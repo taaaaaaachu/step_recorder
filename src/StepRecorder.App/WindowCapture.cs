@@ -8,7 +8,22 @@ using static StepRecorder.App.Native;
 namespace StepRecorder.App;
 
 /// <summary>撮影結果。Bounds は画像の左上に当たるスクリーン座標を含む矩形。</summary>
-sealed record Shot(BitmapSource Image, RECT Bounds);
+sealed record Shot(BitmapSource Image, RECT Bounds)
+{
+    public const int BytesPerPixel = 3; // Image は Bgr24
+
+    /// <summary>画素の並び(前回の撮影との比較用)。</summary>
+    public byte[] Pixels => pixels ??= CopyPixels();
+    byte[]? pixels;
+
+    byte[] CopyPixels()
+    {
+        var stride = Image.PixelWidth * BytesPerPixel;
+        var buf = new byte[stride * Image.PixelHeight];
+        Image.CopyPixels(buf, stride, 0);
+        return buf;
+    }
+}
 
 /// <summary>
 /// 対象プロセスのウィンドウだけを撮る。PrintWindow でウィンドウごとに描かせるので、

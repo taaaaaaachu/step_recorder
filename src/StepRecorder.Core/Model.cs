@@ -8,7 +8,7 @@ public sealed record PixelPoint(int X, int Y);
 /// <summary>スクリーンショットを撮った契機。</summary>
 public enum CaptureTrigger { Click, Manual, WindowChange }
 
-public enum OperationKind { Click, TextInput, KeyPress, WindowShown }
+public enum OperationKind { Click, TextInput, KeyPress, WindowShown, ContentChanged }
 
 public enum MouseButton { Left, Right, Middle }
 

@@ -2,8 +2,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using StepRecorder.App;
 using StepRecorder.Core;
+using static StepRecorder.App.Tests.Desktop;
 
 namespace StepRecorder.App.Tests;
 
@@ -18,7 +18,7 @@ public sealed class EditorSmokeTests : IDisposable
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
-    /// <summary>記録フォルダを渡して起動すると編集画面が開く。入力は送らない(画面を撮るだけ)。</summary>
+    /// <summary>記録フォルダを渡して起動すると、開始画面を出さずに編集画面が開く。</summary>
     [E2EFact]
     public void 記録フォルダを渡すと編集画面が開く()
     {
@@ -34,33 +34,16 @@ public sealed class EditorSmokeTests : IDisposable
         rec.Session.Steps[0].Crop = new(20, 20, 300, 200);
         SessionStore.Save(rec.Session, dir);
 
-        app = Process.Start(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
-        nint editor = 0;
-        for (var i = 0; i < 100 && editor == 0; i++)
-        {
-            Thread.Sleep(100);
-            editor = FindWindow("step_recorder 編集");
-        }
-        Assert.NotEqual(0, editor);
-        Thread.Sleep(1000); // 描画を待つ
+        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Assert.StartsWith("step_recorder 編集", Native.Text(editor));
+        Wait(500); // 描画を待つ
 
         var shot = WindowCapture.Capture(editor);
         Assert.NotNull(shot);
         Assert.True(shot.Image.PixelWidth > 600);
         if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } outDir)
             WindowCapture.SavePng(shot.Image, Path.Combine(outDir, "editor.png"));
-    }
-
-    nint FindWindow(string titlePrefix)
-    {
-        app!.Refresh();
-        nint found = 0;
-        EnumWindows((h, _) =>
-        {
-            if (Native.ProcessId(h) == app.Id && Native.IsWindowVisible(h) && Native.Text(h).StartsWith(titlePrefix)) found = h;
-            return found == 0;
-        }, 0);
-        return found;
     }
 
     static BitmapSource Solid(int w, int h, Color c)
@@ -71,7 +54,4 @@ public sealed class EditorSmokeTests : IDisposable
         b.Freeze();
         return b;
     }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    static extern bool EnumWindows(Native.EnumWindowsProc fn, nint lParam);
 }

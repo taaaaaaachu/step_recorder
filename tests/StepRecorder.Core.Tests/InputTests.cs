@@ -64,9 +64,9 @@ public class SettingsTests
         var path = Path.Combine(Path.GetTempPath(), "sr-settings-" + Guid.NewGuid(), "settings.json");
         try
         {
-            new Settings { WindowChangeDelayMs = 999, GroupMode = GroupMode.ByScreen }.Save(path);
+            new Settings { DrawWaitMs = 999, GroupMode = GroupMode.ByScreen }.Save(path);
             var s = Settings.Load(path);
-            Assert.Equal(999, s.WindowChangeDelayMs);
+            Assert.Equal(999, s.DrawWaitMs);
             Assert.Equal(GroupMode.ByScreen, s.GroupMode);
             Assert.True(s.AutoUpdate); // 既定は自動更新オン
 
@@ -74,8 +74,8 @@ public class SettingsTests
             Assert.False(Settings.Load(path).AutoUpdate);
 
             File.WriteAllText(path, "{ broken");
-            Assert.Equal(300, Settings.Load(path).WindowChangeDelayMs);
-            Assert.Equal(300, Settings.Load(path + ".none").WindowChangeDelayMs);
+            Assert.Equal(300, Settings.Load(path).DrawWaitMs);
+            Assert.Equal(300, Settings.Load(path + ".none").DrawWaitMs);
         }
         finally { Directory.Delete(Path.GetDirectoryName(path)!, true); }
     }
@@ -83,4 +83,26 @@ public class SettingsTests
     [Fact]
     public void フォルダ名() =>
         Assert.Equal("20261121-174100_a_b", Settings.SessionFolderName(new DateTimeOffset(2026, 11, 21, 17, 41, 0, TimeSpan.Zero), "a/b"));
+}
+
+public class ContentChangeRulesTests
+{
+    static readonly DateTimeOffset T = DateTimeOffset.UnixEpoch;
+
+    [Fact]
+    public void 落ち着いたら撮る_届き続けても上限で撮る()
+    {
+        Assert.False(ContentChangeRules.ShouldCapture(T, T.AddMilliseconds(100), T.AddMilliseconds(300), 300, 2000));
+        Assert.True(ContentChangeRules.ShouldCapture(T, T.AddMilliseconds(100), T.AddMilliseconds(400), 300, 2000));
+        Assert.True(ContentChangeRules.ShouldCapture(T, T.AddMilliseconds(1990), T.AddMilliseconds(2000), 300, 2000));
+    }
+
+    [Fact]
+    public void 違う画素の割合()
+    {
+        byte[] a = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        Assert.Equal(0, ContentChangeRules.ChangedRatio(a, [.. a], 3));
+        Assert.Equal(0.25, ContentChangeRules.ChangedRatio(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 99], 3));
+        Assert.Equal(1, ContentChangeRules.ChangedRatio(a, [1, 2, 3], 3));
+    }
 }

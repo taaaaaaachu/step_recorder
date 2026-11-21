@@ -42,8 +42,7 @@ public partial class RecordBar : Window
         var failed = new List<string>();
         foreach (var (id, text) in new[] { (HkCapture, settings.HotkeyCapture), (HkPause, settings.HotkeyPause), (HkStop, settings.HotkeyStop) })
         {
-            if (!Hotkey.TryParse(text, out var hk) || !Enum.TryParse<Key>(hk.Key, true, out var key)
-                || !RegisterHotKey(hwnd, id, (uint)hk.Modifiers, (uint)KeyInterop.VirtualKeyFromKey(key)))
+            if (!HotkeyInput.TryParse(text, out var mods, out var vk) || !RegisterHotKey(hwnd, id, (uint)mods, (uint)vk))
                 failed.Add(text);
         }
         if (failed.Count > 0)

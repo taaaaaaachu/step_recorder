@@ -1,28 +1,15 @@
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Windows.Automation;
-using StepRecorder.App;
 using StepRecorder.Core;
+using static StepRecorder.App.Tests.Desktop;
 
 namespace StepRecorder.App.Tests;
 
-/// <summary>実際のデスクトップでマウスとキーボードを動かすので、STEP_RECORDER_E2E=1 のときだけ走る。</summary>
-public sealed class E2EFactAttribute : FactAttribute
-{
-    public E2EFactAttribute()
-    {
-        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E") != "1")
-            Skip = "STEP_RECORDER_E2E=1 で有効になる(実行中はマウスとキーボードが動く)";
-    }
-}
-
+/// <summary>テスト用の WinForms アプリを実際に操作して、記録エンジンが拾えるかを確かめる。</summary>
 public sealed class RecorderE2ETests : IDisposable
 {
     readonly string dir = Path.Combine(Path.GetTempPath(), "sr-e2e-" + Guid.NewGuid());
     Process? target;
-
-    static RecorderE2ETests() => SetProcessDpiAwarenessContext(-4); // PER_MONITOR_AWARE_V2。アプリ本体と座標系を揃える
 
     public void Dispose()
     {
@@ -45,9 +32,9 @@ public sealed class RecorderE2ETests : IDisposable
     [E2EFact]
     public void 手動撮影_クリック_入力_画面切り替わりを記録できる()
     {
-        target = StartSample();
+        target = Launch(SampleExe);
         var main = target.MainWindowHandle;
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = CaptureTrigger.Click, WindowChangeDelayMs = 300 });
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = CaptureTrigger.Click, DrawWaitMs = 300 });
         engine.Start();
 
         engine.CaptureManual();
@@ -57,18 +44,13 @@ public sealed class RecorderE2ETests : IDisposable
         Wait(500);
         TypeText(main, "abc");
         Wait(300);
-        var box = AutomationElement.FromHandle(main).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "nameBox"));
-        Assert.Equal("abc", ((ValuePattern)box.GetCurrentPattern(ValuePattern.Pattern)).Current.Value);
-        Assert.Equal("nameBox", AutomationElement.FocusedElement.Current.AutomationId);
+        Assert.Equal("abc", ValueOf(main, "nameBox"));
 
         engine.Mode = CaptureTrigger.WindowChange; // OK のクリックは撮らず、出てきたダイアログを撮る
         ClickOn(main, "okButton");
         Wait(1500);
 
-        var session = engine.Stop();
-        var log = Path.Combine(dir, "error.log");
-        Assert.False(File.Exists(log), File.Exists(log) ? File.ReadAllText(log) : "");
-        SessionStore.Save(session, dir);
+        var session = Stop(engine);
         Assert.Equal("SampleTarget", session.ProcessName);
         Assert.True(session.Steps.Count >= 3, $"ステップ数 {session.Steps.Count}");
 
@@ -93,76 +75,36 @@ public sealed class RecorderE2ETests : IDisposable
         }
     }
 
-    static Process StartSample()
+    [E2EFact]
+    public void タブの切り替えとウィンドウ内の表示の切り替えを記録できる()
     {
-        // テストと同じ構成(Debug/Release)の出力を使う
-        var config = Path.GetFileName(Path.GetDirectoryName(AppContext.BaseDirectory.TrimEnd('\\')))!;
-        var exe = Path.Combine(RepoRoot(), "tests", "SampleTarget", "bin", config, "net10.0-windows", "SampleTarget.exe");
-        var p = Process.Start(exe)!;
-        for (var i = 0; i < 100 && p.MainWindowHandle == 0; i++) { Thread.Sleep(100); p.Refresh(); }
-        Assert.NotEqual(0, p.MainWindowHandle);
-        // 裏のプロセスは前面を切り替えられないので、どのアプリも使わない F24 を1回送って入力の権利を得てから前面にする
-        Send(Key(0x87), Key(0x87, 0x0002));
-        SetForegroundWindow(p.MainWindowHandle);
+        target = Launch(SampleExe);
+        var main = target.MainWindowHandle;
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = CaptureTrigger.WindowChange, DrawWaitMs = 300 });
+        engine.Start();
         Wait(500);
-        return p;
+
+        // .NET の UI Automation が返すタブの位置はずれていることがあるので、Ctrl+Tab で次のタブへ切り替える
+        ClickOn(main, "nameBox");
+        Wait(300);
+        PressKeys(main, 0x11, 0x09); // Ctrl+Tab
+        Wait(1500);
+        ClickOn(main, "toggleButton");
+        Wait(1500);
+
+        var session = Stop(engine);
+        Assert.Equal(["『詳細』タブに切り替わった", "画面の表示が切り替わった"], session.Steps.Select(s => s.Description));
+        Assert.Equal("サンプル画面 - 詳細", session.Steps[0].ScreenName);
+        Assert.Equal("サンプル画面", session.Steps[1].ScreenName);
     }
 
-    static string RepoRoot()
+    /// <summary>止めてセッションを保存する。記録中の例外(error.log)があれば失敗させる。</summary>
+    Session Stop(RecorderEngine engine)
     {
-        var d = new DirectoryInfo(AppContext.BaseDirectory);
-        while (d != null && !File.Exists(Path.Combine(d.FullName, "StepRecorder.slnx"))) d = d.Parent;
-        return d?.FullName ?? throw new DirectoryNotFoundException("リポジトリ直下が見つからない");
+        var session = engine.Stop();
+        var log = Path.Combine(dir, "error.log");
+        Assert.False(File.Exists(log), File.Exists(log) ? File.ReadAllText(log) : "");
+        SessionStore.Save(session, dir);
+        return session;
     }
-
-    static void Wait(int ms) => Thread.Sleep(ms);
-
-    /// <summary>キー入力の前に呼ぶ。対象が前面でなければ送らずに失敗させる(他のアプリに入力しないため)。</summary>
-    static void EnsureForeground(nint hwnd)
-    {
-        if (Native.ProcessId(Native.GetForegroundWindow()) != Native.ProcessId(hwnd))
-            throw new InvalidOperationException("テスト用アプリが前面にないのでキー入力を送らずに中止した");
-    }
-
-    /// <summary>部品の中央をクリックする。テストプロセスからは前面を切り替えられないので、クリックで前面にする。</summary>
-    static void ClickOn(nint hwnd, string automationId)
-    {
-        var el = AutomationElement.FromHandle(hwnd).FindFirst(TreeScope.Descendants,
-            new PropertyCondition(AutomationElement.AutomationIdProperty, automationId));
-        Assert.NotNull(el);
-        var r = el.Current.BoundingRectangle;
-        var pt = new Native.POINT { X = (int)(r.X + r.Width / 2), Y = (int)(r.Y + r.Height / 2) };
-        if (Native.ProcessId(Native.WindowFromPoint(pt)) != Native.ProcessId(hwnd))
-            throw new InvalidOperationException($"クリック位置に別のウィンドウが重なっているので中止した: pt=({pt.X},{pt.Y}) hit={Native.ClassName(Native.WindowFromPoint(pt))}/{Native.Text(Native.GetAncestor(Native.WindowFromPoint(pt), Native.GA_ROOT))} pid={Native.ProcessId(Native.WindowFromPoint(pt))} want={Native.ProcessId(hwnd)} frame={Native.FrameBounds(hwnd).Left},{Native.FrameBounds(hwnd).Top},{Native.FrameBounds(hwnd).Right},{Native.FrameBounds(hwnd).Bottom} dpiAware={GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext())}");
-        SetCursorPos(pt.X, pt.Y);
-        Send(Mouse(0x0002), Mouse(0x0004)); // LEFTDOWN, LEFTUP
-    }
-
-    static void TypeText(nint hwnd, string text)
-    {
-        EnsureForeground(hwnd);
-        foreach (var c in text) Send(Key(c, 0x0004), Key(c, 0x0004 | 0x0002)); // UNICODE, UNICODE|KEYUP
-    }
-
-    static void Send(params INPUT[] inputs) => SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
-
-    static INPUT Mouse(uint flags) => new() { type = 0, u = new() { mi = new() { dwFlags = flags } } };
-
-    static INPUT Key(char c, uint flags) => new() { type = 1, u = new() { ki = new() { wScan = c, dwFlags = flags } } };
-
-    static INPUT Key(ushort vk, uint flags = 0) => new() { type = 1, u = new() { ki = new() { wVk = vk, dwFlags = flags } } };
-
-    [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public InputUnion u; }
-    [StructLayout(LayoutKind.Explicit)] struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
-    [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public nint dwExtraInfo; }
-    [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public nint dwExtraInfo; }
-
-    [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
-    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
-    [DllImport("user32.dll")] static extern bool SetForegroundWindow(nint hwnd);
-
-
-    [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(nint value);
-    [DllImport("user32.dll")] static extern nint GetThreadDpiAwarenessContext();
-    [DllImport("user32.dll")] static extern int GetAwarenessFromDpiAwarenessContext(nint c);
 }

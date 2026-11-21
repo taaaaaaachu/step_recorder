@@ -7,7 +7,7 @@ public sealed class Settings
     public string OutputDir { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "step_recorder");
     public CaptureTrigger DefaultMode { get; set; } = CaptureTrigger.Click;
-    public int WindowChangeDelayMs { get; set; } = 300;
+    public int DrawWaitMs { get; set; } = 300;
     public string HotkeyCapture { get; set; } = "Ctrl+Shift+F9";
     public string HotkeyPause { get; set; } = "Ctrl+Shift+F10";
     public string HotkeyStop { get; set; } = "Ctrl+Shift+F11";

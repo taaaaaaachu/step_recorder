@@ -106,3 +106,24 @@ public sealed record Hotkey(HotkeyModifiers Modifiers, string Key)
         string.Concat(Modifiers.HasFlag(HotkeyModifiers.Ctrl) ? "Ctrl+" : "", Modifiers.HasFlag(HotkeyModifiers.Alt) ? "Alt+" : "",
             Modifiers.HasFlag(HotkeyModifiers.Shift) ? "Shift+" : "", Modifiers.HasFlag(HotkeyModifiers.Win) ? "Win+" : "", Key);
 }
+
+/// <summary>画面内の表示の切り替わり(UI Automation の構造変化)をいつ撮るかの判定。</summary>
+public static class ContentChangeRules
+{
+    /// <summary>
+    /// 構造変化は短時間に何十回も届くので、quietMs の間届かなくなったら撮る。
+    /// 届き続ける(アニメーションなど)場合も、最初から maxWaitMs 経ったら撮る。
+    /// </summary>
+    public static bool ShouldCapture(DateTimeOffset first, DateTimeOffset last, DateTimeOffset now, int quietMs, int maxWaitMs) =>
+        (now - last).TotalMilliseconds >= quietMs || (now - first).TotalMilliseconds >= maxWaitMs;
+
+    /// <summary>同じ大きさの画像(1画素 bytesPerPixel バイト)で、違う画素の割合。大きさが違えば 1。</summary>
+    public static double ChangedRatio(byte[] a, byte[] b, int bytesPerPixel)
+    {
+        if (a.Length != b.Length || a.Length == 0) return 1;
+        var changed = 0;
+        for (var i = 0; i < a.Length; i += bytesPerPixel)
+            if (!a.AsSpan(i, bytesPerPixel).SequenceEqual(b.AsSpan(i, bytesPerPixel))) changed++;
+        return (double)changed / (a.Length / bytesPerPixel);
+    }
+}

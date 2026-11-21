@@ -26,6 +26,9 @@ public class DescriberTests
         Assert.Equal("Ctrl+S を押す", Describer.Describe(new Operation { Kind = OperationKind.KeyPress, Keys = "Ctrl+S" }));
         Assert.Equal("『設定』画面が表示された",
             Describer.Describe(new Operation { Kind = OperationKind.WindowShown, Element = new("設定", "Window", "", null) }));
+        Assert.Equal("『詳細』タブに切り替わった",
+            Describer.Describe(new Operation { Kind = OperationKind.ContentChanged, Element = new("詳細", "TabItem", "", null) }));
+        Assert.Equal("画面の表示が切り替わった", Describer.Describe(new Operation { Kind = OperationKind.ContentChanged }));
     }
 }
 

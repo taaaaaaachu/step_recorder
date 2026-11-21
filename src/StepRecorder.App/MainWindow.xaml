@@ -7,6 +7,18 @@
         <Style TargetType="Label"><Setter Property="VerticalAlignment" Value="Center"/></Style>
         <Style TargetType="TextBox"><Setter Property="Margin" Value="0,3"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
         <Style TargetType="Button"><Setter Property="Padding" Value="12,4"/><Setter Property="Margin" Value="4,0,0,0"/></Style>
+        <!-- ショートカットキー欄: フォーカスが当たるとキー入力待ちになり、押した組み合わせがそのまま入る -->
+        <Style x:Key="HotkeyBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="IsReadOnlyCaretVisible" Value="False"/>
+            <Setter Property="InputMethod.IsInputMethodEnabled" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ToolTip" Value="クリックしてから、Ctrl・Alt・Shift・Win と組み合わせたキーを押してください。Esc で取り消し。押しても反応しない組み合わせは、他のアプリが使用中です。"/>
+            <EventSetter Event="GotKeyboardFocus" Handler="Hotkey_GotKeyboardFocus"/>
+            <EventSetter Event="LostKeyboardFocus" Handler="Hotkey_LostKeyboardFocus"/>
+            <EventSetter Event="PreviewKeyDown" Handler="Hotkey_PreviewKeyDown"/>
+            <EventSetter Event="PreviewKeyUp" Handler="Hotkey_PreviewKeyUp"/>
+        </Style>
     </Window.Resources>
     <StackPanel Margin="14">
         <Grid>
@@ -32,15 +44,15 @@
             <TextBox x:Name="OutputDir" Grid.Row="2" Grid.Column="1"/>
             <Button Grid.Row="2" Grid.Column="2" Content="参照" Click="Browse_Click"/>
 
-            <Label Grid.Row="3" Content="切り替わり後の待ち(ms)"/>
-            <TextBox x:Name="Delay" Grid.Row="3" Grid.Column="1" Width="80" HorizontalAlignment="Left"/>
+            <Label Grid.Row="3" Content="描画待機時間(ms)"/>
+            <TextBox x:Name="DrawWait" Grid.Row="3" Grid.Column="1" Width="80" HorizontalAlignment="Left"/>
 
             <Label Grid.Row="4" Content="手動撮影キー"/>
-            <TextBox x:Name="HkCapture" Grid.Row="4" Grid.Column="1"/>
+            <TextBox x:Name="HkCapture" Grid.Row="4" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
             <Label Grid.Row="5" Content="一時停止キー"/>
-            <TextBox x:Name="HkPause" Grid.Row="5" Grid.Column="1"/>
+            <TextBox x:Name="HkPause" Grid.Row="5" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
             <Label Grid.Row="6" Content="停止キー"/>
-            <TextBox x:Name="HkStop" Grid.Row="6" Grid.Column="1"/>
+            <TextBox x:Name="HkStop" Grid.Row="6" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
 
             <Label Grid.Row="7" Content="同じ画面の扱い"/>
             <ComboBox x:Name="Group" Grid.Row="7" Grid.Column="1" Margin="0,3" SelectedIndex="0">

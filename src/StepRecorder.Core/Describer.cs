@@ -9,6 +9,7 @@ public static class Describer
         OperationKind.TextInput => $"{Target(op.Element, "欄")}に「{op.Text}」と入力",
         OperationKind.KeyPress => $"{op.Keys} を押す",
         OperationKind.WindowShown => $"{Quote(op.Element?.Name)}画面が表示された",
+        OperationKind.ContentChanged => op.Element is { ControlType: "TabItem", Name: { Length: > 0 } tab } ? $"『{tab}』タブに切り替わった" : "画面の表示が切り替わった",
         _ => "",
     };
 
