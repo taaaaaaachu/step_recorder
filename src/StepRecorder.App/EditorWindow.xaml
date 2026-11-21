@@ -63,16 +63,24 @@
                 <RadioButton x:Name="ToolCrop" Content="トリミング"/>
                 <Button Content="選択した枠を削除" Click="DeleteHighlight_Click" ToolTip="Delete"/>
                 <Button Content="トリミング解除" Click="ClearCrop_Click"/>
+                <Separator Margin="6,2,12,2"/>
+                <Button Content="−" Click="ZoomOut_Click" ToolTip="縮小 (Ctrl+ホイール / Ctrl+-)" MinWidth="30"/>
+                <TextBlock x:Name="ZoomLabel" AutomationProperties.AutomationId="ZoomLabel" Text="100%" MinWidth="44" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <Button Content="+" Click="ZoomIn_Click" ToolTip="拡大 (Ctrl+ホイール / Ctrl++)" MinWidth="30"/>
+                <Button Content="100%" Click="ZoomActual_Click" ToolTip="Ctrl+0"/>
+                <Button Content="全体" Click="ZoomFit_Click" ToolTip="画像全体が収まる大きさにする"/>
             </StackPanel>
 
             <Border BorderBrush="#ccc" BorderThickness="1" Background="#f4f4f4">
-                <Viewbox x:Name="View" SizeChanged="View_SizeChanged" Stretch="Uniform" StretchDirection="DownOnly" Margin="4">
-                    <Grid x:Name="Stage">
+                <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                              SizeChanged="Scroller_SizeChanged" PreviewMouseWheel="Scroller_PreviewMouseWheel">
+                    <Grid x:Name="Stage" Margin="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid.LayoutTransform><ScaleTransform x:Name="Zoom"/></Grid.LayoutTransform>
                         <Image x:Name="Picture" Stretch="Fill"/>
                         <Canvas x:Name="Overlay" Background="Transparent" ClipToBounds="True"
                                 MouseLeftButtonDown="Overlay_MouseDown" MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp"/>
                     </Grid>
-                </Viewbox>
+                </ScrollViewer>
             </Border>
         </DockPanel>
     </Grid>

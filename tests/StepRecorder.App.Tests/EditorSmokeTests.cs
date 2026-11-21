@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Windows.Automation;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using StepRecorder.Core;
@@ -44,6 +45,38 @@ public sealed class EditorSmokeTests : IDisposable
         Assert.True(shot.Image.PixelWidth > 600);
         if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } outDir)
             WindowCapture.SavePng(shot.Image, Path.Combine(outDir, "editor.png"));
+    }
+
+    [E2EFact]
+    public void 編集画面はズームできる()
+    {
+        var rec = new Recording(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now });
+        var file = rec.NextImageFile;
+        WindowCapture.SavePng(Solid(3000, 2000, Colors.SteelBlue), Path.Combine(dir, file)); // 表示欄より大きい画像
+        rec.AddStep(CaptureTrigger.Manual, new("大きい画面", "W", "Demo"), file, 3000, 2000, DateTimeOffset.Now);
+        SessionStore.Save(rec.Session, dir);
+
+        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        int Percent() => int.Parse(Find(editor, "ZoomLabel").Current.Name.TrimEnd('%'));
+        Wait(500);
+
+        var fitted = Percent();
+        Assert.InRange(fitted, 10, 99); // 最初は全体が収まる大きさ
+
+        ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "+"));
+        Wait(300);
+        Assert.InRange(Percent(), fitted * 1.25 - 1, fitted * 1.25 + 1);
+
+        var r = Find(editor, "Scroller").Current.BoundingRectangle;
+        var before = Percent();
+        CtrlWheel(editor, (int)(r.X + r.Width / 2), (int)(r.Y + r.Height / 2), 1);
+        Wait(300);
+        Assert.True(Percent() > before, $"Ctrl+ホイールで拡大されない: {before}% → {Percent()}%");
+
+        ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "100%"));
+        Wait(300);
+        Assert.Equal(100, Percent());
     }
 
     static BitmapSource Solid(int w, int h, Color c)

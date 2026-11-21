@@ -68,9 +68,12 @@ static class Desktop
     public static string ValueOf(nint hwnd, string automationId) =>
         ((ValuePattern)Find(hwnd, automationId).GetCurrentPattern(ValuePattern.Pattern)).Current.Value;
 
-    public static void ClickOn(nint hwnd, string automationId)
+    public static void ClickOn(nint hwnd, string automationId) =>
+        ClickOn(hwnd, new PropertyCondition(AutomationElement.AutomationIdProperty, automationId));
+
+    public static void ClickOn(nint hwnd, Condition condition)
     {
-        var r = Find(hwnd, automationId).Current.BoundingRectangle;
+        var r = Find(hwnd, condition).Current.BoundingRectangle;
         Click(hwnd, (int)(r.X + r.Width / 2), (int)(r.Y + r.Height / 2));
     }
 
@@ -82,6 +85,17 @@ static class Desktop
             throw new InvalidOperationException("クリック位置に別のウィンドウが重なっているので中止した");
         SetCursorPos(pt.X, pt.Y);
         Send(Mouse(0x0002), Mouse(0x0004)); // LEFTDOWN, LEFTUP
+    }
+
+    /// <summary>(x, y) で Ctrl を押しながらホイールを回す。notches が正なら奥へ。</summary>
+    public static void CtrlWheel(nint hwnd, int x, int y, int notches)
+    {
+        var pt = new Native.POINT { X = x, Y = y };
+        if (Native.ProcessId(Native.WindowFromPoint(pt)) != Native.ProcessId(hwnd))
+            throw new InvalidOperationException("ホイール位置に別のウィンドウが重なっているので中止した");
+        EnsureForeground(hwnd);
+        SetCursorPos(x, y);
+        Send(Key(0x11), new INPUT { type = 0, u = new() { mi = new() { dwFlags = 0x0800, mouseData = unchecked((uint)(notches * 120)) } } }, Key(0x11, KEYUP));
     }
 
     /// <summary>キーを順に押してから逆順に離す(Ctrl+Tab なら 0x11, 0x09)。</summary>

@@ -30,6 +30,11 @@ public partial class EditorWindow : Window
     PixelRect? dragOrigin, preview;
     int selectedHighlight = -1;
 
+    // ズーム。fit のときは表示欄の大きさに合わせて自動で変える
+    const double MinZoom = 0.1, MaxZoom = 8, ZoomStep = 1.25;
+    double zoom = 1;
+    bool fit = true;
+
     Step? Current => (Steps.SelectedItem as StepView)?.Step;
 
     public EditorWindow(Session session, string dir, GroupMode mode)
@@ -88,11 +93,12 @@ public partial class EditorWindow : Window
         Picture.Source = s == null ? null : Load(s);
         if (s != null)
         {
-            // 画像は撮影時のピクセル寸法で置き、Viewbox で縮小表示する。座標はそのまま画像内のピクセル
+            // 画像は撮影時のピクセル寸法で置き、ズームは拡大縮小の変換だけで行う。座標はそのまま画像内のピクセル
             Stage.Width = Picture.Width = Overlay.Width = s.ImageWidth;
             Stage.Height = Picture.Height = Overlay.Height = s.ImageHeight;
         }
-        Redraw();
+        if (fit) FitZoom();
+        else Redraw();
     }
 
     void Move(int delta)
@@ -138,17 +144,69 @@ public partial class EditorWindow : Window
 
     // ---- 強調枠とトリミング ----
 
-    /// <summary>画面上の数ピクセルを画像のピクセルに換算する(Viewbox で縮小されているため)。</summary>
-    double ScreenToImage(double px) =>
-        Overlay.IsVisible && Overlay.TransformToAncestor(this) is Transform t && t.Value.M11 > 0 ? px / t.Value.M11 : px;
+    /// <summary>画面上の数ピクセルを画像のピクセルに換算する(枠線の太さやつまみの大きさを、ズームに関係なく一定に見せるため)。</summary>
+    double ScreenToImage(double px) => px / zoom;
 
-    void View_SizeChanged(object sender, SizeChangedEventArgs e) => Redraw();
+    // ---- ズーム ----
+
+    /// <summary>ズームを変える。anchor(表示欄内の位置)を渡すと、そこに映っている画像上の点が動かないようにスクロールする。</summary>
+    void SetZoom(double z, Point? anchor = null)
+    {
+        var at = anchor ?? new Point(Scroller.ViewportWidth / 2, Scroller.ViewportHeight / 2);
+        var imagePoint = Scroller.TranslatePoint(at, Stage);
+        zoom = Math.Clamp(z, MinZoom, MaxZoom);
+        Zoom.ScaleX = Zoom.ScaleY = zoom;
+        ZoomLabel.Text = $"{zoom * 100:0}%";
+        Scroller.UpdateLayout();
+        var moved = Stage.TranslatePoint(imagePoint, Scroller);
+        Scroller.ScrollToHorizontalOffset(Scroller.HorizontalOffset + moved.X - at.X);
+        Scroller.ScrollToVerticalOffset(Scroller.VerticalOffset + moved.Y - at.Y);
+        Redraw();
+    }
+
+    /// <summary>画像全体が表示欄に収まる大きさにする(小さい画像は拡大しない)。</summary>
+    void FitZoom()
+    {
+        fit = true;
+        var margin = Stage.Margin.Left + Stage.Margin.Right + 2;
+        if (Current is not { } s || Scroller.ActualWidth <= margin || Scroller.ActualHeight <= margin) { Redraw(); return; }
+        SetZoom(Math.Min(1, Math.Min((Scroller.ActualWidth - margin) / s.ImageWidth, (Scroller.ActualHeight - margin) / s.ImageHeight)));
+    }
+
+    void ZoomBy(double factor, Point? anchor = null)
+    {
+        fit = false;
+        SetZoom(zoom * factor, anchor);
+    }
+
+    void ZoomIn_Click(object sender, RoutedEventArgs e) => ZoomBy(ZoomStep);
+    void ZoomOut_Click(object sender, RoutedEventArgs e) => ZoomBy(1 / ZoomStep);
+    void ZoomFit_Click(object sender, RoutedEventArgs e) => FitZoom();
+
+    void ZoomActual_Click(object sender, RoutedEventArgs e)
+    {
+        fit = false;
+        SetZoom(1);
+    }
+
+    /// <summary>Ctrl+ホイールでマウスの位置を中心に拡大縮小する(Ctrl なしは通常のスクロール)。</summary>
+    void Scroller_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+        e.Handled = true;
+        ZoomBy(e.Delta > 0 ? ZoomStep : 1 / ZoomStep, e.GetPosition(Scroller));
+    }
+
+    void Scroller_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (fit) FitZoom();
+    }
 
     void Redraw()
     {
         Overlay.Children.Clear();
         if (Current is not { } s) return;
-        var stroke = Math.Max(2, ScreenToImage(2.5));
+        var stroke = ScreenToImage(2.5); // ズームに関係なく画面上で同じ太さに見せる
 
         if (s.Crop is { } c) // トリミングの外側を暗くする
         {
@@ -265,6 +323,13 @@ public partial class EditorWindow : Window
     void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.S && Keyboard.Modifiers == ModifierKeys.Control) { Save(); e.Handled = true; return; }
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.OemPlus or Key.Add or Key.OemMinus or Key.Subtract or Key.D0 or Key.NumPad0)
+        {
+            if (e.Key is Key.D0 or Key.NumPad0) ZoomActual_Click(this, new());
+            else ZoomBy(e.Key is Key.OemPlus or Key.Add ? ZoomStep : 1 / ZoomStep);
+            e.Handled = true;
+            return;
+        }
         if (Keyboard.FocusedElement is TextBox) return;
         if (e.Key == Key.Delete) { DeleteHighlight_Click(this, new()); e.Handled = true; }
         if (Keyboard.Modifiers == ModifierKeys.Alt && e.SystemKey is Key.Up or Key.Down)
