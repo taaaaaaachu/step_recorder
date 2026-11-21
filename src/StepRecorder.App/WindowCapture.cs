@@ -50,24 +50,9 @@ static class WindowCapture
     public static Shot? Capture(nint focus, bool cursor = false)
     {
         if (focus == 0 || !IsWindow(focus) || IsIconic(focus)) return null;
-        var pid = ProcessId(focus);
         var frame = FrameBounds(focus);
         if (frame.Width <= 0 || frame.Height <= 0) return null;
-
-        var screenArea = new RECT
-        {
-            Left = GetSystemMetrics(SM_XVIRTUALSCREEN), Top = GetSystemMetrics(SM_YVIRTUALSCREEN),
-            Right = GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
-            Bottom = GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN),
-        };
-        var windows = new List<(nint Hwnd, RECT Rect)>();
-        for (var h = GetTopWindow(0); h != 0; h = GetWindow(h, GW_HWNDNEXT))
-        {
-            if (h != focus && (!IsWindowVisible(h) || IsIconic(h) || IsCloaked(h) || ProcessId(h) != pid || ClassName(h) == "SysShadow")) continue;
-            var r = h == focus ? frame : FrameBounds(h);
-            if (r.Width > 0 && r.Height > 0 && Intersects(r, screenArea)) windows.Add((h, r));
-        }
-        windows.Reverse(); // 奥から順に描く
+        var windows = AppWindows(focus);
 
         var u = frame;
         foreach (var (_, r) in windows) u = Union(u, r);
@@ -94,6 +79,30 @@ static class WindowCapture
             DeleteDC(dc);
             ReleaseDC(0, screen);
         }
+    }
+
+    /// <summary>
+    /// focus と同じプロセスの見えているウィンドウ(メインウィンドウ・ダイアログ・メニューなど)を、Z オーダーの奥から順に返す。
+    /// 画面の外に置かれたウィンドウは含めない。focus は見えていなくても含める。
+    /// </summary>
+    public static List<(nint Hwnd, RECT Rect)> AppWindows(nint focus)
+    {
+        var pid = ProcessId(focus);
+        var screenArea = new RECT
+        {
+            Left = GetSystemMetrics(SM_XVIRTUALSCREEN), Top = GetSystemMetrics(SM_YVIRTUALSCREEN),
+            Right = GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            Bottom = GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        };
+        var windows = new List<(nint Hwnd, RECT Rect)>();
+        for (var h = GetTopWindow(0); h != 0; h = GetWindow(h, GW_HWNDNEXT))
+        {
+            if (h != focus && (!IsWindowVisible(h) || IsIconic(h) || IsCloaked(h) || ProcessId(h) != pid || ClassName(h) == "SysShadow")) continue;
+            var r = FrameBounds(h);
+            if (r.Width > 0 && r.Height > 0 && Intersects(r, screenArea)) windows.Add((h, r));
+        }
+        windows.Reverse();
+        return windows;
     }
 
     /// <summary>hwnd を描き、見えている範囲 visible だけを合成先に写す。</summary>

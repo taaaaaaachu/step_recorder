@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Velopack" Version="1.2.161" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <!-- 自前の Main(Velopack 用)を使うため、自動生成の Main を作らせない -->
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
@@ -13,7 +14,9 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- 録画(Windows.Graphics.Capture)の WinRT API を使う。動くのは Windows 10 2004 以降 -->
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -22,6 +25,7 @@
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <AssemblyName>StepRecorder</AssemblyName>
     <RootNamespace>StepRecorder.App</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks> <!-- WGC と COM のつなぎで vtable を直接呼ぶ -->
     <Version>0.0.0-dev</Version> <!-- リリースでは CI が -p:Version でタグの版にする -->
   </PropertyGroup>
 
