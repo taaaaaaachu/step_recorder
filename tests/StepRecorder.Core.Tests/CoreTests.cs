@@ -103,6 +103,25 @@ public class ExportTests
     }
 
     [Fact]
+    public void 画面一覧モードのHtmlでは同じ画面のステップを前後に切り替えられる()
+    {
+        var html = Export.ToHtml(Sample(), GroupMode.ByScreen);
+        // 「メイン」は2ステップなので切り替えボタンが付き、2枚目は隠しておく
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<div class=\"pager\">"));
+        Assert.Contains("<span class=\"pos\">1 / 2</span>", html);
+        Assert.Contains("<div class=\"page\" data-page=\"0\">", html);
+        Assert.Contains("<div class=\"page\" data-page=\"1\" hidden>", html);
+        Assert.Contains("<image href=\"images/0003.png\"", html); // 2枚目の画像も載る
+        // 説明の行はどのステップのものか分かり、最初のステップの行が強調されている
+        Assert.Contains("<li data-page=\"0\" class=\"current\">最初の画面</li>", html);
+        Assert.Contains("<li data-page=\"1\">戻る</li>", html);
+        // 1ステップだけの画面(設定)には付けない
+        Assert.Contains("<li>設定を開く</li>", html);
+        // 手順モードでは付けない
+        Assert.DoesNotContain("class=\"pager\"", Export.ToHtml(Sample(), GroupMode.Sequence));
+    }
+
+    [Fact]
     public void Markdown()
     {
         var md = Export.ToMarkdown(Sample(), GroupMode.ByScreen);

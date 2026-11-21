@@ -5,7 +5,14 @@ using System.Text;
 namespace StepRecorder.Core;
 
 /// <summary>出力の1セクション。Sequence ではステップ1つ、ByScreen では同じ画面のステップ群。</summary>
-public sealed record Section(string Title, Step Image, IReadOnlyList<string> Lines);
+public sealed record Section(string Title, IReadOnlyList<Step> Steps)
+{
+    /// <summary>代表の画像(最初のステップ)。Markdown はこれだけを載せる。</summary>
+    public Step Image => Steps[0];
+
+    /// <summary>全ステップの説明文の行。</summary>
+    public IReadOnlyList<string> Lines => Steps.SelectMany(Export.LinesOf).ToList();
+}
 
 /// <summary>画面一覧モードで「同じ画面」とみなす単位。</summary>
 public sealed record Screen(string ProcessName, string ClassName, string Name);
@@ -18,18 +25,15 @@ public static class Export
     public static IReadOnlyList<Section> Sections(Session s, GroupMode mode)
     {
         if (mode == GroupMode.Sequence)
-            return s.Steps.Select(st => new Section(st.ScreenName, st, Lines(st).ToList())).ToList();
+            return s.Steps.Select(st => new Section(st.ScreenName, [st])).ToList();
 
         // 初めて出てきた順を保ったまま、同じ画面をまとめる
-        return s.Steps
-            .GroupBy(ScreenOf)
-            .Select(g => new Section(g.Key.Name, g.First(), g.SelectMany(Lines).ToList()))
-            .ToList();
+        return s.Steps.GroupBy(ScreenOf).Select(g => new Section(g.Key.Name, g.ToList())).ToList();
     }
 
     public static Screen ScreenOf(Step st) => new(st.Window.ProcessName, st.Window.ClassName, st.ScreenName);
 
-    static IEnumerable<string> Lines(Step st) =>
+    public static IEnumerable<string> LinesOf(Step st) =>
         st.Description.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
     public static string Title(Session s) => $"{s.ProcessName} 画面一覧 ({s.CreatedAt:yyyy-MM-dd})";
@@ -92,6 +96,10 @@ public static class Export
             svg.shot .shade { display: none; fill: rgba(0,0,0,.55); }
             svg.shot.uncropped .shade { display: inline; }
             button.crop-toggle { margin: 0 0 .5em; padding: .25em .9em; font: inherit; cursor: pointer; }
+            .pager { margin: 0 0 .5em; }
+            .pager button { padding: .25em .9em; font: inherit; cursor: pointer; }
+            li[data-page] { color: #888; cursor: pointer; }
+            li[data-page].current { color: inherit; font-weight: bold; }
             table.evidence { border-collapse: collapse; margin: 1em 0 2em; }
             table.evidence th, table.evidence td { border: 1px solid #ccc; padding: .3em .8em; text-align: left; }
             table.evidence th { background: #f4f4f4; font-weight: normal; color: #555; }
@@ -107,12 +115,25 @@ public static class Export
         foreach (var (sec, i) in Sections(s, mode).Select((x, i) => (x, i + 1)))
         {
             sb.Append($"<section>\n<h2>{i}. {H(sec.Title)}</h2>\n");
-            if (sec.Image.VideoFile != null) AppendClip(sb, sec.Image);
-            else AppendShot(sb, sec.Image);
+            // 画面一覧モードで同じ画面のステップが複数あるときは、ボタンで前後のステップの画像に切り替える
+            var paged = sec.Steps.Count > 1;
+            if (paged)
+                sb.Append($"<div class=\"pager\"><button type=\"button\" class=\"prev\" disabled>◀ 前へ</button> " +
+                    $"<span class=\"pos\">1 / {sec.Steps.Count}</span> <button type=\"button\" class=\"next\">次へ ▶</button></div>\n");
+            foreach (var (st, k) in sec.Steps.Select((x, k) => (x, k)))
+            {
+                if (paged) sb.Append($"<div class=\"page\" data-page=\"{k}\"{(k > 0 ? " hidden" : "")}>\n");
+                if (st.VideoFile != null) AppendClip(sb, st);
+                else AppendShot(sb, st);
+                if (paged) sb.Append("</div>\n");
+            }
             if (sec.Lines.Count > 0)
             {
                 sb.Append("<ol>\n");
-                foreach (var line in sec.Lines) sb.Append($"<li>{H(line)}</li>\n");
+                // ページを切り替えると、そのステップの説明が強調される
+                foreach (var (st, k) in sec.Steps.Select((x, k) => (x, k)))
+                    foreach (var line in LinesOf(st))
+                        sb.Append(paged ? $"<li data-page=\"{k}\"{(k == 0 ? " class=\"current\"" : "")}>{H(line)}</li>\n" : $"<li>{H(line)}</li>\n");
                 sb.Append("</ol>\n");
             }
             sb.Append("</section>\n");
@@ -136,6 +157,26 @@ public static class Export
               svg.setAttribute('height', h);
               btn.textContent = full ? 'トリミングする' : 'トリミングを解除';
             }));
+            // 画面一覧モードで、同じ画面のステップを前後に切り替える(説明の行をクリックしてもそのステップへ)
+            document.querySelectorAll('section').forEach(sec => {
+              const pages = sec.querySelectorAll('.page');
+              if (!pages.length) return;
+              let cur = 0;
+              const show = i => {
+                cur = i;
+                pages.forEach((p, k) => {
+                  p.hidden = k !== i;
+                  if (k !== i) p.querySelectorAll('video').forEach(v => v.pause());
+                });
+                sec.querySelectorAll('li[data-page]').forEach(li => li.classList.toggle('current', +li.dataset.page === i));
+                sec.querySelector('.pos').textContent = `${i + 1} / ${pages.length}`;
+                sec.querySelector('.prev').disabled = i === 0;
+                sec.querySelector('.next').disabled = i === pages.length - 1;
+              };
+              sec.querySelector('.prev').addEventListener('click', () => show(cur - 1));
+              sec.querySelector('.next').addEventListener('click', () => show(cur + 1));
+              sec.querySelectorAll('li[data-page]').forEach(li => li.addEventListener('click', () => show(+li.dataset.page)));
+            });
             </script>
             </body>
             </html>
@@ -218,7 +259,7 @@ public static class Export
         // 書き出し用に、動画のステップを書き出したファイルに差し替えた写しで出力する
         var copy = SessionStore.Clone(s);
         copy.VideoFile = null;
-        foreach (var st in Sections(copy, mode).Select(sec => sec.Image))
+        foreach (var st in Sections(copy, mode).SelectMany(sec => sec.Steps)) // 画面一覧モードの HTML は同じ画面の全ステップを切り替えて見せる
         {
             if (st.VideoFile != null)
             {
