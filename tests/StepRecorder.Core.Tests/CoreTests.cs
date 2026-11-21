@@ -147,6 +147,17 @@ public class ExportTests
     }
 
     [Fact]
+    public void Htmlはトリミングしている画面にだけ解除ボタンと外側を暗くする覆いを付ける()
+    {
+        var html = Export.ToHtml(Sample(), GroupMode.Sequence); // 3画面のうち1枚目だけトリミングあり
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<button type=\"button\" class=\"crop-toggle\">トリミングを解除</button>"));
+        Assert.Contains("data-crop=\"10 10 50 50\" data-full=\"0 0 200 100\"", html);
+        // 画像全体から、トリミング範囲をくり抜いた形
+        Assert.Contains("<path class=\"shade\" fill-rule=\"evenodd\" d=\"M0 0H200V100H0Z M10 10h50v50h-50Z\"/>", html);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "class=\"shade\""));
+    }
+
+    [Fact]
     public void 保存して読み戻すと同じ内容()
     {
         var dir = Path.Combine(Path.GetTempPath(), "sr-test-" + Guid.NewGuid());

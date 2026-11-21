@@ -78,6 +78,9 @@ public static class Export
             dialog { padding: 0; border: none; max-width: 98vw; max-height: 98vh; }
             dialog svg.shot { max-width: 98vw; max-height: 96vh; width: auto; cursor: zoom-out; border: none; }
             dialog::backdrop { background: rgba(0,0,0,.7); }
+            svg.shot .shade { display: none; fill: rgba(0,0,0,.55); }
+            svg.shot.uncropped .shade { display: inline; }
+            button.crop-toggle { margin: 0 0 .5em; padding: .25em .9em; font: inherit; cursor: pointer; }
             table.evidence { border-collapse: collapse; margin: 1em 0 2em; }
             table.evidence th, table.evidence td { border: 1px solid #ccc; padding: .3em .8em; text-align: left; }
             table.evidence th { background: #f4f4f4; font-weight: normal; color: #555; }
@@ -93,11 +96,20 @@ public static class Export
         foreach (var (sec, i) in Sections(s, mode).Select((x, i) => (x, i + 1)))
         {
             var st = sec.Image;
-            var c = st.Crop ?? new PixelRect(0, 0, st.ImageWidth, st.ImageHeight);
+            var (w, h) = (st.ImageWidth, st.ImageHeight);
+            var c = st.Crop ?? new PixelRect(0, 0, w, h);
             sb.Append($"<section>\n<h2>{i}. {H(sec.Title)}</h2>\n");
-            // viewBox でトリミングし、強調枠を重ねる。元画像は加工しない
-            sb.Append($"<svg class=\"shot\" viewBox=\"{c.X} {c.Y} {c.Width} {c.Height}\" width=\"{c.Width}\" height=\"{c.Height}\">");
-            sb.Append($"<image href=\"{H(st.ImageFile)}\" width=\"{st.ImageWidth}\" height=\"{st.ImageHeight}\"/>");
+            // トリミングしているときは、解除して画像全体を見られるボタンを付ける
+            if (st.Crop != null) sb.Append("<button type=\"button\" class=\"crop-toggle\">トリミングを解除</button>\n");
+            // viewBox でトリミングし、強調枠を重ねる。元画像は加工しない。
+            // data-crop / data-full はボタンで切り替える表示範囲
+            sb.Append($"<svg class=\"shot\" viewBox=\"{c.X} {c.Y} {c.Width} {c.Height}\" width=\"{c.Width}\" height=\"{c.Height}\"");
+            if (st.Crop != null) sb.Append($" data-crop=\"{c.X} {c.Y} {c.Width} {c.Height}\" data-full=\"0 0 {w} {h}\"");
+            sb.Append('>');
+            sb.Append($"<image href=\"{H(st.ImageFile)}\" width=\"{w}\" height=\"{h}\"/>");
+            // トリミングを解除したときだけ見える、トリミング範囲の外を暗くする覆い
+            if (st.Crop != null)
+                sb.Append($"<path class=\"shade\" fill-rule=\"evenodd\" d=\"M0 0H{w}V{h}H0Z M{c.X} {c.Y}h{c.Width}v{c.Height}h{-c.Width}Z\"/>");
             foreach (var r in st.Highlights)
                 sb.Append($"<rect x=\"{r.X}\" y=\"{r.Y}\" width=\"{r.Width}\" height=\"{r.Height}\"/>");
             sb.Append("</svg>\n");
@@ -118,6 +130,16 @@ public static class Export
               zoom.showModal();
             }));
             zoom.addEventListener('click', () => zoom.close());
+            // トリミングの解除と、もう一度トリミングする切り替え
+            document.querySelectorAll('button.crop-toggle').forEach(btn => btn.addEventListener('click', () => {
+              const svg = btn.parentElement.querySelector('svg.shot');
+              const full = svg.classList.toggle('uncropped');
+              const [x, y, w, h] = (full ? svg.dataset.full : svg.dataset.crop).split(' ');
+              svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+              svg.setAttribute('width', w);
+              svg.setAttribute('height', h);
+              btn.textContent = full ? 'トリミングする' : 'トリミングを解除';
+            }));
             </script>
             </body>
             </html>
