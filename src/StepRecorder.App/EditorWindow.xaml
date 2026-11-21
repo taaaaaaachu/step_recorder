@@ -1,0 +1,79 @@
+<Window x:Class="StepRecorder.App.EditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="step_recorder 編集" Width="1280" Height="820" WindowStartupLocation="CenterScreen"
+        FontFamily="Yu Gothic UI" FontSize="13" PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style TargetType="Button"><Setter Property="Padding" Value="10,3"/><Setter Property="Margin" Value="0,0,6,0"/></Style>
+        <Style TargetType="RadioButton"><Setter Property="Margin" Value="0,0,10,0"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+    </Window.Resources>
+    <Grid Margin="8">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="320"/><ColumnDefinition Width="8"/><ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                <Button Content="↑" Click="Up_Click" ToolTip="上へ (Alt+↑)"/>
+                <Button Content="↓" Click="Down_Click" ToolTip="下へ (Alt+↓)"/>
+                <Button Content="削除" Click="DeleteStep_Click"/>
+            </StackPanel>
+            <ListBox x:Name="Steps" SelectionChanged="Steps_SelectionChanged" HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Margin="2,4">
+                            <Image DockPanel.Dock="Left" Source="{Binding Thumb}" Width="110" Margin="0,0,8,0" VerticalAlignment="Top"/>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Header}" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Summary}" Foreground="#555" TextWrapping="Wrap" MaxHeight="54" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+
+        <DockPanel Grid.Column="2">
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                <Label Content="出力の並べ方" VerticalAlignment="Center"/>
+                <ComboBox x:Name="Group" Width="230" Margin="0,0,10,0" VerticalContentAlignment="Center" SelectionChanged="Group_SelectionChanged">
+                    <ComboBoxItem Content="手順モード(撮った順)"/>
+                    <ComboBoxItem Content="画面一覧モード(画面ごと)"/>
+                </ComboBox>
+                <Button Content="保存" Click="Save_Click" FontWeight="Bold" ToolTip="Ctrl+S"/>
+                <Button Content="HTMLを開く" Click="OpenHtml_Click"/>
+                <Button Content="フォルダを開く" Click="OpenFolder_Click"/>
+            </StackPanel>
+
+            <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                <Label Content="画面名"/>
+                <TextBox x:Name="ScreenName" Grid.Column="1" Margin="0,2" VerticalContentAlignment="Center"
+                         TextChanged="ScreenName_TextChanged" LostFocus="Field_LostFocus"/>
+                <Label Grid.Row="1" Content="説明"/>
+                <TextBox x:Name="Description" Grid.Row="1" Grid.Column="1" Margin="0,2" AcceptsReturn="True" TextWrapping="Wrap"
+                         Height="70" VerticalScrollBarVisibility="Auto" TextChanged="Description_TextChanged" LostFocus="Field_LostFocus"/>
+            </Grid>
+
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                <RadioButton x:Name="ToolSelect" Content="選択・移動" IsChecked="True"/>
+                <RadioButton x:Name="ToolAdd" Content="強調枠を追加"/>
+                <RadioButton x:Name="ToolCrop" Content="トリミング"/>
+                <Button Content="選択した枠を削除" Click="DeleteHighlight_Click" ToolTip="Delete"/>
+                <Button Content="トリミング解除" Click="ClearCrop_Click"/>
+            </StackPanel>
+
+            <Border BorderBrush="#ccc" BorderThickness="1" Background="#f4f4f4">
+                <Viewbox x:Name="View" SizeChanged="View_SizeChanged" Stretch="Uniform" StretchDirection="DownOnly" Margin="4">
+                    <Grid x:Name="Stage">
+                        <Image x:Name="Picture" Stretch="Fill"/>
+                        <Canvas x:Name="Overlay" Background="Transparent" ClipToBounds="True"
+                                MouseLeftButtonDown="Overlay_MouseDown" MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp"/>
+                    </Grid>
+                </Viewbox>
+            </Border>
+        </DockPanel>
+    </Grid>
+</Window>
