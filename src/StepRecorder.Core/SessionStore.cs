@@ -32,4 +32,8 @@ public static class SessionStore
     public static Session Load(string dir) =>
         JsonSerializer.Deserialize<Session>(File.ReadAllText(Path.Combine(dir, FileName)), Options)
         ?? throw new InvalidDataException($"{FileName} が空です");
+
+    /// <summary>セッションの深い写し。</summary>
+    public static Session Clone(Session s) =>
+        JsonSerializer.Deserialize<Session>(JsonSerializer.Serialize(s, Options), Options)!;
 }

@@ -6,7 +6,7 @@ public sealed record PixelRect(int X, int Y, int Width, int Height);
 public sealed record PixelPoint(int X, int Y);
 
 /// <summary>スクリーンショットを撮った契機。</summary>
-public enum CaptureTrigger { Click, Manual, WindowChange }
+public enum CaptureTrigger { Click, Manual, WindowChange, Video }
 
 public enum OperationKind { Click, TextInput, KeyPress, WindowShown, ContentChanged }
 
@@ -48,6 +48,17 @@ public sealed class Step
     public List<PixelRect> Highlights { get; set; } = [];
     /// <summary>トリミング範囲。null なら画像全体。</summary>
     public PixelRect? Crop { get; set; }
+
+    /// <summary>
+    /// 動画のステップなら、その動画(例: "videos/0003.mp4"、録画モードで切り出したものは "video.mp4")。
+    /// ImageFile はポスター(再生前に見せる画像)になる。null なら静止画のステップ。
+    /// </summary>
+    public string? VideoFile { get; set; }
+    /// <summary>動画のうち使う区間。null なら最初から/最後まで。</summary>
+    public TimeSpan? VideoStart { get; set; }
+    public TimeSpan? VideoEnd { get; set; }
+    /// <summary>録画モードで、このステップを撮ったときの全編の動画上の時刻。</summary>
+    public TimeSpan? VideoTime { get; set; }
 }
 
 public sealed class Session
@@ -57,7 +68,12 @@ public sealed class Session
     public string ProcessName { get; set; } = "";
     public EvidenceInfo Evidence { get; set; } = new();
     public List<Step> Steps { get; set; } = [];
+    /// <summary>録画モードで録った全編の動画(例: "video.mp4")。録画モードでなければ null。</summary>
+    public string? VideoFile { get; set; }
 }
+
+/// <summary>配布用に書き出すときの、動画のステップの形式。</summary>
+public enum ClipFormat { Mp4, Gif }
 
 /// <summary>エビデンスとして画面一覧の冒頭に載せる、記録した環境の情報。取れなかった項目は空。</summary>
 public sealed class EvidenceInfo

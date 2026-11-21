@@ -233,3 +233,119 @@ public class EvidenceTests
         Assert.Contains("| バージョン | 1.2.3 |", Export.ToMarkdown(s, GroupMode.Sequence));
     }
 }
+
+public class VideoExportTests
+{
+    /// <summary>静止画1枚と、録画モードの全編から区間を切り出した動画のステップ1つ。</summary>
+    static Session Sample()
+    {
+        var rec = new Recording(new Session { ProcessName = "App", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" });
+        var win = new WindowInfo("メイン", "W", "App");
+        rec.AddStep(CaptureTrigger.Click, win, "images/0001.png", 200, 100, DateTimeOffset.Now);
+        var clip = rec.AddStep(CaptureTrigger.Video, win, "images/0002.png", 200, 100, DateTimeOffset.Now);
+        (clip.VideoFile, clip.VideoStart, clip.VideoEnd) = ("video.mp4", TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(4));
+        clip.Crop = new(10, 20, 100, 50);
+        return rec.Session;
+    }
+
+    [Fact]
+    public void 動画のステップは既定の説明が付き_動画の置き場所が決まる()
+    {
+        var rec = new Recording(new Session());
+        Assert.Equal("videos/0001.mp4", rec.NextVideoFile);
+        var st = rec.AddStep(CaptureTrigger.Video, new("設定", "W", "App"), "images/0001.png", 1, 1, DateTimeOffset.Now);
+        Assert.Equal("『設定』の操作(動画)", st.Description);
+    }
+
+    [Theory]
+    [InlineData(null, null, "v.mp4")]
+    [InlineData(1.5, null, "v.mp4#t=1.5")]
+    [InlineData(null, 4.0, "v.mp4#t=0,4")]
+    [InlineData(1.25, 3.5, "v.mp4#t=1.25,3.5")]
+    public void 区間はメディアフラグメントで指定する(double? start, double? end, string expected) =>
+        Assert.Equal(expected, Export.ClipSource(new Step
+        {
+            VideoFile = "v.mp4",
+            VideoStart = start is { } a ? TimeSpan.FromSeconds(a) : null,
+            VideoEnd = end is { } b ? TimeSpan.FromSeconds(b) : null,
+        }));
+
+    [Fact]
+    public void Htmlでは動画を区間だけ再生しトリミングはCSSで表す()
+    {
+        var html = Export.ToHtml(Sample(), GroupMode.Sequence);
+        Assert.Contains("<video class=\"clip\" controls preload=\"metadata\" src=\"video.mp4#t=1.5,4\" poster=\"images/0002.png\" width=\"100\" " +
+            "style=\"object-view-box: inset(20px 90px 30px 10px); aspect-ratio: 100 / 50\"></video>", html);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<svg class=\"shot\"")); // 動画のステップは静止画にしない
+    }
+
+    [Fact]
+    public void Markdownでは動画へのリンクを添える()
+    {
+        var md = Export.ToMarkdown(Sample(), GroupMode.Sequence);
+        Assert.Contains("![メイン](images/0002.png)\n\n[▶ 動画を再生](video.mp4#t=1.5,4)\n", md);
+    }
+
+    [Theory]
+    [InlineData(ClipFormat.Mp4)]
+    [InlineData(ClipFormat.Gif)]
+    public void 配布用には使っている画像と切り出した動画だけを書き出す(ClipFormat format)
+    {
+        var src = Path.Combine(Path.GetTempPath(), "sr-src-" + Guid.NewGuid());
+        var dst = Path.Combine(Path.GetTempPath(), "sr-dst-" + Guid.NewGuid());
+        try
+        {
+            var s = Sample();
+            Directory.CreateDirectory(Path.Combine(src, "images"));
+            foreach (var f in new[] { "images/0001.png", "images/0002.png", "video.mp4" }) File.WriteAllText(Path.Combine(src, f), f);
+            SessionStore.Save(s, src);
+
+            var calls = new List<(int Id, string Clip, string? Poster)>();
+            Export.ExportForDistribution(s, src, dst, GroupMode.Sequence, format, (st, clip, poster) =>
+            {
+                calls.Add((st.Id, Path.GetRelativePath(dst, clip), poster == null ? null : Path.GetRelativePath(dst, poster)));
+                Assert.Equal(TimeSpan.FromSeconds(1.5), st.VideoStart); // 元のステップ(区間・トリミング付き)が渡る
+                Directory.CreateDirectory(Path.GetDirectoryName(clip)!);
+                File.WriteAllText(clip, "");
+            });
+
+            var ext = format == ClipFormat.Gif ? "gif" : "mp4";
+            Assert.Equal([(2, Path.Combine("clips", $"0002.{ext}"), format == ClipFormat.Gif ? null : Path.Combine("clips", "0002.png"))], calls);
+            Assert.True(File.Exists(Path.Combine(dst, "images", "0001.png")));
+            Assert.False(File.Exists(Path.Combine(dst, "images", "0002.png"))); // 動画のポスターは書き出した動画から作る
+            Assert.False(File.Exists(Path.Combine(dst, SessionStore.FileName)));
+            Assert.False(File.Exists(Path.Combine(dst, "video.mp4")));
+
+            var html = File.ReadAllText(Path.Combine(dst, Export.HtmlFile));
+            Assert.Contains(format == ClipFormat.Gif
+                ? "<img class=\"clip\" src=\"clips/0002.gif\" width=\"100\" height=\"50\" alt=\"\">"
+                : "<video class=\"clip\" controls preload=\"metadata\" src=\"clips/0002.mp4\" poster=\"clips/0002.png\" width=\"100\"></video>", html);
+            var md = File.ReadAllText(Path.Combine(dst, Export.MarkdownFile));
+            Assert.Contains(format == ClipFormat.Gif ? "![メイン](clips/0002.gif)" : "[▶ 動画を再生](clips/0002.mp4)", md);
+            Assert.Equal("video.mp4", s.VideoFile); // 元のセッションは変えない
+        }
+        finally
+        {
+            if (Directory.Exists(src)) Directory.Delete(src, true);
+            if (Directory.Exists(dst)) Directory.Delete(dst, true);
+        }
+    }
+
+    [Fact]
+    public void 動画の項目も保存して読み戻せる()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "sr-test-" + Guid.NewGuid());
+        try
+        {
+            var s = Sample();
+            s.Steps[0].VideoTime = TimeSpan.FromSeconds(0.8);
+            SessionStore.Save(s, dir);
+            var back = SessionStore.Load(dir);
+            Assert.Equal("video.mp4", back.VideoFile);
+            Assert.Equal(TimeSpan.FromSeconds(0.8), back.Steps[0].VideoTime);
+            Assert.Equal((TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(4)), (back.Steps[1].VideoStart!.Value, back.Steps[1].VideoEnd!.Value));
+            Assert.Equal(CaptureTrigger.Video, back.Steps[1].Trigger);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+}

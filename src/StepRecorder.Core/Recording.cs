@@ -9,6 +9,8 @@ public sealed class Recording(Session session)
 
     public string NextImageFile => $"images/{NextId:D4}.png";
 
+    public string NextVideoFile => $"videos/{NextId:D4}.mp4";
+
     public Step AddStep(CaptureTrigger trigger, WindowInfo window, string imageFile,
         int width, int height, DateTimeOffset time, Operation? op = null)
     {
@@ -23,6 +25,7 @@ public sealed class Recording(Session session)
             Window = window,
             ScreenName = window.Title,
         };
+        if (trigger == CaptureTrigger.Video) step.Description = $"『{window.Title}』の操作(動画)"; // 操作が足されたらその説明に置き換わる
         Session.Steps.Add(step);
         if (op != null) Append(step, op);
         return step;

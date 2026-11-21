@@ -11,6 +11,11 @@ public sealed class Settings
     public string HotkeyCapture { get; set; } = "Ctrl+Shift+F9";
     public string HotkeyPause { get; set; } = "Ctrl+Shift+F10";
     public string HotkeyStop { get; set; } = "Ctrl+Shift+F11";
+    public string HotkeyClip { get; set; } = "Ctrl+Shift+F12";
+    /// <summary>録画モード: 記録の最初から最後までを1本の動画に録る。</summary>
+    public bool RecordVideo { get; set; }
+    /// <summary>配布用に書き出すときの動画の形式(前回の選択)。</summary>
+    public ClipFormat ClipFormat { get; set; }
     public GroupMode GroupMode { get; set; } = GroupMode.Sequence;
     /// <summary>起動時に GitHub Releases の新しい版を確認するか。</summary>
     public bool AutoUpdate { get; set; } = true;
