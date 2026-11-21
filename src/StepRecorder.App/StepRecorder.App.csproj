@@ -19,6 +19,7 @@
     <UseWPF>true</UseWPF>
     <StartupObject>StepRecorder.App.App</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <AssemblyName>StepRecorder</AssemblyName>
     <RootNamespace>StepRecorder.App</RootNamespace>
   </PropertyGroup>
