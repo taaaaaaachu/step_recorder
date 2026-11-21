@@ -7,6 +7,9 @@ namespace StepRecorder.Core;
 /// <summary>出力の1セクション。Sequence ではステップ1つ、ByScreen では同じ画面のステップ群。</summary>
 public sealed record Section(string Title, Step Image, IReadOnlyList<string> Lines);
 
+/// <summary>画面一覧モードで「同じ画面」とみなす単位。</summary>
+public sealed record Screen(string ProcessName, string ClassName, string Name);
+
 public static class Export
 {
     public const string MarkdownFile = "steps.md";
@@ -19,10 +22,12 @@ public static class Export
 
         // 初めて出てきた順を保ったまま、同じ画面をまとめる
         return s.Steps
-            .GroupBy(st => (st.Window.ProcessName, st.Window.ClassName, st.ScreenName))
-            .Select(g => new Section(g.Key.ScreenName, g.First(), g.SelectMany(Lines).ToList()))
+            .GroupBy(ScreenOf)
+            .Select(g => new Section(g.Key.Name, g.First(), g.SelectMany(Lines).ToList()))
             .ToList();
     }
+
+    public static Screen ScreenOf(Step st) => new(st.Window.ProcessName, st.Window.ClassName, st.ScreenName);
 
     static IEnumerable<string> Lines(Step st) =>
         st.Description.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);

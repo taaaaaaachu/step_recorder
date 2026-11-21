@@ -20,6 +20,21 @@
             </StackPanel>
             <ListBox x:Name="Steps" SelectionChanged="Steps_SelectionChanged" HorizontalContentAlignment="Stretch"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <!-- 画面一覧モードのときの、画面ごとの見出し(出力でまとまる単位) -->
+                <ListBox.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate>
+                                <Border Background="#FFE8EEF7" Padding="6,3" Margin="0,6,0,2">
+                                    <TextBlock>
+                                        <Run Text="{Binding Name.Name, Mode=OneWay}" FontWeight="Bold"/>
+                                        <Run Text="{Binding ItemCount, Mode=OneWay, StringFormat=({0} ステップ)}" Foreground="#555"/>
+                                    </TextBlock>
+                                </Border>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListBox.GroupStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <DockPanel Margin="2,4">
@@ -111,7 +126,7 @@
                         <Grid.LayoutTransform><ScaleTransform x:Name="Zoom"/></Grid.LayoutTransform>
                         <Image x:Name="Picture" Stretch="Fill"/>
                         <MediaElement x:Name="Player" LoadedBehavior="Manual" UnloadedBehavior="Manual" Stretch="Fill" Visibility="Collapsed"
-                                      IsHitTestVisible="False" MediaEnded="Player_MediaEnded"/>
+                                      IsHitTestVisible="False" MediaEnded="Player_MediaEnded" MediaOpened="Player_MediaOpened"/>
                         <Canvas x:Name="Overlay" Background="Transparent" ClipToBounds="True"
                                 MouseLeftButtonDown="Overlay_MouseDown" MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp"/>
                     </Grid>

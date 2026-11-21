@@ -129,6 +129,46 @@ public sealed class EditorSmokeTests : IDisposable
 
 
 
+    /// <summary>画面一覧モードにすると、一覧も出力と同じく画面ごとに区切られる。</summary>
+    [E2EFact]
+    public void 画面一覧モードでは一覧を画面ごとに区切る()
+    {
+        var rec = new Recording(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now });
+        foreach (var name in new[] { "画面A", "画面B", "画面A" })
+        {
+            var file = rec.NextImageFile;
+            WindowCapture.SavePng(Solid(200, 100, Colors.SteelBlue), Path.Combine(dir, file));
+            rec.AddStep(CaptureTrigger.Manual, new(name, "W", "Demo"), file, 200, 100, DateTimeOffset.Now);
+        }
+        SessionStore.Save(rec.Session, dir);
+        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Wait(500);
+
+        List<string> Headers() => Find(editor, "Steps").FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text))
+            .Cast<AutomationElement>().Select(e => e.Current.Name).Where(n => n.StartsWith("画面") || n.Length > 0 && char.IsDigit(n[0])).ToList();
+        void Choose(string item)
+        {
+            var group = Find(editor, "Group");
+            ((ExpandCollapsePattern)group.GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
+            Wait(300);
+            ((SelectionItemPattern)group.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, item))
+                .GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+            ((ExpandCollapsePattern)group.GetCurrentPattern(ExpandCollapsePattern.Pattern)).Collapse();
+            Wait(500);
+        }
+
+        int Groups() => Find(editor, "Steps").FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Group)).Count;
+        Choose("手順モード(撮った順)");
+        Assert.Equal(["1. 画面A", "2. 画面B", "3. 画面A"], Headers());
+        Assert.Equal(0, Groups());
+        Choose("画面一覧モード(画面ごと)");
+        Assert.Equal(["1. 画面A", "3. 画面A", "2. 画面B"], Headers()); // 出力と同じく、同じ画面がまとまる
+        Assert.Equal(2, Groups());
+        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } shotDir)
+            WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(shotDir, "editor-byscreen.png"));
+    }
+
     /// <summary>録画モードの記録を開くと、全編の動画からフレームと区間をステップに足せる。配布用にも書き出せる。</summary>
     [E2EFact]
     public void 録画モードの記録では全編からフレームと区間を足せる()
@@ -165,7 +205,8 @@ public sealed class EditorSmokeTests : IDisposable
         At(1.8);
         Press("区間の終了");
         Press("区間を動画ステップに追加");
-        Press("▶ 再生"); // 足した動画のステップが選ばれているので、再生できる
+        // 足した動画のステップが選ばれているので、再生できる(区間は 0.8 秒なので、押した直後から確かめる)
+        ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "▶ 再生"));
         Assert.True(Until(() => AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "■ 停止")) != null), "再生が始まらない");
         if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } shotDir)
         {

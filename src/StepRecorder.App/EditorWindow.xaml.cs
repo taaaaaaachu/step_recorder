@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -14,7 +15,7 @@ namespace StepRecorder.App;
 public partial class EditorWindow : Window
 {
     /// <summary>一覧の1行。</summary>
-    sealed record StepView(Step Step, BitmapSource? Thumb, string Header, string Summary);
+    sealed record StepView(Step Step, BitmapSource? Thumb, string Header, string Summary, Screen Screen);
 
     enum Drag { None, New, Move, Resize }
 
@@ -55,12 +56,20 @@ public partial class EditorWindow : Window
 
     // ---- 一覧 ----
 
+    /// <summary>一覧を作り直し、session.Steps の select 番目を選ぶ。画面一覧モードでは出力と同じく画面ごとに区切る。</summary>
     void RefreshList(int select)
     {
-        Steps.ItemsSource = session.Steps.Select((s, i) => new StepView(s, Thumb(s), $"{i + 1}. {s.ScreenName}{(s.VideoFile != null ? "  ▶ 動画" : "")}", s.Description)).ToList();
-        if (session.Steps.Count > 0) Steps.SelectedIndex = Math.Clamp(select, 0, session.Steps.Count - 1);
+        var items = session.Steps.Select((s, i) =>
+            new StepView(s, Thumb(s), $"{i + 1}. {s.ScreenName}{(s.VideoFile != null ? "  ▶ 動画" : "")}", s.Description, Export.ScreenOf(s))).ToList();
+        Steps.ItemsSource = items;
+        var view = CollectionViewSource.GetDefaultView(items);
+        if ((GroupMode)Group.SelectedIndex == GroupMode.ByScreen) view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(StepView.Screen)));
+        if (items.Count > 0) Steps.SelectedItem = items[Math.Clamp(select, 0, items.Count - 1)];
         else ShowStep(null);
     }
+
+    /// <summary>選んでいるステップの、session.Steps での位置(一覧の表示順とは限らない)。</summary>
+    int CurrentIndex => Current is { } s ? session.Steps.IndexOf(s) : -1;
 
     BitmapSource? Thumb(Step s)
     {
@@ -112,7 +121,7 @@ public partial class EditorWindow : Window
 
     void Move(int delta)
     {
-        var i = Steps.SelectedIndex;
+        var i = CurrentIndex;
         var j = i + delta;
         if (i < 0 || j < 0 || j >= session.Steps.Count) return;
         Checkpoint();
@@ -126,7 +135,7 @@ public partial class EditorWindow : Window
     void DeleteStep_Click(object sender, RoutedEventArgs e)
     {
         if (Current is not { } s) return;
-        var i = Steps.SelectedIndex;
+        var i = CurrentIndex;
         Checkpoint();
         session.Steps.Remove(s);
         maybeUnused.Add(s.ImageFile); // ファイルは保存したときに消す(元に戻したものは消さない)
@@ -160,7 +169,7 @@ public partial class EditorWindow : Window
     void Field_LostFocus(object sender, RoutedEventArgs e)
     {
         textCheckpointed = false;
-        RefreshList(Steps.SelectedIndex);
+        RefreshList(CurrentIndex);
     }
 
     // ---- 強調枠とトリミング ----
@@ -404,9 +413,8 @@ public partial class EditorWindow : Window
     void Play_Click(object sender, RoutedEventArgs e)
     {
         if (clipPlaying) { StopClip(); return; }
-        if (Current is not { VideoFile: { } video } s) return;
+        if (Current is not { VideoFile: { } video }) return;
         Player.Source = new Uri(FullPath(video));
-        Player.Position = s.VideoStart ?? TimeSpan.Zero;
         Player.Visibility = Visibility.Visible;
         Player.Play();
         clipPlaying = true;
@@ -425,6 +433,9 @@ public partial class EditorWindow : Window
     }
 
     void Player_MediaEnded(object sender, RoutedEventArgs e) => StopClip();
+
+    /// <summary>開き終えてから区間の最初へ移る(開く前に位置を変えても効かないことがある)。</summary>
+    void Player_MediaOpened(object sender, RoutedEventArgs e) => Player.Position = Current?.VideoStart ?? TimeSpan.Zero;
 
     void StartPlayTimer()
     {
@@ -555,7 +566,9 @@ public partial class EditorWindow : Window
 
     void Group_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!loading) MarkDirty();
+        if (loading) return;
+        MarkDirty();
+        RefreshList(CurrentIndex);
     }
 
     void MarkDirty() => dirty = true;
@@ -573,7 +586,7 @@ public partial class EditorWindow : Window
     void Undo()
     {
         if (history.Undo() is not { } previous) return;
-        var i = Steps.SelectedIndex;
+        var i = CurrentIndex;
         session.Steps = previous.Steps;
         dirty = true;
         textCheckpointed = false;
