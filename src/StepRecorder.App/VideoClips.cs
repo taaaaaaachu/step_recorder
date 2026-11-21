@@ -16,6 +16,13 @@ static class VideoClips
     /// <summary>time の時点のフレーム。</summary>
     public static BitmapSource Frame(string video, TimeSpan time) => Reader.Open(video).Frame(time);
 
+    /// <summary>動画の長さと大きさ。</summary>
+    public static (TimeSpan Duration, int Width, int Height) Info(string video)
+    {
+        var r = Reader.Open(video);
+        return (r.Duration, r.Width, r.Height);
+    }
+
     /// <summary>
     /// start〜end(null なら最後まで)を、crop の範囲だけの mp4 に切り出す。
     /// MediaTranscoder の区間指定(ファイルからの変換)は E_POINTER で失敗するので、

@@ -129,6 +129,37 @@ public sealed class EditorSmokeTests : IDisposable
 
 
 
+    /// <summary>表示欄だけを別ウインドウに出し、閉じると編集画面に戻る。</summary>
+    [E2EFact]
+    public void 表示欄を別ウインドウに出して戻せる()
+    {
+        var rec = new Recording(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now });
+        WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, rec.NextImageFile));
+        rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), rec.NextImageFile, 400, 300, DateTimeOffset.Now);
+        SessionStore.Save(rec.Session, dir);
+        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Wait(500);
+
+        // WPF の子ウインドウ(Owner 付き)は UI Automation では編集画面の下に出るので、表示欄がどちらのウインドウにあるかは親をたどって見る
+        string? WindowOfScroller()
+        {
+            var e = AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "Scroller"));
+            for (; e != null; e = TreeWalker.ControlViewWalker.GetParent(e))
+                if (e.Current.ControlType == ControlType.Window) return e.Current.Name;
+            return null;
+        }
+        var popupTitle = $"step_recorder プレビュー — {Path.GetFileName(dir)}";
+
+        Assert.StartsWith("step_recorder 編集", WindowOfScroller());
+        ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "別ウインドウで表示"));
+        Assert.True(Until(() => WindowOfScroller() == popupTitle), "表示欄が別ウインドウに出ない");
+
+        // 別ウインドウが編集画面の上に重なっていることがあるので、マウスではなく UI Automation で押す
+        ((InvokePattern)Find(editor, new PropertyCondition(AutomationElement.NameProperty, "表示欄をここに戻す")).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+        Assert.True(Until(() => WindowOfScroller()?.StartsWith("step_recorder 編集") == true), "表示欄が戻らない");
+    }
+
     /// <summary>画面一覧モードにすると、一覧も出力と同じく画面ごとに区切られる。</summary>
     [E2EFact]
     public void 画面一覧モードでは一覧を画面ごとに区切る()
@@ -199,6 +230,11 @@ public sealed class EditorSmokeTests : IDisposable
         void Press(string name) { ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, name)); Wait(800); }
 
         At(2.0);
+        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } seekDir) // シークすると、メインの表示欄に全編の動画が出る
+        {
+            Wait(500);
+            WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(seekDir, "editor-seek.png"));
+        }
         Press("このフレームをステップに追加");
         At(1.0);
         Press("区間の開始");

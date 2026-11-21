@@ -103,18 +103,15 @@ public partial class EditorWindow : Window
         ScreenName.IsEnabled = Description.IsEnabled = s != null;
         loading = false;
         selectedHighlight = -1;
+        LeaveVideoView();
         StopClip();
         PlayButton.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
         ToolAdd.IsEnabled = s?.VideoFile == null; // 動画には強調枠を付けない
         if (s?.VideoFile != null && ToolAdd.IsChecked == true) ToolSelect.IsChecked = true;
-        if (s?.VideoTime is { } t && session.VideoFile != null) TimeSlider.Value = t.TotalSeconds; // タイムラインもその時刻へ
+        if (s?.VideoTime is { } t && session.VideoFile != null) MoveSlider(t); // タイムラインもその時刻へ
         Picture.Source = s == null ? null : Load(s);
-        if (s != null)
-        {
-            // 画像は撮影時のピクセル寸法で置き、ズームは拡大縮小の変換だけで行う。座標はそのまま画像内のピクセル
-            Stage.Width = Picture.Width = Overlay.Width = s.ImageWidth;
-            Stage.Height = Picture.Height = Overlay.Height = s.ImageHeight;
-        }
+        // 画像は撮影時のピクセル寸法で置き、ズームは拡大縮小の変換だけで行う。座標はそのまま画像内のピクセル
+        if (s != null) SetStageSize(s.ImageWidth, s.ImageHeight);
         if (fit) FitZoom();
         else Redraw();
     }
@@ -199,8 +196,8 @@ public partial class EditorWindow : Window
     {
         fit = true;
         var margin = Stage.Margin.Left + Stage.Margin.Right + 2;
-        if (Current is not { } s || Scroller.ActualWidth <= margin || Scroller.ActualHeight <= margin) { Redraw(); return; }
-        SetZoom(Math.Min(1, Math.Min((Scroller.ActualWidth - margin) / s.ImageWidth, (Scroller.ActualHeight - margin) / s.ImageHeight)));
+        if (Current == null && !videoView || double.IsNaN(Stage.Width) || Scroller.ActualWidth <= margin || Scroller.ActualHeight <= margin) { Redraw(); return; }
+        SetZoom(Math.Min(1, Math.Min((Scroller.ActualWidth - margin) / Stage.Width, (Scroller.ActualHeight - margin) / Stage.Height)));
     }
 
     void ZoomBy(double factor, Point? anchor = null)
@@ -402,18 +399,28 @@ public partial class EditorWindow : Window
     }
 
     // ---- 動画 ----
+    // メインの表示欄の Player は、動画のステップの再生(clipPlaying)と、録画モードの全編の表示(videoView)の両方に使う。
+    // 全編の表示はシークバーを動かすか ▶ を押すと始まり、ステップを選ぶとそのステップの画像に戻る。
 
     readonly System.Windows.Threading.DispatcherTimer playTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
-    bool clipPlaying, fullPlaying, sliderFromPlayer;
+    bool clipPlaying, videoView, fullPlaying, sliderQuiet;
+    (int Width, int Height) fullSize;
     TimeSpan? rangeStart, rangeEnd;
 
     string FullPath(string relative) => System.IO.Path.GetFullPath(System.IO.Path.Combine(dir, relative));
+
+    void SetStageSize(int width, int height)
+    {
+        Stage.Width = Picture.Width = Overlay.Width = width;
+        Stage.Height = Picture.Height = Overlay.Height = height;
+    }
 
     /// <summary>動画のステップを、区間だけ再生する(ポスターの上に重ねる)。もう一度押すと止める。</summary>
     void Play_Click(object sender, RoutedEventArgs e)
     {
         if (clipPlaying) { StopClip(); return; }
-        if (Current is not { VideoFile: { } video }) return;
+        if (Current is not { VideoFile: { } video } s) return;
+        if (videoView) ShowStep(s); // 全編を見ていたら、そのステップの表示に戻してから
         Player.Source = new Uri(FullPath(video));
         Player.Visibility = Visibility.Visible;
         Player.Play();
@@ -432,10 +439,15 @@ public partial class EditorWindow : Window
         PlayButton.Content = "▶ 再生";
     }
 
-    void Player_MediaEnded(object sender, RoutedEventArgs e) => StopClip();
+    void Player_MediaEnded(object sender, RoutedEventArgs e)
+    {
+        if (videoView) SetFullPlaying(false);
+        else StopClip();
+    }
 
-    /// <summary>開き終えてから区間の最初へ移る(開く前に位置を変えても効かないことがある)。</summary>
-    void Player_MediaOpened(object sender, RoutedEventArgs e) => Player.Position = Current?.VideoStart ?? TimeSpan.Zero;
+    /// <summary>開き終えてから位置を合わせる(開く前に位置を変えても効かないことがある)。</summary>
+    void Player_MediaOpened(object sender, RoutedEventArgs e) =>
+        Player.Position = videoView ? SliderTime : Current?.VideoStart ?? TimeSpan.Zero;
 
     void StartPlayTimer()
     {
@@ -447,29 +459,50 @@ public partial class EditorWindow : Window
     void OnPlayTick()
     {
         if (clipPlaying && Current?.VideoEnd is { } end && Player.Position >= end) StopClip();
-        if (fullPlaying)
-        {
-            sliderFromPlayer = true;
-            TimeSlider.Value = FullPlayer.Position.TotalSeconds;
-            sliderFromPlayer = false;
-        }
+        if (fullPlaying) MoveSlider(Player.Position);
     }
 
     void OpenFullVideo()
     {
         TimelinePanel.Visibility = Visibility.Visible;
-        FullPlayer.Source = new Uri(FullPath(session.VideoFile!));
-        FullPlayer.Pause(); // 開くだけ(MediaOpened で長さが分かる)
+        var (duration, width, height) = VideoClips.Info(FullPath(session.VideoFile!));
+        TimeSlider.Maximum = duration.TotalSeconds;
+        fullSize = (width, height);
         UpdateTicks();
     }
 
-    void FullPlayer_MediaOpened(object sender, RoutedEventArgs e)
+    /// <summary>表示欄に全編の動画を出す(ステップの画像と強調枠の編集は隠す)。</summary>
+    void ShowVideoView()
     {
-        if (FullPlayer.NaturalDuration.HasTimeSpan) TimeSlider.Maximum = FullPlayer.NaturalDuration.TimeSpan.TotalSeconds;
-        FullPlayer.Position = TimeSpan.FromSeconds(TimeSlider.Value);
+        if (videoView) return;
+        StopClip();
+        videoView = true;
+        Picture.Visibility = Overlay.Visibility = PlayButton.Visibility = Visibility.Collapsed;
+        SetStageSize(fullSize.Width, fullSize.Height);
+        Player.Source = new Uri(FullPath(session.VideoFile!));
+        Player.Visibility = Visibility.Visible;
+        Player.Pause(); // 開くだけ。開き終えたらシークバーの位置へ移る
+        if (fit) FitZoom();
     }
 
-    void FullPlayer_MediaEnded(object sender, RoutedEventArgs e) => FullPlay_Click(this, new());
+    void LeaveVideoView()
+    {
+        if (!videoView) return;
+        SetFullPlaying(false);
+        videoView = false;
+        Player.Stop();
+        Player.Source = null;
+        Player.Visibility = Visibility.Collapsed;
+        Picture.Visibility = Overlay.Visibility = Visibility.Visible;
+    }
+
+    void SetFullPlaying(bool playing)
+    {
+        fullPlaying = playing;
+        if (playing) { Player.Play(); StartPlayTimer(); }
+        else if (videoView) Player.Pause();
+        FullPlayButton.Content = playing ? "‖" : "▶";
+    }
 
     /// <summary>タイムラインの目盛り(ステップを撮った時刻)を付け直す。</summary>
     void UpdateTicks() =>
@@ -477,19 +510,28 @@ public partial class EditorWindow : Window
 
     TimeSpan SliderTime => TimeSpan.FromSeconds(TimeSlider.Value);
 
+    /// <summary>シークバーを動かす(全編の表示には切り替えない)。</summary>
+    void MoveSlider(TimeSpan t)
+    {
+        sliderQuiet = true;
+        TimeSlider.Value = t.TotalSeconds;
+        sliderQuiet = false;
+    }
+
     static string Clock(TimeSpan t) => t.ToString(@"m\:ss\.f");
 
     void TimeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         TimeLabel.Text = Clock(SliderTime);
-        if (!sliderFromPlayer && FullPlayer.Source != null) FullPlayer.Position = SliderTime;
+        if (sliderQuiet) return;
+        ShowVideoView();
+        Player.Position = SliderTime;
     }
 
     void FullPlay_Click(object sender, RoutedEventArgs e)
     {
-        fullPlaying = !fullPlaying;
-        if (fullPlaying) { FullPlayer.Play(); StartPlayTimer(); } else FullPlayer.Pause();
-        FullPlayButton.Content = fullPlaying ? "‖" : "▶";
+        ShowVideoView();
+        SetFullPlaying(!fullPlaying);
     }
 
     void AddFrame_Click(object sender, RoutedEventArgs e)
@@ -560,6 +602,36 @@ public partial class EditorWindow : Window
         }
         finally { Mouse.OverrideCursor = null; }
         Process.Start(new ProcessStartInfo(System.IO.Path.Combine(dialog.FolderName, Export.HtmlFile)) { UseShellExecute = true });
+    }
+
+    // ---- 表示欄を別ウインドウに出す ----
+
+    Window? popup;
+
+    void PopOut_Click(object sender, RoutedEventArgs e)
+    {
+        if (popup != null) { popup.Close(); return; } // 出ていればここへ戻す
+        var back = new Button { Content = "表示欄をここに戻す", Padding = new Thickness(12, 4, 12, 4), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        back.Click += (_, _) => popup?.Close();
+        PreviewSlot.Content = back; // 先に外してから別ウインドウに入れる(1つの部品は1か所にしか置けない)
+        popup = new Window
+        {
+            Title = $"step_recorder プレビュー — {System.IO.Path.GetFileName(dir)}",
+            Owner = this,
+            Width = 1100, Height = 750,
+            FontFamily = FontFamily, FontSize = FontSize,
+            Content = PreviewBorder,
+        };
+        popup.PreviewKeyDown += Window_PreviewKeyDown; // Ctrl+Z やズームのキーも効くように
+        popup.Closed += (_, _) =>
+        {
+            popup!.Content = null;
+            PreviewSlot.Content = PreviewBorder;
+            popup = null;
+            PopOutButton.Content = "別ウインドウで表示";
+        };
+        popup.Show();
+        PopOutButton.Content = "表示欄を戻す";
     }
 
     // ---- 保存 ----

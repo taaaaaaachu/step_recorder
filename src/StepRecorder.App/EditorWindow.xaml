@@ -92,13 +92,12 @@
                 <Button Content="+" Click="ZoomIn_Click" ToolTip="拡大 (Ctrl+ホイール / Ctrl++)" MinWidth="30"/>
                 <Button Content="100%" Click="ZoomActual_Click" ToolTip="Ctrl+0"/>
                 <Button Content="全体" Click="ZoomFit_Click" ToolTip="画像全体が収まる大きさにする"/>
+                <Button x:Name="PopOutButton" Content="別ウインドウで表示" Click="PopOut_Click" ToolTip="表示欄だけを別のウインドウに出します(閉じると戻ります)"/>
             </StackPanel>
 
-            <!-- 録画モードの全編の動画。好きな時刻のフレームや区間をステップとして足す -->
+            <!-- 録画モードの全編のシークバーと操作。動画はメインの表示欄に出す。好きな時刻のフレームや区間をステップとして足す -->
             <Border x:Name="TimelinePanel" DockPanel.Dock="Bottom" Margin="0,6,0,0" BorderBrush="#ccc" BorderThickness="1" Padding="6" Visibility="Collapsed">
                 <DockPanel>
-                    <MediaElement x:Name="FullPlayer" DockPanel.Dock="Left" Height="160" Margin="0,0,8,0" LoadedBehavior="Manual" UnloadedBehavior="Manual"
-                                  ScrubbingEnabled="True" MediaOpened="FullPlayer_MediaOpened" MediaEnded="FullPlayer_MediaEnded"/>
                     <StackPanel VerticalAlignment="Center">
                         <DockPanel>
                             <TextBlock x:Name="TimeLabel" DockPanel.Dock="Right" Text="0:00.0" MinWidth="60" TextAlignment="Right" VerticalAlignment="Center"/>
@@ -118,20 +117,23 @@
                 </DockPanel>
             </Border>
 
-            <Border BorderBrush="#ccc" BorderThickness="1" Background="#f4f4f4">
-                <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                              SizeChanged="Scroller_SizeChanged" PreviewMouseWheel="Scroller_PreviewMouseWheel"
-                              PreviewMouseDown="Scroller_PreviewMouseDown" PreviewMouseMove="Scroller_PreviewMouseMove" PreviewMouseUp="Scroller_PreviewMouseUp">
-                    <Grid x:Name="Stage" Margin="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Grid.LayoutTransform><ScaleTransform x:Name="Zoom"/></Grid.LayoutTransform>
-                        <Image x:Name="Picture" Stretch="Fill"/>
-                        <MediaElement x:Name="Player" LoadedBehavior="Manual" UnloadedBehavior="Manual" Stretch="Fill" Visibility="Collapsed"
-                                      IsHitTestVisible="False" MediaEnded="Player_MediaEnded" MediaOpened="Player_MediaOpened"/>
-                        <Canvas x:Name="Overlay" Background="Transparent" ClipToBounds="True"
-                                MouseLeftButtonDown="Overlay_MouseDown" MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp"/>
-                    </Grid>
-                </ScrollViewer>
-            </Border>
+            <!-- 表示欄。「別ウインドウ」で PreviewBorder を別のウインドウへ移し、閉じたらここへ戻す -->
+            <ContentControl x:Name="PreviewSlot" Focusable="False">
+                <Border x:Name="PreviewBorder" BorderBrush="#ccc" BorderThickness="1" Background="#f4f4f4">
+                    <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                  SizeChanged="Scroller_SizeChanged" PreviewMouseWheel="Scroller_PreviewMouseWheel"
+                                  PreviewMouseDown="Scroller_PreviewMouseDown" PreviewMouseMove="Scroller_PreviewMouseMove" PreviewMouseUp="Scroller_PreviewMouseUp">
+                        <Grid x:Name="Stage" Margin="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Grid.LayoutTransform><ScaleTransform x:Name="Zoom"/></Grid.LayoutTransform>
+                            <Image x:Name="Picture" Stretch="Fill"/>
+                            <MediaElement x:Name="Player" LoadedBehavior="Manual" UnloadedBehavior="Manual" Stretch="Fill" Visibility="Collapsed" ScrubbingEnabled="True"
+                                          IsHitTestVisible="False" MediaEnded="Player_MediaEnded" MediaOpened="Player_MediaOpened"/>
+                            <Canvas x:Name="Overlay" Background="Transparent" ClipToBounds="True"
+                                    MouseLeftButtonDown="Overlay_MouseDown" MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp"/>
+                        </Grid>
+                    </ScrollViewer>
+                </Border>
+            </ContentControl>
         </DockPanel>
     </Grid>
 </Window>
