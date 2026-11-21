@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      # 記録エンジンの E2E テストはデスクトップ操作が要るので、ここでは自動でスキップされる
+      - run: dotnet test -c Release
+
+  # v1.2.3 形式のタグを push すると、Velopack でパッケージを作って GitHub Releases に公開する。
+  # アプリは起動時にここを見て自動更新する。
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      REPO_URL: https://github.com/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: バージョン
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - run: dotnet publish src/StepRecorder.App -c Release -r win-x64 --self-contained -o publish -p:Version=${{ env.VERSION }}
+      - run: dotnet tool install -g vpk --version 1.2.161 # Velopack パッケージと同じ版にする
+      - name: 前回のリリースを取得(差分更新用。初回は無くてよい)
+        continue-on-error: true
+        run: vpk download github --repoUrl ${{ env.REPO_URL }} --token ${{ secrets.GITHUB_TOKEN }}
+      - run: vpk pack --packId StepRecorder --packVersion ${{ env.VERSION }} --packDir publish --mainExe StepRecorder.exe --packTitle step_recorder
+      - run: vpk upload github --repoUrl ${{ env.REPO_URL }} --publish --releaseName "step_recorder ${{ env.VERSION }}" --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }}
