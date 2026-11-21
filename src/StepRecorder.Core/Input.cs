@@ -61,6 +61,21 @@ public static class KeyClassifier
     };
 }
 
+/// <summary>
+/// IME のオン・オフを切り替えるキー。キーボードの LANG1/LANG2 は、レイアウトによって
+/// VK_KANA(0x15)/VK_HANJA(0x19) か VK_IME_ON(0x16)/VK_IME_OFF(0x1A) で届く。
+/// </summary>
+public static class ImeKeys
+{
+    /// <summary>IME をオンにするキーなら true、オフにするキーなら false、それ以外は null。</summary>
+    public static bool? OpenState(int vk) => vk switch
+    {
+        0x15 or 0x16 => true,
+        0x19 or 0x1A => false,
+        _ => null,
+    };
+}
+
 public sealed record ClickEvent(DateTimeOffset Time, PixelPoint ScreenPoint, MouseButton Button);
 
 public static class ClickRules

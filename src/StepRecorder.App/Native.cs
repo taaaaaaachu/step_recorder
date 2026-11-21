@@ -18,7 +18,7 @@ static class Native
     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9, DWMWA_CLOAKED = 14;
     public const int SM_CXDOUBLECLK = 36, SM_CYDOUBLECLK = 37;
     public const int SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77, SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
-    public const int WM_IME_CONTROL = 0x0283, IMC_GETOPENSTATUS = 0x0005;
+    public const int WM_IME_CONTROL = 0x0283, IMC_GETOPENSTATUS = 0x0005, IMC_SETOPENSTATUS = 0x0006;
 
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; public readonly int Width => Right - Left; public readonly int Height => Bottom - Top; }
@@ -107,4 +107,8 @@ static class Native
         var ime = ImmGetDefaultIMEWnd(hwnd);
         return ime != 0 && SendMessageTimeout(ime, WM_IME_CONTROL, IMC_GETOPENSTATUS, 0, 2 /*SMTO_ABORTIFHUNG*/, 100, out var open) != 0 && open != 0;
     }
+
+    /// <summary>ウィンドウの IME を開く・閉じる。</summary>
+    public static void SetImeOpen(nint hwnd, bool open) =>
+        SendMessageTimeout(ImmGetDefaultIMEWnd(hwnd), WM_IME_CONTROL, IMC_SETOPENSTATUS, open ? 1 : 0, 2 /*SMTO_ABORTIFHUNG*/, 100, out _);
 }

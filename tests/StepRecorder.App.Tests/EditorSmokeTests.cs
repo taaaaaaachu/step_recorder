@@ -99,6 +99,36 @@ public sealed class EditorSmokeTests : IDisposable
             $"ドラッグで動かない: ({h0:0.#}, {v0:0.#}) → ({scroll.Current.HorizontalScrollPercent:0.#}, {scroll.Current.VerticalScrollPercent:0.#})");
     }
 
+
+    /// <summary>キーボードの LANG1/LANG2(VK_IME_ON/OFF・VK_KANA/HANJA)で、説明欄の IME がオン・オフになる。</summary>
+    [E2EFact]
+    public void 説明欄でLANG1とLANG2がIMEを切り替える()
+    {
+        var rec = new Recording(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now });
+        var file = rec.NextImageFile;
+        WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, file));
+        rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), file, 400, 300, DateTimeOffset.Now);
+        SessionStore.Save(rec.Session, dir);
+
+        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Wait(500);
+        ClickOn(editor, "Description");
+        Wait(300);
+
+        foreach (var (on, off) in new (ushort, ushort)[] { (0x16, 0x1A), (0x15, 0x19) })
+        {
+            PressKeys(editor, on);
+            Wait(300);
+            Assert.True(Native.ImeOpen(editor), $"0x{on:X2} で IME がオンにならない");
+            PressKeys(editor, off);
+            Wait(300);
+            Assert.False(Native.ImeOpen(editor), $"0x{off:X2} で IME がオフにならない");
+        }
+    }
+
+
+
     static BitmapSource Solid(int w, int h, Color c)
     {
         var px = new byte[w * h * 3];

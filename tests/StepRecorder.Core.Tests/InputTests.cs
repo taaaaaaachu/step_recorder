@@ -109,3 +109,15 @@ public class ContentChangeRulesTests
         Assert.Equal(1, ContentChangeRules.ChangedRatio(a, [1, 2, 3], 3));
     }
 }
+
+public class ImeKeysTests
+{
+    [Theory]
+    [InlineData(0x15, true)]  // VK_KANA (LANG1)
+    [InlineData(0x16, true)]  // VK_IME_ON
+    [InlineData(0x19, false)] // VK_HANJA (LANG2)
+    [InlineData(0x1A, false)] // VK_IME_OFF
+    [InlineData(0x41, null)]  // A
+    [InlineData(0x1B, null)]  // Esc
+    public void LANG1はオンLANG2はオフ(int vk, bool? expected) => Assert.Equal(expected, ImeKeys.OpenState(vk));
+}
