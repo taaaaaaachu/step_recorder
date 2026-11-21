@@ -106,4 +106,26 @@ static class Native
     /// <summary>ウィンドウの IME を開く・閉じる。</summary>
     public static void SetImeOpen(nint hwnd, bool open) =>
         SendMessageTimeout(ImmGetDefaultIMEWnd(hwnd), WM_IME_CONTROL, IMC_SETOPENSTATUS, open ? 1 : 0, 2 /*SMTO_ABORTIFHUNG*/, 100, out _);
+
+    /// <summary>
+    /// hwnd を前面に出す。Windows は他のアプリが前面のとき SetForegroundWindow を拒むことがあるので、
+    /// 拒まれたら、どのアプリも使わない F24 を一度押したことにしてから(最後の入力をこのプロセスにする)やり直す。
+    /// </summary>
+    public static void BringToFront(nint hwnd)
+    {
+        if (SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd) return;
+        INPUT[] tap = [new() { type = 1, ki = new() { wVk = VK_F24 } }, new() { type = 1, ki = new() { wVk = VK_F24, dwFlags = KEYEVENTF_KEYUP } }];
+        SendInput((uint)tap.Length, tap, Marshal.SizeOf<INPUT>());
+        SetForegroundWindow(hwnd);
+    }
+
+    const ushort VK_F24 = 0x87;
+    const uint KEYEVENTF_KEYUP = 0x0002;
+
+    // キーボード入力だけを送るので、INPUT の共用体のうち KEYBDINPUT だけを並べる(大きさはマウス入力に合わせる)
+    [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public KEYBDINPUT ki; public long pad; }
+    [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public nint dwExtraInfo; }
+
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(nint hwnd);
+    [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
 }

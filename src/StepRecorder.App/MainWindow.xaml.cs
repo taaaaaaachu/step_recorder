@@ -179,5 +179,6 @@ public partial class MainWindow : Window
         var editor = new EditorWindow(session, dir, settings.GroupMode);
         editor.Closed += (_, _) => Show();
         editor.Show();
+        Native.BringToFront(new System.Windows.Interop.WindowInteropHelper(editor).Handle); // 記録を止めたあと、対象アプリの後ろに隠れないように
     }
 }
