@@ -45,6 +45,17 @@ public sealed class EditorSmokeTests : IDisposable
         Assert.True(shot.Image.PixelWidth > 600);
         if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } outDir)
             WindowCapture.SavePng(shot.Image, Path.Combine(outDir, "editor.png"));
+
+        // ステップを削除して、Ctrl+Z で元に戻す
+        int Count() => Find(editor, "Steps").FindAll(TreeScope.Children,
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)).Count;
+        Assert.Equal(2, Count());
+        ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "削除"));
+        Wait(300);
+        Assert.Equal(1, Count());
+        PressKeys(editor, 0x11, 0x5A); // Ctrl+Z
+        Wait(300);
+        Assert.Equal(2, Count());
     }
 
     [E2EFact]

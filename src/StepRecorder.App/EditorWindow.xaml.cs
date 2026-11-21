@@ -22,7 +22,9 @@ public partial class EditorWindow : Window
     readonly string dir;
     readonly Dictionary<string, BitmapSource?> thumbs = [];
     readonly List<string> removedImages = [];
+    readonly SessionHistory history = new();
     bool dirty, loading;
+    bool textCheckpointed; // 文字の編集は、欄で編集を始めてから終えるまでを1回分として控える
 
     // 画像上のドラッグ
     Drag drag;
@@ -106,8 +108,8 @@ public partial class EditorWindow : Window
         var i = Steps.SelectedIndex;
         var j = i + delta;
         if (i < 0 || j < 0 || j >= session.Steps.Count) return;
+        Checkpoint();
         (session.Steps[i], session.Steps[j]) = (session.Steps[j], session.Steps[i]);
-        MarkDirty();
         RefreshList(j);
     }
 
@@ -118,9 +120,9 @@ public partial class EditorWindow : Window
     {
         if (Current is not { } s) return;
         var i = Steps.SelectedIndex;
+        Checkpoint();
         session.Steps.Remove(s);
-        removedImages.Add(s.ImageFile); // 画像は保存したときに消す
-        MarkDirty();
+        removedImages.Add(s.ImageFile); // 画像は保存したときに消す(元に戻したものは消さない)
         RefreshList(i);
     }
 
@@ -129,18 +131,29 @@ public partial class EditorWindow : Window
     void ScreenName_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (loading || Current is not { } s) return;
+        TextCheckpoint();
         s.ScreenName = ScreenName.Text;
-        MarkDirty();
     }
 
     void Description_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (loading || Current is not { } s) return;
+        TextCheckpoint();
         s.Description = Description.Text.ReplaceLineEndings("\n");
-        MarkDirty();
     }
 
-    void Field_LostFocus(object sender, RoutedEventArgs e) => RefreshList(Steps.SelectedIndex);
+    void TextCheckpoint()
+    {
+        if (textCheckpointed) return;
+        Checkpoint();
+        textCheckpointed = true;
+    }
+
+    void Field_LostFocus(object sender, RoutedEventArgs e)
+    {
+        textCheckpointed = false;
+        RefreshList(Steps.SelectedIndex);
+    }
 
     // ---- 強調枠とトリミング ----
 
@@ -319,14 +332,14 @@ public partial class EditorWindow : Window
         {
             if (drag == Drag.New && Geometry.IsUsable(preview))
             {
+                Checkpoint();
                 if (ToolCrop.IsChecked == true) s.Crop = preview;
                 else { s.Highlights.Add(preview); selectedHighlight = s.Highlights.Count - 1; }
-                MarkDirty();
             }
             else if (drag is Drag.Move or Drag.Resize && preview != dragOrigin)
             {
+                Checkpoint();
                 s.Highlights[selectedHighlight] = preview;
-                MarkDirty();
             }
         }
         drag = Drag.None;
@@ -337,17 +350,17 @@ public partial class EditorWindow : Window
     void DeleteHighlight_Click(object sender, RoutedEventArgs e)
     {
         if (Current is not { } s || selectedHighlight < 0 || selectedHighlight >= s.Highlights.Count) return;
+        Checkpoint();
         s.Highlights.RemoveAt(selectedHighlight);
         selectedHighlight = -1;
-        MarkDirty();
         Redraw();
     }
 
     void ClearCrop_Click(object sender, RoutedEventArgs e)
     {
         if (Current is not { Crop: not null } s) return;
+        Checkpoint();
         s.Crop = null;
-        MarkDirty();
         Redraw();
     }
 
@@ -361,7 +374,8 @@ public partial class EditorWindow : Window
             e.Handled = true;
             return;
         }
-        if (Keyboard.FocusedElement is TextBox) return;
+        if (Keyboard.FocusedElement is TextBox) return; // 入力中の Ctrl+Z などは TextBox 自身に任せる
+        if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control) { Undo(); e.Handled = true; return; }
         if (e.Key == Key.Delete) { DeleteHighlight_Click(this, new()); e.Handled = true; }
         if (Keyboard.Modifiers == ModifierKeys.Alt && e.SystemKey is Key.Up or Key.Down)
         {
@@ -378,6 +392,29 @@ public partial class EditorWindow : Window
     }
 
     void MarkDirty() => dirty = true;
+
+    // ---- 元に戻す ----
+
+    /// <summary>変更する直前に呼ぶ。今の状態を履歴に控える。</summary>
+    void Checkpoint()
+    {
+        history.Push(session);
+        dirty = true;
+        UndoButton.IsEnabled = true;
+    }
+
+    void Undo()
+    {
+        if (history.Undo() is not { } previous) return;
+        var i = Steps.SelectedIndex;
+        session.Steps = previous.Steps;
+        dirty = true;
+        textCheckpointed = false;
+        UndoButton.IsEnabled = history.CanUndo;
+        RefreshList(i);
+    }
+
+    void Undo_Click(object sender, RoutedEventArgs e) => Undo();
 
     bool Save()
     {

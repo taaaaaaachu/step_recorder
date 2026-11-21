@@ -41,6 +41,7 @@
                     <ComboBoxItem Content="手順モード(撮った順)"/>
                     <ComboBoxItem Content="画面一覧モード(画面ごと)"/>
                 </ComboBox>
+                <Button x:Name="UndoButton" Content="元に戻す" Click="Undo_Click" ToolTip="Ctrl+Z" IsEnabled="False"/>
                 <Button Content="保存" Click="Save_Click" FontWeight="Bold" ToolTip="Ctrl+S"/>
                 <Button Content="HTMLを開く" Click="OpenHtml_Click"/>
                 <Button Content="フォルダを開く" Click="OpenFolder_Click"/>
