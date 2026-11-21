@@ -98,19 +98,22 @@ public sealed class VideoE2ETests : IDisposable
     /// <summary>a の各画素と、b の (ox, oy) からの同じ大きさの範囲との、色の差の平均。</summary>
     static double MeanDiff(BitmapSource a, BitmapSource b, int ox, int oy)
     {
-        byte[] Bgr(BitmapSource s)
-        {
-            var c = new FormatConvertedBitmap(s, PixelFormats.Bgr24, null, 0);
-            var buf = new byte[c.PixelWidth * c.PixelHeight * 3];
-            c.CopyPixels(buf, c.PixelWidth * 3, 0);
-            return buf;
-        }
-        var (pa, pb) = (Bgr(a), Bgr(b));
+        var (pa, pb) = (Bgr24(a), Bgr24(b));
         long sum = 0, n = 0;
         for (var y = 0; y < a.PixelHeight && y + oy < b.PixelHeight; y++)
             for (var x = 0; x < a.PixelWidth * 3 && x + ox * 3 < b.PixelWidth * 3; x++, n++)
                 sum += Math.Abs(pa[y * a.PixelWidth * 3 + x] - pb[(y + oy) * b.PixelWidth * 3 + ox * 3 + x]);
         return (double)sum / n;
+    }
+
+
+    /// <summary>画素の並び(1画素 3 バイト、BGR)。</summary>
+    internal static byte[] Bgr24(BitmapSource s)
+    {
+        var c = new FormatConvertedBitmap(s, PixelFormats.Bgr24, null, 0);
+        var buf = new byte[c.PixelWidth * c.PixelHeight * 3];
+        c.CopyPixels(buf, c.PixelWidth * 3, 0);
+        return buf;
     }
 
     internal static (TimeSpan Duration, int Width, int Height) VideoInfo(string path)

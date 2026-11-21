@@ -27,13 +27,14 @@ public partial class RecordBar : Window
         this.engine = engine;
         this.settings = settings;
         this.dir = dir;
-        (engine.Mode switch { CaptureTrigger.Manual => ModeManual, CaptureTrigger.WindowChange => ModeWindow, _ => ModeClick }).IsChecked = true;
+        (settings.DefaultMode == RecordMode.Manual ? ModeManual : ModeClick).IsChecked = true;
         engine.StepCountChanged += n => Dispatcher.BeginInvoke(() => Count.Text = $"{n} 枚");
         engine.ClipChanged += recording => Dispatcher.BeginInvoke(() => OnClipChanged(recording));
         clipTimer.Tick += (_, _) => ShowClipTime();
-        if (settings.RecordVideo)
+        if (settings.DefaultMode == RecordMode.Video)
         {
-            ClipButton.Visibility = Visibility.Collapsed; // 全編を録っているので、区間は編集画面で切り出す
+            // クリックごとに撮りつつ全編を録っている。区間は編集画面で切り出すので録画ボタンは使わない
+            ModeClick.Visibility = ModeManual.Visibility = ClipButton.Visibility = Visibility.Collapsed;
             State.Text = "● 記録中(録画)";
         }
         var area = SystemParameters.WorkArea;
@@ -50,7 +51,7 @@ public partial class RecordBar : Window
 
         var failed = new List<string>();
         var hotkeys = new List<(int, string)> { (HkCapture, settings.HotkeyCapture), (HkPause, settings.HotkeyPause), (HkStop, settings.HotkeyStop) };
-        if (!settings.RecordVideo) hotkeys.Add((HkClip, settings.HotkeyClip));
+        if (settings.DefaultMode != RecordMode.Video) hotkeys.Add((HkClip, settings.HotkeyClip));
         foreach (var (id, text) in hotkeys)
         {
             if (!HotkeyInput.TryParse(text, out var mods, out var vk) || !RegisterHotKey(hwnd, id, (uint)mods, (uint)vk))
@@ -79,7 +80,7 @@ public partial class RecordBar : Window
     void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
 
     void Mode_Checked(object sender, RoutedEventArgs e) =>
-        engine.Mode = sender == ModeManual ? CaptureTrigger.Manual : sender == ModeWindow ? CaptureTrigger.WindowChange : CaptureTrigger.Click;
+        engine.Mode = sender == ModeManual ? RecordMode.Manual : RecordMode.Click;
 
     void Capture_Click(object sender, RoutedEventArgs e) => engine.CaptureManual();
 

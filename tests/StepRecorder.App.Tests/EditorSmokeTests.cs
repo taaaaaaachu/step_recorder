@@ -153,6 +153,7 @@ public sealed class EditorSmokeTests : IDisposable
         var editor = app.MainWindowHandle;
         Wait(1000);
         var slider = (RangeValuePattern)Find(editor, "TimeSlider").GetCurrentPattern(RangeValuePattern.Pattern);
+        Until(() => slider.Current.Maximum > 1); // 動画を開き終えると長さが分かる
         Assert.InRange(slider.Current.Maximum, 2.5, 3.5); // 全編の長さ
         void At(double sec) { slider.SetValue(sec); Wait(300); }
         void Press(string name) { ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, name)); Wait(800); }
@@ -165,7 +166,7 @@ public sealed class EditorSmokeTests : IDisposable
         Press("区間の終了");
         Press("区間を動画ステップに追加");
         Press("▶ 再生"); // 足した動画のステップが選ばれているので、再生できる
-        Assert.NotNull(Find(editor, new PropertyCondition(AutomationElement.NameProperty, "■ 停止")));
+        Assert.True(Until(() => AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "■ 停止")) != null), "再生が始まらない");
         if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } shotDir)
         {
             Wait(500);

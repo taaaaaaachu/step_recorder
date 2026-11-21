@@ -52,6 +52,14 @@ static class Desktop
 
     public static void Wait(int ms) => Thread.Sleep(ms);
 
+    /// <summary>cond が成り立つまで待つ(最大 timeoutMs)。成り立ったかを返す。</summary>
+    public static bool Until(Func<bool> cond, int timeoutMs = 5000)
+    {
+        var end = DateTime.Now.AddMilliseconds(timeoutMs);
+        while (!cond()) { if (DateTime.Now > end) return false; Thread.Sleep(100); }
+        return true;
+    }
+
     /// <summary>起動直後は部品が UI Automation にまだ出ていないことがあるので、少し待ちながら探す。</summary>
     public static AutomationElement Find(nint hwnd, Condition condition)
     {

@@ -28,19 +28,12 @@ public partial class MainWindow : Window
 
     void ShowSettings()
     {
-        (settings.DefaultMode switch
-        {
-            CaptureTrigger.Manual => ModeManual,
-            CaptureTrigger.WindowChange => ModeWindow,
-            _ => ModeClick,
-        }).IsChecked = true;
+        (settings.DefaultMode switch { RecordMode.Manual => ModeManual, RecordMode.Video => ModeRecord, _ => ModeClick }).IsChecked = true;
         OutputDir.Text = settings.OutputDir;
-        DrawWait.Text = settings.DrawWaitMs.ToString();
         HkCapture.Text = settings.HotkeyCapture;
         HkPause.Text = settings.HotkeyPause;
         HkStop.Text = settings.HotkeyStop;
         HkClip.Text = settings.HotkeyClip;
-        RecordVideo.IsChecked = settings.RecordVideo;
         Group.SelectedIndex = (int)settings.GroupMode;
         CaptureCursor.IsChecked = settings.CaptureCursor;
         AutoUpdate.IsChecked = settings.AutoUpdate;
@@ -49,21 +42,18 @@ public partial class MainWindow : Window
     /// <summary>画面の入力を設定に反映して保存する。不正な値があればメッセージを出して false。</summary>
     bool ReadSettings()
     {
-        if (!int.TryParse(DrawWait.Text, out var drawWait) || drawWait < 0) return Fail("描画待機時間は 0 以上の数値で入力してください");
         foreach (var (box, label) in new[] { (HkCapture, "手動撮影"), (HkPause, "一時停止"), (HkStop, "停止"), (HkClip, "録画") })
             if (!Hotkey.TryParse(box.Text, out _)) return Fail($"{label}キーを設定してください(欄をクリックしてキーを押す)");
         if (new[] { HkCapture.Text, HkPause.Text, HkStop.Text, HkClip.Text }.Distinct().Count() < 4) return Fail("手動撮影・一時停止・停止・録画には別々のキーを設定してください");
         if (string.IsNullOrWhiteSpace(OutputDir.Text)) return Fail("出力先を入力してください");
 
-        settings.DefaultMode = ModeManual.IsChecked == true ? CaptureTrigger.Manual
-            : ModeWindow.IsChecked == true ? CaptureTrigger.WindowChange : CaptureTrigger.Click;
+        settings.DefaultMode = ModeManual.IsChecked == true ? RecordMode.Manual
+            : ModeRecord.IsChecked == true ? RecordMode.Video : RecordMode.Click;
         settings.OutputDir = OutputDir.Text.Trim();
-        settings.DrawWaitMs = drawWait;
         settings.HotkeyCapture = HkCapture.Text.Trim();
         settings.HotkeyPause = HkPause.Text.Trim();
         settings.HotkeyStop = HkStop.Text.Trim();
         settings.HotkeyClip = HkClip.Text.Trim();
-        settings.RecordVideo = RecordVideo.IsChecked == true;
         settings.GroupMode = (GroupMode)Group.SelectedIndex;
         settings.CaptureCursor = CaptureCursor.IsChecked == true;
         settings.Save(Settings.DefaultPath);

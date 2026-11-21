@@ -17,18 +17,13 @@ public class DescriberTests
         Assert.Equal(expected, Describer.Describe(Click(name, type, b, dbl)));
 
     [Fact]
-    public void 入力とキーと画面表示()
+    public void 入力とキー()
     {
         Assert.Equal("『氏名』欄に「山田太郎」と入力",
             Describer.Describe(new Operation { Kind = OperationKind.TextInput, Element = new("氏名", "Edit", "", null), Text = "山田太郎" }));
         Assert.Equal("入力欄に「abc」と入力",
             Describer.Describe(new Operation { Kind = OperationKind.TextInput, Text = "abc" }));
         Assert.Equal("Ctrl+S を押す", Describer.Describe(new Operation { Kind = OperationKind.KeyPress, Keys = "Ctrl+S" }));
-        Assert.Equal("『設定』画面が表示された",
-            Describer.Describe(new Operation { Kind = OperationKind.WindowShown, Element = new("設定", "Window", "", null) }));
-        Assert.Equal("『詳細』タブに切り替わった",
-            Describer.Describe(new Operation { Kind = OperationKind.ContentChanged, Element = new("詳細", "TabItem", "", null) }));
-        Assert.Equal("画面の表示が切り替わった", Describer.Describe(new Operation { Kind = OperationKind.ContentChanged }));
     }
 }
 

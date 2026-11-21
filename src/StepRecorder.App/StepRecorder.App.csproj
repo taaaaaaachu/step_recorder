@@ -5,7 +5,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />
     <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <!-- 自前の Main(Velopack 用)を使うため、自動生成の Main を作らせない -->

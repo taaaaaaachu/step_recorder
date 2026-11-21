@@ -48,6 +48,6 @@ public sealed class MainWindowTests : IDisposable
     }
 
     [E2EFact]
-    public void 描画待機時間の文言() =>
-        Find(app.MainWindowHandle, new PropertyCondition(AutomationElement.NameProperty, "描画待機時間(ms)"));
+    public void 撮影モードに録画がある() =>
+        Find(app.MainWindowHandle, new PropertyCondition(AutomationElement.NameProperty, "録画"));
 }

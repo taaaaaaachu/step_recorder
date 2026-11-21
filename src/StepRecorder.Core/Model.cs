@@ -5,10 +5,13 @@ public sealed record PixelRect(int X, int Y, int Width, int Height);
 
 public sealed record PixelPoint(int X, int Y);
 
-/// <summary>スクリーンショットを撮った契機。</summary>
-public enum CaptureTrigger { Click, Manual, WindowChange, Video }
+/// <summary>ステップを撮った契機。</summary>
+public enum CaptureTrigger { Click, Manual, Video }
 
-public enum OperationKind { Click, TextInput, KeyPress, WindowShown, ContentChanged }
+/// <summary>撮影モード。Video(録画)はクリックごとに撮りつつ、記録の最初から最後までを動画に録る。</summary>
+public enum RecordMode { Click, Manual, Video }
+
+public enum OperationKind { Click, TextInput, KeyPress }
 
 public enum MouseButton { Left, Right, Middle }
 

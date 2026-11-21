@@ -8,8 +8,6 @@ public static class Describer
         OperationKind.Click => DescribeClick(op),
         OperationKind.TextInput => $"{Target(op.Element, "欄")}に「{op.Text}」と入力",
         OperationKind.KeyPress => $"{op.Keys} を押す",
-        OperationKind.WindowShown => $"{Quote(op.Element?.Name)}画面が表示された",
-        OperationKind.ContentChanged => op.Element is { ControlType: "TabItem", Name: { Length: > 0 } tab } ? $"『{tab}』タブに切り替わった" : "画面の表示が切り替わった",
         _ => "",
     };
 
@@ -33,7 +31,6 @@ public static class Describer
     static string Target(ElementInfo? e, string noun) =>
         string.IsNullOrWhiteSpace(e?.Name) ? $"入力{noun}" : $"『{e.Name}』{noun}";
 
-    static string Quote(string? name) => string.IsNullOrWhiteSpace(name) ? "" : $"『{name}』";
 
     /// <summary>UIA の ControlType 名(英語)を説明文用の名詞にする。</summary>
     static string ControlNoun(string controlType) => controlType switch

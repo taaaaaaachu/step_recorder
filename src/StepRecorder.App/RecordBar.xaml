@@ -18,7 +18,6 @@
         <TextBlock x:Name="State" Text="● 記録中" Foreground="#FFFF6060" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
         <RadioButton x:Name="ModeClick" Content="クリック" Checked="Mode_Checked"/>
         <RadioButton x:Name="ModeManual" Content="手動" Checked="Mode_Checked"/>
-        <RadioButton x:Name="ModeWindow" Content="画面切替" Checked="Mode_Checked"/>
         <Button x:Name="CaptureButton" Content="撮影" Click="Capture_Click"/>
         <Button x:Name="ClipButton" Content="● 録画" Click="Clip_Click" ToolTip="押してから操作し、もう一度押すと動画のステップになります"/>
         <Button x:Name="PauseButton" Content="一時停止" Click="Pause_Click"/>

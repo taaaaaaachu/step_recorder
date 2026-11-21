@@ -17,7 +17,6 @@ sealed class RecorderEngine
     readonly uint pid;
     readonly string processName;
     readonly string dir;
-    readonly int drawWaitMs;
     readonly bool captureCursor;
     readonly bool recordVideo;
     readonly HashSet<(HotkeyModifiers, int)> ownHotkeys = []; // 記録用のホットキー自体は記録しない
@@ -29,30 +28,19 @@ sealed class RecorderEngine
 
     // フックの delegate は GC されないようフィールドで持つ
     readonly HookProc mouseProc, keyProc;
-    readonly WinEventProc winProc;
 
     // ワーカー専用の状態
     ClickEvent? lastClick;
     Step? lastClickStep;
     AutomationElement? typing;
-    nint lastTargetRoot, lastShownHwnd;
+    nint lastTargetRoot;
     readonly Timer flushTimer;
-    readonly ContentWatcher watcher;
-
-    // 表示の切り替わり(ワーカー専用)。構造変化が落ち着くまで待ってから撮る
-    const int ContentMaxWaitMs = 2000;
-    const double ContentMinChange = 0.005; // これ未満の差(キャレットの点滅など)は切り替わりとみなさない
-    nint pendingHwnd;
-    DateTimeOffset pendingFirst, pendingLast;
-    ElementInfo? pendingTab;
-    nint lastShotHwnd;
-    byte[]? lastShotPixels;
 
     // 動画(ワーカー専用)。clip はホットキーで録っている途中の動画のステップ、full は録画モードの全編
     (VideoRecorder Recorder, Step Step)? clip;
     VideoRecorder? full;
 
-    public volatile CaptureTrigger Mode;
+    public volatile RecordMode Mode;
     public volatile bool Paused;
 
     /// <summary>ステップ数が変わった。ワーカースレッドから呼ばれる。</summary>
@@ -66,9 +54,8 @@ sealed class RecorderEngine
         pid = (uint)target.Id;
         processName = target.ProcessName;
         this.dir = dir;
-        drawWaitMs = settings.DrawWaitMs;
         captureCursor = settings.CaptureCursor;
-        recordVideo = settings.RecordVideo;
+        recordVideo = settings.DefaultMode == RecordMode.Video;
         Mode = settings.DefaultMode;
         foreach (var text in new[] { settings.HotkeyCapture, settings.HotkeyPause, settings.HotkeyStop, settings.HotkeyClip })
             if (HotkeyInput.TryParse(text, out var mods, out var vk)) ownHotkeys.Add((mods, vk));
@@ -76,9 +63,7 @@ sealed class RecorderEngine
         rec = new Recording(new Session { CreatedAt = DateTimeOffset.Now, ProcessName = processName, Evidence = EvidenceCollector.Collect(target) });
         mouseProc = MouseProc;
         keyProc = KeyProc;
-        winProc = WinProc;
         flushTimer = new Timer(_ => Enqueue(Flush));
-        watcher = new ContentWatcher((hwnd, tab) => Enqueue(() => OnContentChanged(hwnd, tab)));
         worker = new Thread(Work) { IsBackground = true, Name = "recorder-worker" };
         worker.SetApartmentState(ApartmentState.STA); // WPF の画像処理用
         hookThread = new Thread(HookLoop) { IsBackground = true, Name = "recorder-hooks" };
@@ -90,7 +75,6 @@ sealed class RecorderEngine
         if (recordVideo) Enqueue(StartFullVideo);
         hookThread.Start();
         hookReady.Wait();
-        Enqueue(() => watcher.Watch(lastTargetRoot));
     }
 
     public void CaptureManual() => Enqueue(() =>
@@ -106,7 +90,6 @@ sealed class RecorderEngine
     {
         PostThreadMessage(hookThreadId, WM_QUIT, 0, 0);
         hookThread.Join();
-        watcher.Stop();
         flushTimer.Dispose();
         Enqueue(() => { Flush(); StopVideos(); });
         queue.CompleteAdding();
@@ -186,14 +169,10 @@ sealed class RecorderEngine
         var mod = GetModuleHandle(null);
         var mouse = SetWindowsHookEx(WH_MOUSE_LL, mouseProc, mod, 0);
         var key = SetWindowsHookEx(WH_KEYBOARD_LL, keyProc, mod, 0);
-        var fg = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, 0, winProc, pid, 0, WINEVENT_OUTOFCONTEXT);
-        var show = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, 0, winProc, pid, 0, WINEVENT_OUTOFCONTEXT);
         hookReady.Set();
         while (GetMessage(out _, 0, 0, 0) > 0) { }
         UnhookWindowsHookEx(mouse);
         UnhookWindowsHookEx(key);
-        UnhookWinEvent(fg);
-        UnhookWinEvent(show);
     }
 
     nint MouseProc(int n, nint w, nint l)
@@ -207,7 +186,7 @@ sealed class RecorderEngine
                 var button = (int)w switch { WM_RBUTTONDOWN => MouseButton.Right, WM_MBUTTONDOWN => MouseButton.Middle, _ => MouseButton.Left };
                 var ev = new ClickEvent(DateTimeOffset.Now, new(info.pt.X, info.pt.Y), button);
                 var mode = Mode;
-                Enqueue(() => { Flush(); if (mode == CaptureTrigger.Click) OnClick(root, ev); });
+                Enqueue(() => { Flush(); if (mode != RecordMode.Manual) OnClick(root, ev); });
             }
         }
         return CallNextHookEx(0, n, w, l);
@@ -227,16 +206,6 @@ sealed class RecorderEngine
             }
         }
         return CallNextHookEx(0, n, w, l);
-    }
-
-    void WinProc(nint hook, uint ev, nint hwnd, int idObject, int idChild, uint thread, uint time)
-    {
-        if (idObject != OBJID_WINDOW || idChild != 0) return;
-        if (GetAncestor(hwnd, GA_ROOT) != hwnd || (GetWindowLongPtr(hwnd, GWL_STYLE) & WS_CAPTION) != WS_CAPTION) return;
-        Enqueue(() => watcher.Watch(hwnd)); // 途中でモードを切り替えても拾えるよう、モードに関係なく監視しておく
-        if (Paused || Mode != CaptureTrigger.WindowChange) return;
-        // 描画が終わるのを待ってから撮る
-        After(drawWaitMs, () => OnWindowShown(hwnd));
     }
 
     // ---- ワーカースレッド ----
@@ -301,60 +270,12 @@ sealed class RecorderEngine
             rec.AddOperation(new Operation { Kind = OperationKind.TextInput, Time = DateTimeOffset.Now, Element = Uia.Info(e, default), Text = v });
     }
 
-    void OnWindowShown(nint hwnd)
-    {
-        if (Paused || clip != null || !IsWindowVisible(hwnd) || hwnd == lastShownHwnd) return; // 同じウィンドウに戻っただけなら撮らない
-        Flush();
-        if (Capture(hwnd) is not { } shot) return;
-        lastShownHwnd = hwnd;
-        var op = new Operation { Kind = OperationKind.WindowShown, Time = DateTimeOffset.Now, Element = new(Text(hwnd), "Window", "", null) };
-        AddShot(CaptureTrigger.WindowChange, hwnd, shot, op);
-    }
-
-    void After(int ms, Action a) => Task.Delay(ms).ContinueWith(_ => Enqueue(a));
-
     Shot? Capture(nint hwnd) => WindowCapture.Capture(hwnd, captureCursor);
 
-    void OnContentChanged(nint hwnd, ElementInfo? tab)
-    {
-        if (Paused || Mode != CaptureTrigger.WindowChange) return;
-        var now = DateTimeOffset.Now;
-        if (pendingHwnd != hwnd)
-        {
-            pendingHwnd = hwnd;
-            pendingFirst = now;
-            pendingTab = null;
-            After(drawWaitMs, CaptureContentChange);
-        }
-        pendingLast = now;
-        pendingTab = tab ?? pendingTab;
-    }
-
-    void CaptureContentChange()
-    {
-        if (pendingHwnd == 0) return;
-        var now = DateTimeOffset.Now;
-        if (!ContentChangeRules.ShouldCapture(pendingFirst, pendingLast, now, drawWaitMs, ContentMaxWaitMs))
-        {
-            After(Math.Max(50, drawWaitMs - (int)(now - pendingLast).TotalMilliseconds), CaptureContentChange);
-            return;
-        }
-        var (hwnd, tab) = (pendingHwnd, pendingTab);
-        pendingHwnd = 0;
-        if (Paused || clip != null || !IsWindowVisible(hwnd)) return;
-        Flush();
-        if (Capture(hwnd) is not { } shot) return;
-        if (hwnd == lastShotHwnd && lastShotPixels != null
-            && ContentChangeRules.ChangedRatio(lastShotPixels, shot.Pixels, Shot.BytesPerPixel) < ContentMinChange) return;
-        var step = AddShot(CaptureTrigger.WindowChange, hwnd, shot, new Operation { Kind = OperationKind.ContentChanged, Time = now, Element = tab });
-        if (tab != null) step.ScreenName = $"{step.Window.Title} - {tab.Name}"; // 画面一覧モードでタブごとに別の画面として扱う
-    }
 
     Step AddShot(CaptureTrigger trigger, nint root, Shot shot, Operation? op)
     {
         lastTargetRoot = root;
-        lastShotHwnd = root;
-        lastShotPixels = shot.Pixels;
         var file = rec.NextImageFile;
         WindowCapture.SavePng(shot.Image, Path.Combine(dir, file));
         var step = rec.AddStep(trigger, new WindowInfo(Text(root), ClassName(root), processName), file,

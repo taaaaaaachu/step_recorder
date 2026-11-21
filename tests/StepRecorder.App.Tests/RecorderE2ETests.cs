@@ -30,11 +30,11 @@ public sealed class RecorderE2ETests : IDisposable
     }
 
     [E2EFact]
-    public void 手動撮影_クリック_入力_画面切り替わりを記録できる()
+    public void 手動撮影_クリック_入力_ダイアログを記録できる()
     {
         target = Launch(SampleExe);
         var main = target.MainWindowHandle;
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = CaptureTrigger.Click, DrawWaitMs = 300 });
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Click });
         engine.Start();
 
         engine.CaptureManual();
@@ -46,9 +46,11 @@ public sealed class RecorderE2ETests : IDisposable
         Wait(300);
         Assert.Equal("abc", ValueOf(main, "nameBox"));
 
-        engine.Mode = CaptureTrigger.WindowChange; // OK のクリックは撮らず、出てきたダイアログを撮る
+        engine.Mode = RecordMode.Manual; // OK のクリックは撮らず、出てきたダイアログを手動で撮る
         ClickOn(main, "okButton");
-        Wait(1500);
+        Wait(800);
+        engine.CaptureManual();
+        Wait(800);
 
         var session = Stop(engine);
         Assert.Equal("SampleTarget", session.ProcessName);
@@ -57,7 +59,7 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.Matches(@"^\d+×\d+$", session.Evidence.Screen);
         Assert.True(session.Evidence.ScalePercent >= 100);
         Assert.Equal(Environment.MachineName, session.Evidence.MachineName);
-        Assert.True(session.Steps.Count >= 3, $"ステップ数 {session.Steps.Count}");
+        Assert.Equal(3, session.Steps.Count);
 
         var manual = session.Steps[0];
         Assert.Equal(CaptureTrigger.Manual, manual.Trigger);
@@ -69,8 +71,7 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.Single(click.Highlights);
 
         var dialog = session.Steps[2];
-        Assert.Equal(CaptureTrigger.WindowChange, dialog.Trigger);
-        Assert.Equal("『確認』画面が表示された", dialog.Description);
+        Assert.Equal("確認", dialog.ScreenName);
         // ダイアログは、メインウィンドウごと撮ったアプリ全体の画像を、ダイアログの範囲にトリミングした状態になる
         Assert.NotNull(dialog.Crop);
         Assert.True(dialog.ImageWidth >= click.ImageWidth && dialog.ImageHeight >= click.ImageHeight, "画像がアプリ全体になっていない");
@@ -83,29 +84,6 @@ public sealed class RecorderE2ETests : IDisposable
             Assert.True(info.Exists && info.Length > 1000, $"{s.ImageFile} が撮れていない");
             Assert.True(s.ImageWidth > 100 && s.ImageHeight > 50);
         }
-    }
-
-    [E2EFact]
-    public void タブの切り替えとウィンドウ内の表示の切り替えを記録できる()
-    {
-        target = Launch(SampleExe);
-        var main = target.MainWindowHandle;
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = CaptureTrigger.WindowChange, DrawWaitMs = 300 });
-        engine.Start();
-        Wait(500);
-
-        // .NET の UI Automation が返すタブの位置はずれていることがあるので、Ctrl+Tab で次のタブへ切り替える
-        ClickOn(main, "nameBox");
-        Wait(300);
-        PressKeys(main, 0x11, 0x09); // Ctrl+Tab
-        Wait(1500);
-        ClickOn(main, "toggleButton");
-        Wait(1500);
-
-        var session = Stop(engine);
-        Assert.Equal(["『詳細』タブに切り替わった", "画面の表示が切り替わった"], session.Steps.Select(s => s.Description));
-        Assert.Equal("サンプル画面 - 詳細", session.Steps[0].ScreenName);
-        Assert.Equal("サンプル画面", session.Steps[1].ScreenName);
     }
 
     [E2EFact]
@@ -125,7 +103,7 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.Equal((without.Image.PixelWidth, without.Image.PixelHeight), (with.Image.PixelWidth, with.Image.PixelHeight));
 
         // 違いはカーソルの位置(ホットスポットから右下へ数十ピクセル)にだけある
-        var (a, b, w) = (without.Pixels, with.Pixels, without.Image.PixelWidth);
+        var (a, b, w) = (VideoE2ETests.Bgr24(without.Image), VideoE2ETests.Bgr24(with.Image), without.Image.PixelWidth);
         var changed = Enumerable.Range(0, a.Length / 3).Where(i => a[i * 3] != b[i * 3] || a[i * 3 + 1] != b[i * 3 + 1] || a[i * 3 + 2] != b[i * 3 + 2])
             .Select(i => (X: i % w, Y: i / w)).ToList();
         Assert.NotEmpty(changed);
@@ -138,7 +116,7 @@ public sealed class RecorderE2ETests : IDisposable
     {
         target = Launch(SampleExe);
         var main = target.MainWindowHandle;
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = CaptureTrigger.Click, DrawWaitMs = 300 });
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Click });
         engine.Start();
         Wait(300);
 
@@ -168,7 +146,7 @@ public sealed class RecorderE2ETests : IDisposable
     {
         target = Launch(SampleExe);
         var main = target.MainWindowHandle;
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = CaptureTrigger.Click, DrawWaitMs = 300, RecordVideo = true });
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Video });
         engine.Start();
         Wait(800);
         ClickOn(main, "nameBox");

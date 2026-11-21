@@ -20,20 +20,6 @@ sealed record Shot(BitmapSource Image, RECT Bounds, RECT Focus)
     public PixelRect? Crop => Geometry.CropFor(ToPixel(Bounds), ToPixel(Focus));
 
     static PixelRect ToPixel(RECT r) => new(r.Left, r.Top, r.Width, r.Height);
-
-    public const int BytesPerPixel = 3; // Image は Bgr24
-
-    /// <summary>画素の並び(前回の撮影との比較用)。</summary>
-    public byte[] Pixels => pixels ??= CopyPixels();
-    byte[]? pixels;
-
-    byte[] CopyPixels()
-    {
-        var stride = Image.PixelWidth * BytesPerPixel;
-        var buf = new byte[stride * Image.PixelHeight];
-        Image.CopyPixels(buf, stride, 0);
-        return buf;
-    }
 }
 
 /// <summary>

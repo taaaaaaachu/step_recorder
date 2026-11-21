@@ -47,9 +47,9 @@
                 <Button Content="フォルダを開く" Click="OpenFolder_Click"/>
                 <Button Content="配布用に書き出す..." Click="ExportForDistribution_Click"
                         ToolTip="使っている画像と動画だけを別のフォルダに書き出します(あとから編集はできません)"/>
-                <ComboBox x:Name="ClipFormatBox" Width="110" VerticalContentAlignment="Center" ToolTip="配布用に書き出すときの動画の形式">
-                    <ComboBoxItem Content="動画は mp4"/>
-                    <ComboBoxItem Content="動画は GIF"/>
+                <ComboBox x:Name="ClipFormatBox" Width="70" VerticalContentAlignment="Center" ToolTip="配布用に書き出すときの動画の形式">
+                    <ComboBoxItem Content="MP4"/>
+                    <ComboBoxItem Content="GIF"/>
                 </ComboBox>
             </StackPanel>
 
