@@ -33,7 +33,6 @@ sealed class RecorderEngine
     ClickEvent? lastClick;
     Step? lastClickStep;
     AutomationElement? typing;
-    string? typingInitial;
     nint lastTargetRoot, lastShownHwnd;
     readonly Timer flushTimer;
 
@@ -199,22 +198,18 @@ sealed class RecorderEngine
         }
         else if (kind == KeyKind.Typing)
         {
-            if (typing == null && Uia.Focused() is { } e)
-            {
-                typing = e;
-                typingInitial = Uia.Value(e);
-            }
+            typing ??= Uia.Focused();
             flushTimer.Change(1500, Timeout.Infinite); // 入力が止まったら確定させる
         }
     }
 
-    /// <summary>入力中の欄の値を読み、変わっていれば入力操作として記録する。</summary>
+    /// <summary>入力中の欄の値を読み、入力操作として記録する。同じ欄への続きの入力は Recording が1つにまとめる。</summary>
     void Flush()
     {
         if (typing is not { } e) return;
         typing = null;
         var v = Uia.Value(e);
-        if (v != null && v != typingInitial)
+        if (v != null)
             rec.AddOperation(new Operation { Kind = OperationKind.TextInput, Time = DateTimeOffset.Now, Element = Uia.Info(e, default), Text = v });
     }
 

@@ -28,6 +28,9 @@ public static class KeyClassifier
         if (vk == VK_TAB)
             return (KeyKind.Shortcut, Combine(name!, false, false, shift, false));
 
+        // カーソル移動だけのキーは値を変えないので入力として扱わない
+        if (vk is >= 0x21 and <= 0x28 or 0x2D) return (KeyKind.Ignore, "");
+
         return (KeyKind.Typing, "");
     }
 

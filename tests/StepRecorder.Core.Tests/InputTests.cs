@@ -15,6 +15,10 @@ public class KeyClassifierTests
     [InlineData(0x41, false, false, false, false, false, KeyKind.Typing, "")]
     [InlineData(0x41, false, false, true, false, false, KeyKind.Typing, "")] // 大文字入力
     [InlineData(0x08, false, false, false, false, false, KeyKind.Typing, "")]
+    [InlineData(0x25, false, false, false, false, false, KeyKind.Ignore, "")] // ← はカーソル移動だけ
+    [InlineData(0x24, false, false, true, false, false, KeyKind.Ignore, "")] // Shift+Home は範囲選択
+    [InlineData(0x25, true, false, false, false, false, KeyKind.Shortcut, "Ctrl+←")]
+    [InlineData(0x20, false, false, false, false, false, KeyKind.Typing, "")] // Space は文字
     [InlineData(0x11, true, false, false, false, false, KeyKind.Ignore, "")] // Ctrl 単体
     [InlineData(0xA2, true, false, false, false, false, KeyKind.Ignore, "")] // 左 Ctrl
     [InlineData(0xBA, true, false, false, false, false, KeyKind.Ignore, "")] // 名前の無いキー + Ctrl
