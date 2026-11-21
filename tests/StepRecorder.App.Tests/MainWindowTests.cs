@@ -50,4 +50,16 @@ public sealed class MainWindowTests : IDisposable
     [E2EFact]
     public void 撮影モードに録画がある() =>
         Find(app.MainWindowHandle, new PropertyCondition(AutomationElement.NameProperty, "録画"));
+
+    [E2EFact]
+    public void 今すぐ確認で結果が新しい見た目のメッセージボックスに出る()
+    {
+        ClickOn(app.MainWindowHandle, "CheckUpdate");
+        // テストの実行はインストールしていないので、その旨が出る(メッセージボックスは持ち主の下にぶら下がる)
+        Find(app.MainWindowHandle, new PropertyCondition(AutomationElement.NameProperty, "インストールされていないため、更新を確認できません。"));
+        // マニフェストでコモンコントロール v6 を指定していれば、メッセージボックスはそれで描かれる
+        app.Refresh();
+        Assert.Contains(app.Modules.Cast<ProcessModule>(), m =>
+            m.ModuleName.Equals("comctl32.dll", StringComparison.OrdinalIgnoreCase) && m.FileVersionInfo.FileMajorPart >= 6);
+    }
 }

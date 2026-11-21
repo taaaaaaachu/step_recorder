@@ -84,6 +84,13 @@ public partial class MainWindow : Window
         settings.Save(Settings.DefaultPath);
     }
 
+    async void CheckUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        CheckUpdate.IsEnabled = false; // 確認中の二度押しを防ぐ
+        await Updater.CheckAsync(this, manual: true);
+        CheckUpdate.IsEnabled = true;
+    }
+
     // ---- ショートカットキー欄(フォーカス中はキー入力待ち。確定した値は Tag に持つ) ----
 
     void Hotkey_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)

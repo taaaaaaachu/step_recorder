@@ -6,7 +6,7 @@ GUI アプリの操作を記録して、企画チームに渡す「画面一覧�
 
 ## インストール
 
-[Releases](https://github.com/taaaaaaachu/step_recorder/releases) から `StepRecorder-win-Setup.exe` を実行する(管理者権限は不要)。起動時に新しい版があれば更新を確認する(開始画面の「自動更新」のチェックを外すと確認しない)。
+[Releases](https://github.com/taaaaaaachu/step_recorder/releases) から `StepRecorder-win-Setup.exe` を実行する(管理者権限は不要)。起動時に新しい版があれば更新を確認する(開始画面の「自動更新」のチェックを外すと確認しない)。「今すぐ確認」ボタンでいつでも確認できる。
 コード署名をしていないので、初回は SmartScreen の警告が出る(「詳細情報」→「実行」)。
 
 インストールせずに使う場合は `StepRecorder-win-Portable.zip` を展開する。

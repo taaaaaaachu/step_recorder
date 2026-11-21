@@ -16,7 +16,7 @@ Windows 標準の「ステップ記録ツール」を拡張したツール。GUI
 |---|---|
 | 言語・UI | C# / WPF (.NET 10)。録画は Windows.Graphics.Capture と Media Foundation(WinRT の MediaTranscoder・MediaComposition)、Direct3D 11 は Vortice.Direct3D11 |
 | 対象アプリ | WinForms / WPF (.NET) を主に想定。UI Automation で部品名を取得する |
-| 配布・更新 | Velopack + GitHub Releases(public リポジトリ `taaaaaaachu/step_recorder`)。起動時に更新を確認する(設定でオフにできる) |
+| 配布・更新 | Velopack + GitHub Releases(public リポジトリ `taaaaaaachu/step_recorder`)。起動時に更新を確認する(設定でオフにできる)。開始画面の「今すぐ確認」で手動でも確認でき、こちらは最新のときや失敗したときも結果を出す。マニフェストでコモンコントロール v6 を使う(WinForms の EnableVisualStyles 相当) |
 | 言語 | 日本語のみ |
 | テスト | xUnit。記録ロジック・生成処理・JSON の読み書きを単体テストする |
 
