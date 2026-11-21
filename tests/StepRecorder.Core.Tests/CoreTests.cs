@@ -288,7 +288,7 @@ public class VideoExportTests
     public void Htmlでは動画を区間だけ再生しトリミングはCSSで表す()
     {
         var html = Export.ToHtml(Sample(), GroupMode.Sequence);
-        Assert.Contains("<video class=\"clip\" controls preload=\"metadata\" src=\"video.mp4#t=1.5,4\" poster=\"images/0002.png\" width=\"100\" " +
+        Assert.Contains("<video class=\"clip\" controls preload=\"metadata\" src=\"video.mp4#t=1.5,4\" poster=\"images/0002.png\" width=\"100\" data-start=\"1.5\" data-end=\"4\" " +
             "style=\"object-view-box: inset(20px 90px 30px 10px); aspect-ratio: 100 / 50\"></video>", html);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<svg class=\"shot\"")); // 動画のステップは静止画にしない
     }

@@ -157,6 +157,14 @@ public static class Export
               svg.setAttribute('height', h);
               btn.textContent = full ? 'トリミングする' : 'トリミングを解除';
             }));
+            // 動画は再生し終えたら区間の最初に戻す。区間(#t=開始,終了)の終わりではブラウザは一時停止するだけで、
+            // そのまま ▶ を押すと区間の外まで再生してしまうため
+            document.querySelectorAll('video.clip').forEach(v => {
+              const start = +(v.dataset.start ?? 0), end = v.dataset.end === undefined ? Infinity : +v.dataset.end;
+              const rewind = () => { if (v.ended || v.currentTime >= end - 0.05) v.currentTime = start; };
+              v.addEventListener('pause', rewind);
+              v.addEventListener('ended', rewind);
+            });
             // 画面一覧モードで、同じ画面のステップを前後に切り替える(説明の行をクリックしてもそのステップへ)
             document.querySelectorAll('section').forEach(sec => {
               const pages = sec.querySelectorAll('.page');
@@ -224,20 +232,20 @@ public static class Export
         }
         var style = st.Crop == null ? "" :
             $" style=\"object-view-box: inset({c.Y}px {w - c.X - c.Width}px {h - c.Y - c.Height}px {c.X}px); aspect-ratio: {c.Width} / {c.Height}\"";
-        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{style}></video>\n");
+        // 区間の開始・終了は、再生し終えたら区間の最初に戻すために持たせる(スクリプトで使う)
+        var range = (st.VideoStart is { } a ? $" data-start=\"{Seconds(a)}\"" : "") + (st.VideoEnd is { } b ? $" data-end=\"{Seconds(b)}\"" : "");
+        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{style}></video>\n");
     }
 
     /// <summary>動画のステップの参照先。区間があればメディアフラグメントを付ける。</summary>
-    public static string ClipSource(Step st)
+    public static string ClipSource(Step st) => (st.VideoStart, st.VideoEnd) switch
     {
-        static string Sec(TimeSpan t) => t.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
-        return (st.VideoStart, st.VideoEnd) switch
-        {
-            (null, null) => st.VideoFile!,
-            (var a, null) => $"{st.VideoFile}#t={Sec(a!.Value)}",
-            (var a, var b) => $"{st.VideoFile}#t={Sec(a ?? TimeSpan.Zero)},{Sec(b!.Value)}",
-        };
-    }
+        (null, null) => st.VideoFile!,
+        (var a, null) => $"{st.VideoFile}#t={Seconds(a!.Value)}",
+        (var a, var b) => $"{st.VideoFile}#t={Seconds(a ?? TimeSpan.Zero)},{Seconds(b!.Value)}",
+    };
+
+    static string Seconds(TimeSpan t) => t.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
 
     /// <summary>session.json・steps.md・index.html をまとめて書き出す。</summary>
     public static void SaveAll(Session s, string dir, GroupMode mode)
