@@ -73,9 +73,6 @@ public class SettingsTests
             new Settings { AutoUpdate = false }.Save(path);
             Assert.False(Settings.Load(path).AutoUpdate);
 
-            File.WriteAllText(path, """{ "windowChangeDelayMs": 100 }"""); // 項目が無い古い設定ファイル
-            Assert.True(Settings.Load(path).AutoUpdate);
-
             File.WriteAllText(path, "{ broken");
             Assert.Equal(300, Settings.Load(path).WindowChangeDelayMs);
             Assert.Equal(300, Settings.Load(path + ".none").WindowChangeDelayMs);

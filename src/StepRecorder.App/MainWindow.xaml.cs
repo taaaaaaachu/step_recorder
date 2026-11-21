@@ -11,7 +11,6 @@ public partial class MainWindow : Window
     sealed record ProcessItem(Process Process, string Label);
 
     readonly Settings settings = Settings.Load(Settings.DefaultPath);
-    bool loadingSettings;
 
     public MainWindow()
     {
@@ -39,9 +38,7 @@ public partial class MainWindow : Window
         HkPause.Text = settings.HotkeyPause;
         HkStop.Text = settings.HotkeyStop;
         Group.SelectedIndex = (int)settings.GroupMode;
-        loadingSettings = true;
         AutoUpdate.IsChecked = settings.AutoUpdate;
-        loadingSettings = false;
     }
 
     /// <summary>画面の入力を設定に反映して保存する。不正な値があればメッセージを出して false。</summary>
@@ -82,9 +79,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>記録開始を待たず、切り替えたらすぐ保存する(次回の起動から効く)。</summary>
-    void AutoUpdate_Changed(object sender, RoutedEventArgs e)
+    void AutoUpdate_Click(object sender, RoutedEventArgs e)
     {
-        if (loadingSettings) return;
         settings.AutoUpdate = AutoUpdate.IsChecked == true;
         settings.Save(Settings.DefaultPath);
     }
