@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/StepRecorder.App/StepRecorder.App.csproj" />
+    <Project Path="src/StepRecorder.Core/StepRecorder.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/StepRecorder.Core.Tests/StepRecorder.Core.Tests.csproj" />
+  </Folder>
+</Solution>
