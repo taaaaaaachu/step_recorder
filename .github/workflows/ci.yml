@@ -40,5 +40,5 @@ jobs:
       - name: 前回のリリースを取得(差分更新用。初回は無くてよい)
         continue-on-error: true
         run: vpk download github --repoUrl ${{ env.REPO_URL }} --token ${{ secrets.GITHUB_TOKEN }}
-      - run: vpk pack --packId StepRecorder --packVersion ${{ env.VERSION }} --packDir publish --mainExe StepRecorder.exe --packTitle step_recorder
+      - run: vpk pack --packId StepRecorder --packVersion ${{ env.VERSION }} --runtime win-x64 --packDir publish --mainExe StepRecorder.exe --packTitle step_recorder
       - run: vpk upload github --repoUrl ${{ env.REPO_URL }} --publish --releaseName "step_recorder ${{ env.VERSION }}" --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }}
