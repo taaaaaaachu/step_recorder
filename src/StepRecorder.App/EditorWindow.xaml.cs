@@ -580,28 +580,58 @@ public partial class EditorWindow : Window
         RefreshList(index);
     }
 
-    void ExportForDistribution_Click(object sender, RoutedEventArgs e)
+    async void ExportForDistribution_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "配布用に書き出すフォルダ", InitialDirectory = System.IO.Path.GetDirectoryName(dir) };
         if (dialog.ShowDialog(this) != true) return;
-        var format = (ClipFormat)ClipFormatBox.SelectedIndex;
+        var (format, mode, outDir) = ((ClipFormat)ClipFormatBox.SelectedIndex, (GroupMode)Group.SelectedIndex, dialog.FolderName);
         var settings = Settings.Load(Settings.DefaultPath);
         settings.ClipFormat = format;
         settings.Save(Settings.DefaultPath);
-        // ponytail: 動画はフレームを1枚ずつ取り出して作り直すので、長いと待たされる。気になるなら進み具合を出す
-        Mouse.OverrideCursor = Cursors.Wait;
+
+        // 動画はフレームを1枚ずつ取り出して作り直すので時間がかかる。裏で動かし、進み具合を出す
+        var snapshot = SessionStore.Clone(session);
+        var total = Export.Sections(snapshot, mode).SelectMany(sec => sec.Steps).Count(st => st.VideoFile != null);
+        var label = new TextBlock { Text = "書き出しています...", Margin = new Thickness(0, 0, 0, 8) };
+        var bar = new ProgressBar { Maximum = 1, Width = 380, Height = 18, IsIndeterminate = total == 0 };
+        var busy = true;
+        var progress = new Window
+        {
+            Title = "配布用に書き出し中", Owner = this, ShowInTaskbar = false, ResizeMode = ResizeMode.NoResize,
+            SizeToContent = SizeToContent.WidthAndHeight, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            FontFamily = FontFamily, FontSize = FontSize,
+            Content = new StackPanel { Margin = new Thickness(18), Children = { label, bar } },
+        };
+        progress.Closing += (_, ev) => ev.Cancel = busy; // 途中では閉じさせない
+        var done = 0;
+        void Report(double clip) => Dispatcher.BeginInvoke(() =>
+        {
+            bar.Value = (done + clip) / total;
+            label.Text = $"動画を作っています({done + 1} / {total} 本目)";
+        });
+        IsEnabled = false;
+        progress.Show();
         try
         {
-            Export.ExportForDistribution(session, dir, dialog.FolderName, (GroupMode)Group.SelectedIndex, format,
-                (st, clip, poster) => VideoClips.ExportClip(dir, st, format, clip, poster));
+            await Task.Run(() => Export.ExportForDistribution(snapshot, dir, outDir, mode, format, (st, clip, poster) =>
+            {
+                VideoClips.ExportClip(dir, st, format, clip, poster, Report);
+                done++;
+            }));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             MessageBox.Show(this, $"書き出せませんでした: {ex.Message}", "step_recorder", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
-        finally { Mouse.OverrideCursor = null; }
-        Process.Start(new ProcessStartInfo(System.IO.Path.Combine(dialog.FolderName, Export.HtmlFile)) { UseShellExecute = true });
+        finally
+        {
+            busy = false;
+            progress.Close();
+            IsEnabled = true;
+            Activate();
+        }
+        Process.Start(new ProcessStartInfo(System.IO.Path.Combine(outDir, Export.HtmlFile)) { UseShellExecute = true });
     }
 
     // ---- 表示欄を別ウインドウに出す ----

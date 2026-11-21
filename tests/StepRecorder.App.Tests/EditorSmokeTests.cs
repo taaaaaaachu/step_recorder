@@ -264,7 +264,11 @@ public sealed class EditorSmokeTests : IDisposable
         foreach (var format in new[] { ClipFormat.Mp4, ClipFormat.Gif })
         {
             var outDir = Path.Combine(dir, "dist-" + format);
-            Export.ExportForDistribution(saved, dir, outDir, GroupMode.Sequence, format, (st, c, p) => VideoClips.ExportClip(dir, st, format, c, p));
+            var reported = new List<double>();
+            Export.ExportForDistribution(saved, dir, outDir, GroupMode.Sequence, format, (st, c, p) => VideoClips.ExportClip(dir, st, format, c, p, reported.Add));
+            Assert.NotEmpty(reported); // 進み具合(0〜1)が増えながら届く
+            Assert.All(reported, v => Assert.InRange(v, 0, 1));
+            Assert.Equal(reported.Order(), reported);
             Assert.False(File.Exists(Path.Combine(outDir, SessionStore.FileName)));
             Assert.False(File.Exists(Path.Combine(outDir, "video.mp4")));
             if (format == ClipFormat.Mp4)

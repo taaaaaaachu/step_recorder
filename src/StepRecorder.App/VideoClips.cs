@@ -28,7 +28,7 @@ static class VideoClips
     /// MediaTranscoder の区間指定(ファイルからの変換)は E_POINTER で失敗するので、
     /// フレームを1枚ずつ取り出して録画と同じ方法でエンコードし直す。
     /// </summary>
-    public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst)
+    public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null)
     {
         var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
@@ -39,6 +39,7 @@ static class VideoClips
             {
                 var t = TimeSpan.FromSeconds((double)i / VideoRecorder.Fps);
                 if (start + t >= stop) yield break;
+                progress?.Invoke(t / (stop - start));
                 yield return (BottomUpBgra(Crop(reader.Frame(start + t), crop), w, h), t);
             }
         }
@@ -46,13 +47,14 @@ static class VideoClips
     }
 
     /// <summary>start〜end(null なら最後まで)の crop の範囲を、繰り返し再生する GIF アニメーションにする。</summary>
-    public static void ToGif(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst)
+    public static void ToGif(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null)
     {
         var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
         var enc = new GifBitmapEncoder();
         for (var i = 0; start + TimeSpan.FromSeconds((double)i / GifFps) < stop; i++)
         {
+            progress?.Invoke(TimeSpan.FromSeconds((double)i / GifFps) / (stop - start));
             BitmapSource f = Crop(reader.Frame(start + TimeSpan.FromSeconds((double)i / GifFps)), crop);
             if (f.PixelWidth > GifMaxWidth)
             {
@@ -67,13 +69,16 @@ static class VideoClips
         File.WriteAllBytes(dst, Animate(ms.ToArray(), 100 / GifFps));
     }
 
-    /// <summary>配布用の書き出しで、動画のステップを区間とトリミングを反映したファイル(と、mp4 ならポスター画像)にする。</summary>
-    public static void ExportClip(string dir, Step st, ClipFormat format, string clip, string? poster)
+    /// <summary>
+    /// 配布用の書き出しで、動画のステップを区間とトリミングを反映したファイル(と、mp4 ならポスター画像)にする。
+    /// progress には進み具合(0〜1)を知らせる。
+    /// </summary>
+    public static void ExportClip(string dir, Step st, ClipFormat format, string clip, string? poster, Action<double>? progress = null)
     {
         var src = Path.Combine(dir, st.VideoFile!);
         var start = st.VideoStart ?? TimeSpan.Zero;
-        if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip);
-        else Cut(src, start, st.VideoEnd, st.Crop, clip);
+        if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip, progress);
+        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress);
         if (poster != null) WindowCapture.SavePng(Frame(clip, TimeSpan.Zero), poster);
     }
 
