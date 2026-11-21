@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using StepRecorder.Core;
 using Windows.Media.Editing;
 using Windows.Storage;
 
@@ -13,40 +14,64 @@ static class VideoClips
     const int GifFps = 10, GifMaxWidth = 960; // ponytail: GIF の重さはこの2つで決まる。重すぎるなら設定にする
 
     /// <summary>time の時点のフレーム。</summary>
-    public static BitmapSource Frame(string video, TimeSpan time) => Reader.Open(video, 0).Frame(time);
+    public static BitmapSource Frame(string video, TimeSpan time) => Reader.Open(video).Frame(time);
 
     /// <summary>
-    /// start〜end を mp4 に切り出す。MediaTranscoder の区間指定(ファイルからの変換)は E_POINTER で失敗するので、
+    /// start〜end(null なら最後まで)を、crop の範囲だけの mp4 に切り出す。
+    /// MediaTranscoder の区間指定(ファイルからの変換)は E_POINTER で失敗するので、
     /// フレームを1枚ずつ取り出して録画と同じ方法でエンコードし直す。
     /// </summary>
-    public static void Cut(string video, TimeSpan start, TimeSpan end, string dst)
+    public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst)
     {
-        var reader = Reader.Open(video, 0);
-        var (w, h) = (reader.Width & ~1, reader.Height & ~1);
+        var reader = Reader.Open(video);
+        var stop = end ?? reader.Duration;
+        var (w, h) = ((crop?.Width ?? reader.Width) & ~1, (crop?.Height ?? reader.Height) & ~1); // H.264 は縦横とも偶数
         IEnumerable<(byte[], TimeSpan)> Frames()
         {
             for (var i = 0; ; i++)
             {
                 var t = TimeSpan.FromSeconds((double)i / VideoRecorder.Fps);
-                if (start + t >= end) yield break;
-                yield return (BottomUpBgra(reader.Frame(start + t), w, h), t);
+                if (start + t >= stop) yield break;
+                yield return (BottomUpBgra(Crop(reader.Frame(start + t), crop), w, h), t);
             }
         }
         Task.Run(() => VideoRecorder.Encode(dst, w, h, Frames())).GetAwaiter().GetResult();
     }
 
-    /// <summary>start〜end を、繰り返し再生する GIF アニメーションにする。</summary>
-    public static void ToGif(string video, TimeSpan start, TimeSpan end, string dst)
+    /// <summary>start〜end(null なら最後まで)の crop の範囲を、繰り返し再生する GIF アニメーションにする。</summary>
+    public static void ToGif(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst)
     {
-        var reader = Reader.Open(video, GifMaxWidth);
+        var reader = Reader.Open(video);
+        var stop = end ?? reader.Duration;
         var enc = new GifBitmapEncoder();
-        for (var i = 0; start + TimeSpan.FromSeconds((double)i / GifFps) < end; i++)
-            enc.Frames.Add(BitmapFrame.Create(reader.Frame(start + TimeSpan.FromSeconds((double)i / GifFps))));
+        for (var i = 0; start + TimeSpan.FromSeconds((double)i / GifFps) < stop; i++)
+        {
+            BitmapSource f = Crop(reader.Frame(start + TimeSpan.FromSeconds((double)i / GifFps)), crop);
+            if (f.PixelWidth > GifMaxWidth)
+            {
+                var scale = (double)GifMaxWidth / f.PixelWidth;
+                f = new TransformedBitmap(f, new ScaleTransform(scale, scale));
+            }
+            enc.Frames.Add(BitmapFrame.Create(f));
+        }
         using var ms = new MemoryStream();
         enc.Save(ms);
         Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
         File.WriteAllBytes(dst, Animate(ms.ToArray(), 100 / GifFps));
     }
+
+    /// <summary>配布用の書き出しで、動画のステップを区間とトリミングを反映したファイル(と、mp4 ならポスター画像)にする。</summary>
+    public static void ExportClip(string dir, Step st, ClipFormat format, string clip, string? poster)
+    {
+        var src = Path.Combine(dir, st.VideoFile!);
+        var start = st.VideoStart ?? TimeSpan.Zero;
+        if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip);
+        else Cut(src, start, st.VideoEnd, st.Crop, clip);
+        if (poster != null) WindowCapture.SavePng(Frame(clip, TimeSpan.Zero), poster);
+    }
+
+    static BitmapSource Crop(BitmapSource f, PixelRect? crop) =>
+        crop is { } c ? new CroppedBitmap(f, new Int32Rect(c.X, c.Y, Math.Min(c.Width, f.PixelWidth - c.X), Math.Min(c.Height, f.PixelHeight - c.Y))) : f;
 
     /// <summary>
     /// GifBitmapEncoder は表示時間も繰り返しの指定も書けない(メタデータを渡しても無視される)ので、
@@ -102,22 +127,23 @@ static class VideoClips
         return flipped;
     }
 
-    /// <summary>MediaComposition でフレームを取り出す。maxWidth が 0 でなければ、その幅までに縮める。</summary>
+    /// <summary>MediaComposition でフレームを取り出す。</summary>
     sealed class Reader
     {
         readonly MediaComposition composition;
         public readonly int Width, Height;
+        public readonly TimeSpan Duration;
 
-        Reader(MediaComposition composition, int width, int height) => (this.composition, Width, Height) = (composition, width, height);
+        Reader(MediaComposition composition, int width, int height, TimeSpan duration) =>
+            (this.composition, Width, Height, Duration) = (composition, width, height, duration);
 
-        public static Reader Open(string video, int maxWidth) => Run(async () =>
+        public static Reader Open(string video) => Run(async () =>
         {
             var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(video)); // WinRT は / 区切りを受け付けない
             var props = await file.Properties.GetVideoPropertiesAsync();
             var composition = new MediaComposition();
             composition.Clips.Add(await MediaClip.CreateFromFileAsync(file));
-            var scale = maxWidth > 0 && props.Width > maxWidth ? (double)maxWidth / props.Width : 1;
-            return new Reader(composition, (int)(props.Width * scale), (int)(props.Height * scale));
+            return new Reader(composition, (int)props.Width, (int)props.Height, props.Duration);
         });
 
         public BitmapSource Frame(TimeSpan time)

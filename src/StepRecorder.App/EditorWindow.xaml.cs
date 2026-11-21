@@ -21,7 +21,7 @@ public partial class EditorWindow : Window
     readonly Session session;
     readonly string dir;
     readonly Dictionary<string, BitmapSource?> thumbs = [];
-    readonly List<string> removedImages = [];
+    readonly List<string> maybeUnused = []; // 消したステップや足したフレームのファイル。保存したとき、どのステップも使っていなければ消す
     readonly SessionHistory history = new();
     bool dirty, loading;
     bool textCheckpointed; // 文字の編集は、欄で編集を始めてから終えるまでを1回分として控える
@@ -48,6 +48,8 @@ public partial class EditorWindow : Window
         loading = true;
         Group.SelectedIndex = (int)mode;
         loading = false;
+        ClipFormatBox.SelectedIndex = (int)Settings.Load(Settings.DefaultPath).ClipFormat;
+        if (session.VideoFile != null) OpenFullVideo();
         RefreshList(0);
     }
 
@@ -55,7 +57,7 @@ public partial class EditorWindow : Window
 
     void RefreshList(int select)
     {
-        Steps.ItemsSource = session.Steps.Select((s, i) => new StepView(s, Thumb(s), $"{i + 1}. {s.ScreenName}", s.Description)).ToList();
+        Steps.ItemsSource = session.Steps.Select((s, i) => new StepView(s, Thumb(s), $"{i + 1}. {s.ScreenName}{(s.VideoFile != null ? "  ▶ 動画" : "")}", s.Description)).ToList();
         if (session.Steps.Count > 0) Steps.SelectedIndex = Math.Clamp(select, 0, session.Steps.Count - 1);
         else ShowStep(null);
     }
@@ -92,6 +94,11 @@ public partial class EditorWindow : Window
         ScreenName.IsEnabled = Description.IsEnabled = s != null;
         loading = false;
         selectedHighlight = -1;
+        StopClip();
+        PlayButton.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
+        ToolAdd.IsEnabled = s?.VideoFile == null; // 動画には強調枠を付けない
+        if (s?.VideoFile != null && ToolAdd.IsChecked == true) ToolSelect.IsChecked = true;
+        if (s?.VideoTime is { } t && session.VideoFile != null) TimeSlider.Value = t.TotalSeconds; // タイムラインもその時刻へ
         Picture.Source = s == null ? null : Load(s);
         if (s != null)
         {
@@ -122,7 +129,8 @@ public partial class EditorWindow : Window
         var i = Steps.SelectedIndex;
         Checkpoint();
         session.Steps.Remove(s);
-        removedImages.Add(s.ImageFile); // 画像は保存したときに消す(元に戻したものは消さない)
+        maybeUnused.Add(s.ImageFile); // ファイルは保存したときに消す(元に戻したものは消さない)
+        if (s.VideoFile != null) maybeUnused.Add(s.VideoFile);
         RefreshList(i);
     }
 
@@ -384,6 +392,165 @@ public partial class EditorWindow : Window
         }
     }
 
+    // ---- 動画 ----
+
+    readonly System.Windows.Threading.DispatcherTimer playTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+    bool clipPlaying, fullPlaying, sliderFromPlayer;
+    TimeSpan? rangeStart, rangeEnd;
+
+    string FullPath(string relative) => System.IO.Path.GetFullPath(System.IO.Path.Combine(dir, relative));
+
+    /// <summary>動画のステップを、区間だけ再生する(ポスターの上に重ねる)。もう一度押すと止める。</summary>
+    void Play_Click(object sender, RoutedEventArgs e)
+    {
+        if (clipPlaying) { StopClip(); return; }
+        if (Current is not { VideoFile: { } video } s) return;
+        Player.Source = new Uri(FullPath(video));
+        Player.Position = s.VideoStart ?? TimeSpan.Zero;
+        Player.Visibility = Visibility.Visible;
+        Player.Play();
+        clipPlaying = true;
+        PlayButton.Content = "■ 停止";
+        StartPlayTimer();
+    }
+
+    void StopClip()
+    {
+        if (!clipPlaying) return;
+        clipPlaying = false;
+        Player.Stop();
+        Player.Source = null;
+        Player.Visibility = Visibility.Collapsed;
+        PlayButton.Content = "▶ 再生";
+    }
+
+    void Player_MediaEnded(object sender, RoutedEventArgs e) => StopClip();
+
+    void StartPlayTimer()
+    {
+        if (playTimer.IsEnabled) return;
+        playTimer.Tick += (_, _) => OnPlayTick();
+        playTimer.Start();
+    }
+
+    void OnPlayTick()
+    {
+        if (clipPlaying && Current?.VideoEnd is { } end && Player.Position >= end) StopClip();
+        if (fullPlaying)
+        {
+            sliderFromPlayer = true;
+            TimeSlider.Value = FullPlayer.Position.TotalSeconds;
+            sliderFromPlayer = false;
+        }
+    }
+
+    void OpenFullVideo()
+    {
+        TimelinePanel.Visibility = Visibility.Visible;
+        FullPlayer.Source = new Uri(FullPath(session.VideoFile!));
+        FullPlayer.Pause(); // 開くだけ(MediaOpened で長さが分かる)
+        UpdateTicks();
+    }
+
+    void FullPlayer_MediaOpened(object sender, RoutedEventArgs e)
+    {
+        if (FullPlayer.NaturalDuration.HasTimeSpan) TimeSlider.Maximum = FullPlayer.NaturalDuration.TimeSpan.TotalSeconds;
+        FullPlayer.Position = TimeSpan.FromSeconds(TimeSlider.Value);
+    }
+
+    void FullPlayer_MediaEnded(object sender, RoutedEventArgs e) => FullPlay_Click(this, new());
+
+    /// <summary>タイムラインの目盛り(ステップを撮った時刻)を付け直す。</summary>
+    void UpdateTicks() =>
+        TimeSlider.Ticks = new DoubleCollection(session.Steps.Where(s => s.VideoTime != null).Select(s => s.VideoTime!.Value.TotalSeconds));
+
+    TimeSpan SliderTime => TimeSpan.FromSeconds(TimeSlider.Value);
+
+    static string Clock(TimeSpan t) => t.ToString(@"m\:ss\.f");
+
+    void TimeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        TimeLabel.Text = Clock(SliderTime);
+        if (!sliderFromPlayer && FullPlayer.Source != null) FullPlayer.Position = SliderTime;
+    }
+
+    void FullPlay_Click(object sender, RoutedEventArgs e)
+    {
+        fullPlaying = !fullPlaying;
+        if (fullPlaying) { FullPlayer.Play(); StartPlayTimer(); } else FullPlayer.Pause();
+        FullPlayButton.Content = fullPlaying ? "‖" : "▶";
+    }
+
+    void AddFrame_Click(object sender, RoutedEventArgs e)
+    {
+        var time = SliderTime;
+        InsertFromVideo(CaptureTrigger.Manual, VideoClips.Frame(FullPath(session.VideoFile!), time), time, _ => { });
+    }
+
+    void RangeStart_Click(object sender, RoutedEventArgs e) { rangeStart = SliderTime; ShowRange(); }
+    void RangeEnd_Click(object sender, RoutedEventArgs e) { rangeEnd = SliderTime; ShowRange(); }
+
+    void ShowRange() =>
+        RangeLabel.Text = $"区間 {(rangeStart is { } a ? Clock(a) : "?")} 〜 {(rangeEnd is { } b ? Clock(b) : "?")}";
+
+    void AddRange_Click(object sender, RoutedEventArgs e)
+    {
+        if (rangeStart is not { } start || rangeEnd is not { } end || end <= start)
+        {
+            MessageBox.Show(this, "「区間の開始」と「区間の終了」で、開始より後に終了を指定してください。", "step_recorder", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        InsertFromVideo(CaptureTrigger.Video, VideoClips.Frame(FullPath(session.VideoFile!), start), start,
+            st => (st.VideoFile, st.VideoStart, st.VideoEnd) = (session.VideoFile, start, end));
+        (rangeStart, rangeEnd) = (null, null);
+        RangeLabel.Text = "";
+    }
+
+    /// <summary>全編の動画の time から作ったステップを、時刻の順の位置に入れる。画面名などは直前のステップに合わせる。</summary>
+    void InsertFromVideo(CaptureTrigger trigger, BitmapSource image, TimeSpan time, Action<Step> setup)
+    {
+        Checkpoint();
+        var rec = new Recording(session);
+        // 消したステップの画像(保存までは残っていて、元に戻せる)と名前がぶつからないよう時刻を付ける
+        var file = $"images/{rec.NextId:D4}-{DateTime.Now:HHmmssfff}.png";
+        WindowCapture.SavePng(image, System.IO.Path.Combine(dir, file));
+        maybeUnused.Add(file);
+        var index = Recording.IndexByVideoTime(session.Steps, time);
+        var near = index > 0 ? session.Steps[index - 1] : session.Steps.FirstOrDefault();
+        var st = rec.AddStep(trigger, near?.Window ?? new("", "", session.ProcessName), file, image.PixelWidth, image.PixelHeight, DateTimeOffset.Now);
+        st.ScreenName = near?.ScreenName ?? "";
+        st.VideoTime = time;
+        setup(st);
+        session.Steps.Remove(st);
+        session.Steps.Insert(index, st);
+        UpdateTicks();
+        RefreshList(index);
+    }
+
+    void ExportForDistribution_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "配布用に書き出すフォルダ", InitialDirectory = System.IO.Path.GetDirectoryName(dir) };
+        if (dialog.ShowDialog(this) != true) return;
+        var format = (ClipFormat)ClipFormatBox.SelectedIndex;
+        var settings = Settings.Load(Settings.DefaultPath);
+        settings.ClipFormat = format;
+        settings.Save(Settings.DefaultPath);
+        // ponytail: 動画はフレームを1枚ずつ取り出して作り直すので、長いと待たされる。気になるなら進み具合を出す
+        Mouse.OverrideCursor = Cursors.Wait;
+        try
+        {
+            Export.ExportForDistribution(session, dir, dialog.FolderName, (GroupMode)Group.SelectedIndex, format,
+                (st, clip, poster) => VideoClips.ExportClip(dir, st, format, clip, poster));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            MessageBox.Show(this, $"書き出せませんでした: {ex.Message}", "step_recorder", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        finally { Mouse.OverrideCursor = null; }
+        Process.Start(new ProcessStartInfo(System.IO.Path.Combine(dialog.FolderName, Export.HtmlFile)) { UseShellExecute = true });
+    }
+
     // ---- 保存 ----
 
     void Group_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -421,9 +588,9 @@ public partial class EditorWindow : Window
         try
         {
             Export.SaveAll(session, dir, (GroupMode)Group.SelectedIndex);
-            foreach (var f in removedImages.Where(f => session.Steps.All(s => s.ImageFile != f)))
+            foreach (var f in maybeUnused.Distinct().Where(f => f != session.VideoFile && session.Steps.All(s => s.ImageFile != f && s.VideoFile != f)))
                 File.Delete(System.IO.Path.Combine(dir, f));
-            removedImages.Clear();
+            maybeUnused.Clear();
             dirty = false;
             return true;
         }

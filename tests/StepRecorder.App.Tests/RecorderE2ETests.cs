@@ -116,7 +116,7 @@ public sealed class RecorderE2ETests : IDisposable
         var frame = Native.FrameBounds(main);
         var (x, y) = (frame.Left + 60, frame.Top + 150); // 部品の無い所
         MoveCursor(x, y);
-        Wait(300);
+        Wait(1000); // 起動直後のウィンドウの描画(開くアニメーション)が終わるのを待つ
 
         var without = WindowCapture.Capture(main, cursor: false)!;
         var with = WindowCapture.Capture(main, cursor: true)!;

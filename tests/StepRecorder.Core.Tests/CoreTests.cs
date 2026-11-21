@@ -349,3 +349,16 @@ public class VideoExportTests
         finally { Directory.Delete(dir, true); }
     }
 }
+
+public class TimelineTests
+{
+    static Step At(double? sec) => new() { VideoTime = sec is { } s ? TimeSpan.FromSeconds(s) : null };
+
+    [Theory]
+    [InlineData(0.5, 0)] // どれよりも前
+    [InlineData(1.0, 1)] // 同じ時刻なら後ろ
+    [InlineData(2.5, 2)] // 2.0 の直後(時刻の無いステップより前)
+    [InlineData(9.0, 4)] // 最後
+    public void 足したステップは動画上の時刻の順に入れる(double time, int expected) =>
+        Assert.Equal(expected, Recording.IndexByVideoTime([At(1), At(2), At(null), At(3)], TimeSpan.FromSeconds(time)));
+}

@@ -11,6 +11,17 @@ public sealed class Recording(Session session)
 
     public string NextVideoFile => $"videos/{NextId:D4}.mp4";
 
+    /// <summary>
+    /// 全編の動画の time から足したステップを入れる位置。動画上の時刻が time 以前の最後のステップの直後
+    /// (時刻を持たないステップは見ない)。
+    /// </summary>
+    public static int IndexByVideoTime(IReadOnlyList<Step> steps, TimeSpan time)
+    {
+        var i = steps.Count - 1;
+        while (i >= 0 && !(steps[i].VideoTime <= time)) i--;
+        return i + 1;
+    }
+
     public Step AddStep(CaptureTrigger trigger, WindowInfo window, string imageFile,
         int width, int height, DateTimeOffset time, Operation? op = null)
     {

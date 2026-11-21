@@ -82,11 +82,13 @@ public sealed class VideoE2ETests : IDisposable
         rec.Stop();
 
         var mp4 = Path.Combine(dir, "clips", "cut.mp4");
-        VideoClips.Cut(path, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2.5), mp4);
-        Assert.InRange(VideoInfo(mp4).Duration.TotalSeconds, 1.3, 1.7);
+        VideoClips.Cut(path, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2.5), new(0, 0, 200, 100), mp4);
+        var (duration, w, h) = VideoInfo(mp4);
+        Assert.InRange(duration.TotalSeconds, 1.3, 1.7);
+        Assert.Equal((200, 100), (w, h)); // トリミングした範囲だけになる
 
         var gif = Path.Combine(dir, "clips", "cut.gif");
-        VideoClips.ToGif(path, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), gif);
+        VideoClips.ToGif(path, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), null, gif);
         var decoder = new GifBitmapDecoder(new Uri(gif), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
         Assert.Equal(10, decoder.Frames.Count); // 10fps で1秒
         Assert.Equal((ushort)10, ((BitmapMetadata)decoder.Frames[0].Metadata).GetQuery("/grctlext/Delay"));

@@ -129,6 +129,82 @@ public sealed class EditorSmokeTests : IDisposable
 
 
 
+    /// <summary>録画モードの記録を開くと、全編の動画からフレームと区間をステップに足せる。配布用にも書き出せる。</summary>
+    [E2EFact]
+    public void 録画モードの記録では全編からフレームと区間を足せる()
+    {
+        // 録画モードの記録を作る(サンプルアプリを3秒録画し、0.5 秒の時点のステップを1つ持つ)
+        var sample = Launch(SampleExe);
+        try
+        {
+            var rec = VideoRecorder.Start(sample.MainWindowHandle, Path.Combine(dir, "video.mp4"), cursor: false);
+            Wait(3000);
+            rec.Stop();
+        }
+        finally { sample.Kill(); }
+        var poster = VideoClips.Frame(Path.Combine(dir, "video.mp4"), TimeSpan.FromSeconds(0.5));
+        var recording = new Recording(new Session { ProcessName = "SampleTarget", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" });
+        WindowCapture.SavePng(poster, Path.Combine(dir, recording.NextImageFile));
+        var first = recording.AddStep(CaptureTrigger.Click, new("サンプル画面", "W", "SampleTarget"), recording.NextImageFile, poster.PixelWidth, poster.PixelHeight, DateTimeOffset.Now);
+        first.VideoTime = TimeSpan.FromSeconds(0.5);
+        SessionStore.Save(recording.Session, dir);
+
+        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Wait(1000);
+        var slider = (RangeValuePattern)Find(editor, "TimeSlider").GetCurrentPattern(RangeValuePattern.Pattern);
+        Assert.InRange(slider.Current.Maximum, 2.5, 3.5); // 全編の長さ
+        void At(double sec) { slider.SetValue(sec); Wait(300); }
+        void Press(string name) { ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, name)); Wait(800); }
+
+        At(2.0);
+        Press("このフレームをステップに追加");
+        At(1.0);
+        Press("区間の開始");
+        At(1.8);
+        Press("区間の終了");
+        Press("区間を動画ステップに追加");
+        Press("▶ 再生"); // 足した動画のステップが選ばれているので、再生できる
+        Assert.NotNull(Find(editor, new PropertyCondition(AutomationElement.NameProperty, "■ 停止")));
+        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } shotDir)
+        {
+            Wait(500);
+            WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(shotDir, "editor-video.png"));
+        }
+        PressKeys(editor, 0x11, 0x53); // Ctrl+S
+        Wait(800);
+
+        var saved = SessionStore.Load(dir);
+        Assert.Equal([0.5, 1.0, 2.0], saved.Steps.Select(s => Math.Round(s.VideoTime!.Value.TotalSeconds, 1))); // 時刻の順に並ぶ
+        var clip = saved.Steps[1];
+        Assert.Equal(("video.mp4", CaptureTrigger.Video), (clip.VideoFile, clip.Trigger));
+        Assert.Equal((1.0, 1.8), (Math.Round(clip.VideoStart!.Value.TotalSeconds, 1), Math.Round(clip.VideoEnd!.Value.TotalSeconds, 1)));
+        Assert.All(saved.Steps, s => Assert.True(File.Exists(Path.Combine(dir, s.ImageFile))));
+
+        // 配布用の書き出し(mp4 と GIF)。トリミングも反映される
+        clip.Crop = new(0, 0, 200, 100);
+        foreach (var format in new[] { ClipFormat.Mp4, ClipFormat.Gif })
+        {
+            var outDir = Path.Combine(dir, "dist-" + format);
+            Export.ExportForDistribution(saved, dir, outDir, GroupMode.Sequence, format, (st, c, p) => VideoClips.ExportClip(dir, st, format, c, p));
+            Assert.False(File.Exists(Path.Combine(outDir, SessionStore.FileName)));
+            Assert.False(File.Exists(Path.Combine(outDir, "video.mp4")));
+            if (format == ClipFormat.Mp4)
+            {
+                var (duration, w, h) = VideoE2ETests.VideoInfo(Path.Combine(outDir, "clips", "0003.mp4"));
+                Assert.InRange(duration.TotalSeconds, 0.6, 1.0);
+                Assert.Equal((200, 100), (w, h));
+                Assert.True(File.Exists(Path.Combine(outDir, "clips", "0003.png")));
+            }
+            else
+            {
+                var gif = new GifBitmapDecoder(new Uri(Path.Combine(outDir, "clips", "0003.gif")), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                Assert.Equal(8, gif.Frames.Count); // 10fps で 0.8 秒
+                Assert.Equal(200, gif.Frames[0].PixelWidth);
+            }
+        }
+    }
+
     static BitmapSource Solid(int w, int h, Color c)
     {
         var px = new byte[w * h * 3];
