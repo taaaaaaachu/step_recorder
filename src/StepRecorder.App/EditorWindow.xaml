@@ -5,6 +5,7 @@
         FontFamily="Yu Gothic UI" FontSize="13" PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Padding" Value="10,3"/><Setter Property="Margin" Value="0,0,6,0"/></Style>
+        <Style TargetType="Label" BasedOn="{StaticResource {x:Type Label}}"><Setter Property="Margin" Value="0,0,8,0"/></Style> <!-- Fluent のラベルは右に余白がなく、隣の欄とくっつく -->
         <Style TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}"><Setter Property="Margin" Value="0,0,10,0"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="MinWidth" Value="0"/></Style>
     </Window.Resources>
     <Grid Margin="8">
