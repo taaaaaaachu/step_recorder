@@ -133,6 +133,61 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.All(changed, p => Assert.True(p.X >= cx - 8 && p.X <= cx + 64 && p.Y >= cy - 8 && p.Y <= cy + 64, $"カーソル以外の所が違う: {p}"));
     }
 
+    [E2EFact]
+    public void 録画ボタンで動画のステップを録れる()
+    {
+        target = Launch(SampleExe);
+        var main = target.MainWindowHandle;
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = CaptureTrigger.Click, DrawWaitMs = 300 });
+        engine.Start();
+        Wait(300);
+
+        engine.ToggleClip();
+        Wait(500);
+        ClickOn(main, "nameBox"); // 録画中のクリックは撮らず、動画のステップの操作になる
+        Wait(1000);
+        engine.ToggleClip();
+        Wait(300);
+        ClickOn(main, "nameBox"); // 録画を止めたら、いつもどおり撮る
+        Wait(500);
+
+        var session = Stop(engine);
+        Assert.Equal([CaptureTrigger.Video, CaptureTrigger.Click], session.Steps.Select(s => s.Trigger));
+        var clip = session.Steps[0];
+        Assert.Equal("videos/0001.mp4", clip.VideoFile);
+        Assert.Equal("『氏名』欄をクリック", clip.Description);
+        Assert.Empty(clip.Highlights);
+        var (duration, w, h) = VideoE2ETests.VideoInfo(Path.Combine(dir, clip.VideoFile));
+        Assert.InRange(duration.TotalSeconds, 1.2, 2.5);
+        Assert.Equal((w, h), (clip.ImageWidth, clip.ImageHeight)); // ポスターは動画の最初のフレーム
+        Assert.True(new FileInfo(Path.Combine(dir, clip.ImageFile)).Length > 1000);
+    }
+
+    [E2EFact]
+    public void 録画モードでは全編を録り_ステップに動画上の時刻を付ける()
+    {
+        target = Launch(SampleExe);
+        var main = target.MainWindowHandle;
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = CaptureTrigger.Click, DrawWaitMs = 300, RecordVideo = true });
+        engine.Start();
+        Wait(800);
+        ClickOn(main, "nameBox");
+        Wait(1000);
+        ClickOn(main, "okButton");
+        Wait(1000);
+        engine.ToggleClip(); // 録画モードでは使えない
+        Wait(300);
+
+        var session = Stop(engine);
+        Assert.Equal("video.mp4", session.VideoFile);
+        Assert.All(session.Steps, s => Assert.Null(s.VideoFile));
+        var times = session.Steps.Select(s => s.VideoTime!.Value.TotalSeconds).ToList();
+        Assert.Equal(2, times.Count);
+        Assert.InRange(times[0], 0.5, 1.5);
+        Assert.InRange(times[1] - times[0], 0.7, 1.6);
+        Assert.InRange(VideoE2ETests.VideoInfo(Path.Combine(dir, "video.mp4")).Duration.TotalSeconds, 2.5, 4.5);
+    }
+
     /// <summary>止めてセッションを保存する。記録中の例外(error.log)があれば失敗させる。</summary>
     Session Stop(RecorderEngine engine)
     {

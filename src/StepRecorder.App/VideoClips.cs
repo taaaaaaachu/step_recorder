@@ -112,7 +112,7 @@ static class VideoClips
 
         public static Reader Open(string video, int maxWidth) => Run(async () =>
         {
-            var file = await StorageFile.GetFileFromPathAsync(video);
+            var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(video)); // WinRT は / 区切りを受け付けない
             var props = await file.Properties.GetVideoPropertiesAsync();
             var composition = new MediaComposition();
             composition.Clips.Add(await MediaClip.CreateFromFileAsync(file));

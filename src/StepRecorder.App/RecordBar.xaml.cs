@@ -9,12 +9,14 @@ namespace StepRecorder.App;
 /// <summary>記録中に最前面へ出す小さなバー。クリックしても前面を奪わない(対象アプリのフォーカスを保つ)。</summary>
 public partial class RecordBar : Window
 {
-    const int HkCapture = 1, HkPause = 2, HkStop = 3;
+    const int HkCapture = 1, HkPause = 2, HkStop = 3, HkClip = 4;
 
     readonly RecorderEngine engine;
     readonly Settings settings;
     readonly string dir;
     bool stopped;
+    readonly System.Windows.Threading.DispatcherTimer clipTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    DateTime clipStarted;
 
     /// <summary>停止後のセッション。</summary>
     public Session? Result { get; private set; }
@@ -27,6 +29,13 @@ public partial class RecordBar : Window
         this.dir = dir;
         (engine.Mode switch { CaptureTrigger.Manual => ModeManual, CaptureTrigger.WindowChange => ModeWindow, _ => ModeClick }).IsChecked = true;
         engine.StepCountChanged += n => Dispatcher.BeginInvoke(() => Count.Text = $"{n} 枚");
+        engine.ClipChanged += recording => Dispatcher.BeginInvoke(() => OnClipChanged(recording));
+        clipTimer.Tick += (_, _) => ShowClipTime();
+        if (settings.RecordVideo)
+        {
+            ClipButton.Visibility = Visibility.Collapsed; // 全編を録っているので、区間は編集画面で切り出す
+            State.Text = "● 記録中(録画)";
+        }
         var area = SystemParameters.WorkArea;
         Left = area.Left + area.Width / 2 - 220;
         Top = area.Top + 4;
@@ -40,7 +49,9 @@ public partial class RecordBar : Window
         HwndSource.FromHwnd(hwnd).AddHook(WndProc);
 
         var failed = new List<string>();
-        foreach (var (id, text) in new[] { (HkCapture, settings.HotkeyCapture), (HkPause, settings.HotkeyPause), (HkStop, settings.HotkeyStop) })
+        var hotkeys = new List<(int, string)> { (HkCapture, settings.HotkeyCapture), (HkPause, settings.HotkeyPause), (HkStop, settings.HotkeyStop) };
+        if (!settings.RecordVideo) hotkeys.Add((HkClip, settings.HotkeyClip));
+        foreach (var (id, text) in hotkeys)
         {
             if (!HotkeyInput.TryParse(text, out var mods, out var vk) || !RegisterHotKey(hwnd, id, (uint)mods, (uint)vk))
                 failed.Add(text);
@@ -60,6 +71,7 @@ public partial class RecordBar : Window
             case HkCapture: Capture_Click(this, new()); break;
             case HkPause: Pause_Click(this, new()); break;
             case HkStop: Stop_Click(this, new()); break;
+            case HkClip: Clip_Click(this, new()); break;
         }
         return 0;
     }
@@ -70,6 +82,23 @@ public partial class RecordBar : Window
         engine.Mode = sender == ModeManual ? CaptureTrigger.Manual : sender == ModeWindow ? CaptureTrigger.WindowChange : CaptureTrigger.Click;
 
     void Capture_Click(object sender, RoutedEventArgs e) => engine.CaptureManual();
+
+    void Clip_Click(object sender, RoutedEventArgs e) => engine.ToggleClip();
+
+    void OnClipChanged(bool recording)
+    {
+        if (!recording)
+        {
+            clipTimer.Stop();
+            ClipButton.Content = "● 録画";
+            return;
+        }
+        clipStarted = DateTime.Now;
+        clipTimer.Start();
+        ShowClipTime();
+    }
+
+    void ShowClipTime() => ClipButton.Content = $@"■ 録画停止 {DateTime.Now - clipStarted:m\:ss}";
 
     void Pause_Click(object sender, RoutedEventArgs e)
     {
@@ -83,7 +112,8 @@ public partial class RecordBar : Window
         if (stopped) return;
         stopped = true;
         var hwnd = new WindowInteropHelper(this).Handle;
-        foreach (var id in new[] { HkCapture, HkPause, HkStop }) UnregisterHotKey(hwnd, id);
+        foreach (var id in new[] { HkCapture, HkPause, HkStop, HkClip }) UnregisterHotKey(hwnd, id);
+        clipTimer.Stop();
         Result = engine.Stop();
         if (Result.Steps.Count > 0) SessionStore.Save(Result, dir); // 編集前の状態も残しておく
         Close();

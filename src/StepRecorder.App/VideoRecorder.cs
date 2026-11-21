@@ -33,6 +33,7 @@ sealed class VideoRecorder
     readonly bool cursor;
     readonly int width, height;
     readonly Stopwatch clock = new();
+    readonly ManualResetEventSlim started = new();
     readonly BlockingCollection<(byte[] Pixels, TimeSpan Time)> frames = new(boundedCapacity: Fps * 2);
     readonly Thread loop;
     readonly Task encoding;
@@ -51,8 +52,8 @@ sealed class VideoRecorder
         if (width <= 0 || height <= 0) throw new InvalidOperationException("録画するウィンドウの大きさが取れない");
         encoding = Task.Run(() => Encode(path, width, height, frames.GetConsumingEnumerable()));
         loop = new Thread(CaptureLoop) { IsBackground = true, Name = "video-capture" };
-        clock.Start();
         loop.Start();
+        started.Wait(); // 最初のフレームが揃うまで待つ(CurrentTime を操作の時刻と合わせるため)
     }
 
     /// <summary>main を含むアプリのウィンドウを path に録画し始める。</summary>
@@ -76,6 +77,13 @@ sealed class VideoRecorder
         try
         {
             using var gpu = new Gpu();
+            // 録り始めは WGC のフレームがまだ届いておらず真っ白になるので、全部のウィンドウの最初のフレームを待ってから時計を動かす
+            foreach (var (h, _) in WindowCapture.AppWindows(main))
+                if (WindowSource.TryCreate(gpu, h, cursor) is { } s) sources[h] = s;
+            var deadline = DateTime.Now.AddSeconds(1);
+            while (!sources.Values.All(s => s.Ready()) && DateTime.Now < deadline) Thread.Sleep(10);
+            clock.Start();
+            started.Set();
             var next = 0L;
             while (!stopping)
             {
@@ -108,6 +116,7 @@ sealed class VideoRecorder
         finally
         {
             foreach (var s in sources.Values) s.Dispose();
+            started.Set(); // 失敗しても Start を待たせ続けない
         }
     }
 
@@ -217,6 +226,13 @@ sealed class VideoRecorder
             if (count <= 0) return;
             for (var row = Math.Max(0, -y); row < h && y + row < ch; row++)
                 Buffer.BlockCopy(pixels, (row * w + from) * 4, canvas, ((ch - 1 - y - row) * cw + x + from) * 4, count * 4);
+        }
+
+        /// <summary>最初のフレームが届いたか。</summary>
+        public bool Ready()
+        {
+            Update();
+            return pixels.Length > 0;
         }
 
         void Update()

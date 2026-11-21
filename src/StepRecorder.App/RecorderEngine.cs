@@ -19,6 +19,7 @@ sealed class RecorderEngine
     readonly string dir;
     readonly int drawWaitMs;
     readonly bool captureCursor;
+    readonly bool recordVideo;
     readonly HashSet<(HotkeyModifiers, int)> ownHotkeys = []; // 記録用のホットキー自体は記録しない
     readonly Recording rec;
     readonly BlockingCollection<Action> queue = new();
@@ -47,11 +48,18 @@ sealed class RecorderEngine
     nint lastShotHwnd;
     byte[]? lastShotPixels;
 
+    // 動画(ワーカー専用)。clip はホットキーで録っている途中の動画のステップ、full は録画モードの全編
+    (VideoRecorder Recorder, Step Step)? clip;
+    VideoRecorder? full;
+
     public volatile CaptureTrigger Mode;
     public volatile bool Paused;
 
     /// <summary>ステップ数が変わった。ワーカースレッドから呼ばれる。</summary>
     public event Action<int>? StepCountChanged;
+
+    /// <summary>動画のステップを録り始めた(true)・録り終えた(false)。ワーカースレッドから呼ばれる。</summary>
+    public event Action<bool>? ClipChanged;
 
     public RecorderEngine(Process target, string dir, Settings settings)
     {
@@ -60,8 +68,9 @@ sealed class RecorderEngine
         this.dir = dir;
         drawWaitMs = settings.DrawWaitMs;
         captureCursor = settings.CaptureCursor;
+        recordVideo = settings.RecordVideo;
         Mode = settings.DefaultMode;
-        foreach (var text in new[] { settings.HotkeyCapture, settings.HotkeyPause, settings.HotkeyStop })
+        foreach (var text in new[] { settings.HotkeyCapture, settings.HotkeyPause, settings.HotkeyStop, settings.HotkeyClip })
             if (HotkeyInput.TryParse(text, out var mods, out var vk)) ownHotkeys.Add((mods, vk));
         lastTargetRoot = target.MainWindowHandle;
         rec = new Recording(new Session { CreatedAt = DateTimeOffset.Now, ProcessName = processName, Evidence = EvidenceCollector.Collect(target) });
@@ -78,6 +87,7 @@ sealed class RecorderEngine
     public void Start()
     {
         worker.Start();
+        if (recordVideo) Enqueue(StartFullVideo);
         hookThread.Start();
         hookReady.Wait();
         Enqueue(() => watcher.Watch(lastTargetRoot));
@@ -86,6 +96,7 @@ sealed class RecorderEngine
     public void CaptureManual() => Enqueue(() =>
     {
         Flush();
+        if (clip != null) return;
         var root = TargetRoot();
         if (Capture(root) is { } shot) AddShot(CaptureTrigger.Manual, root, shot, null);
     });
@@ -97,10 +108,60 @@ sealed class RecorderEngine
         hookThread.Join();
         watcher.Stop();
         flushTimer.Dispose();
-        Enqueue(Flush);
+        Enqueue(() => { Flush(); StopVideos(); });
         queue.CompleteAdding();
         worker.Join();
         return rec.Session;
+    }
+
+    /// <summary>
+    /// 動画のステップを録り始める。もう一度呼ぶと止めて、動画のステップを確定する。
+    /// 録画モード(全編を録っている)では使えない(編集画面で全編から区間を切り出す)。
+    /// </summary>
+    public void ToggleClip() => Enqueue(() =>
+    {
+        if (recordVideo || Paused && clip == null) return;
+        Flush();
+        if (clip != null) { StopClip(); return; }
+        // 操作しているウィンドウを録る。ステップは先に作り、録っている間の操作はこのステップに足す
+        var root = TargetRoot();
+        if (root == 0) return;
+        var file = rec.NextVideoFile;
+        var frame = FrameBounds(root);
+        var step = rec.AddStep(CaptureTrigger.Video, new WindowInfo(Text(root), ClassName(root), processName), rec.NextImageFile,
+            frame.Width & ~1, frame.Height & ~1, DateTimeOffset.Now);
+        step.VideoFile = file;
+        clip = (VideoRecorder.Start(root, Path.Combine(dir, file), captureCursor), step);
+        lastTargetRoot = root;
+        StepCountChanged?.Invoke(rec.Session.Steps.Count);
+        ClipChanged?.Invoke(true);
+    });
+
+    void StopClip()
+    {
+        if (clip is not var (recorder, step)) return;
+        clip = null;
+        recorder.Stop();
+        // ポスター(再生前に見せる画像)は動画の最初のフレーム
+        var poster = VideoClips.Frame(Path.Combine(dir, step.VideoFile!), TimeSpan.Zero);
+        WindowCapture.SavePng(poster, Path.Combine(dir, step.ImageFile));
+        (step.ImageWidth, step.ImageHeight) = (poster.PixelWidth, poster.PixelHeight);
+        ClipChanged?.Invoke(false);
+    }
+
+    const string FullVideoFile = "video.mp4";
+
+    void StartFullVideo()
+    {
+        full = VideoRecorder.Start(lastTargetRoot, Path.Combine(dir, FullVideoFile), captureCursor);
+        rec.Session.VideoFile = FullVideoFile;
+    }
+
+    void StopVideos()
+    {
+        StopClip();
+        full?.Stop();
+        full = null;
     }
 
     void Enqueue(Action a)
@@ -182,6 +243,13 @@ sealed class RecorderEngine
 
     void OnClick(nint root, ClickEvent ev)
     {
+        if (clip != null)
+        {
+            // 動画を録っている間は撮らず、操作だけを動画のステップに足す(動画には強調枠を付けないので位置は持たない)
+            var el = Uia.Info(Uia.FromPoint(ev.ScreenPoint.X, ev.ScreenPoint.Y), default);
+            rec.AddOperation(new Operation { Kind = OperationKind.Click, Time = ev.Time, Button = ev.Button, Element = el == null ? null : el with { Rect = null } });
+            return;
+        }
         if (lastClickStep != null && ClickRules.IsDoubleClick(lastClick, ev, (int)GetDoubleClickTime(),
                 GetSystemMetrics(SM_CXDOUBLECLK), GetSystemMetrics(SM_CYDOUBLECLK)))
         {
@@ -235,7 +303,7 @@ sealed class RecorderEngine
 
     void OnWindowShown(nint hwnd)
     {
-        if (Paused || !IsWindowVisible(hwnd) || hwnd == lastShownHwnd) return; // 同じウィンドウに戻っただけなら撮らない
+        if (Paused || clip != null || !IsWindowVisible(hwnd) || hwnd == lastShownHwnd) return; // 同じウィンドウに戻っただけなら撮らない
         Flush();
         if (Capture(hwnd) is not { } shot) return;
         lastShownHwnd = hwnd;
@@ -273,7 +341,7 @@ sealed class RecorderEngine
         }
         var (hwnd, tab) = (pendingHwnd, pendingTab);
         pendingHwnd = 0;
-        if (Paused || !IsWindowVisible(hwnd)) return;
+        if (Paused || clip != null || !IsWindowVisible(hwnd)) return;
         Flush();
         if (Capture(hwnd) is not { } shot) return;
         if (hwnd == lastShotHwnd && lastShotPixels != null
@@ -292,6 +360,7 @@ sealed class RecorderEngine
         var step = rec.AddStep(trigger, new WindowInfo(Text(root), ClassName(root), processName), file,
             shot.Image.PixelWidth, shot.Image.PixelHeight, DateTimeOffset.Now, op);
         step.Crop = shot.Crop; // 画像はアプリ全体。ダイアログなどを操作したときは、そのウィンドウだけが見えるようにトリミングしておく
+        step.VideoTime = full?.CurrentTime; // 録画モードなら、編集画面のタイムラインに目盛りを付ける
         StepCountChanged?.Invoke(rec.Session.Steps.Count);
         return step;
     }

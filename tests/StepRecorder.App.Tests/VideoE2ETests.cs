@@ -113,7 +113,7 @@ public sealed class VideoE2ETests : IDisposable
 
     internal static (TimeSpan Duration, int Width, int Height) VideoInfo(string path)
     {
-        var file = StorageFile.GetFileFromPathAsync(path).AsTask().GetAwaiter().GetResult();
+        var file = StorageFile.GetFileFromPathAsync(Path.GetFullPath(path)).AsTask().GetAwaiter().GetResult();
         var p = file.Properties.GetVideoPropertiesAsync().AsTask().GetAwaiter().GetResult();
         return (p.Duration, (int)p.Width, (int)p.Height);
     }
