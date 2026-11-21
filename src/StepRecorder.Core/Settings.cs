@@ -12,6 +12,8 @@ public sealed class Settings
     public string HotkeyPause { get; set; } = "Ctrl+Shift+F10";
     public string HotkeyStop { get; set; } = "Ctrl+Shift+F11";
     public GroupMode GroupMode { get; set; } = GroupMode.Sequence;
+    /// <summary>起動時に GitHub Releases の新しい版を確認するか。</summary>
+    public bool AutoUpdate { get; set; } = true;
 
     public static string DefaultPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "step_recorder", "settings.json");

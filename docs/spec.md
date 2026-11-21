@@ -16,7 +16,7 @@ Windows 標準の「ステップ記録ツール」を拡張したツール。GUI
 |---|---|
 | 言語・UI | C# / WPF (.NET 10) |
 | 対象アプリ | WinForms / WPF (.NET) を主に想定。UI Automation で部品名を取得する |
-| 配布・更新 | Velopack + GitHub Releases(public リポジトリ `taaaaaaachu/step_recorder`)。起動時に更新を確認する |
+| 配布・更新 | Velopack + GitHub Releases(public リポジトリ `taaaaaaachu/step_recorder`)。起動時に更新を確認する(設定でオフにできる) |
 | 言語 | 日本語のみ |
 | テスト | xUnit。記録ロジック・生成処理・JSON の読み書きを単体テストする |
 
@@ -129,7 +129,7 @@ Windows 標準の「ステップ記録ツール」を拡張したツール。GUI
 
 ## 6. 設定
 
-撮影モードの初期値、画面切り替わり検知の待ち時間、ホットキー、出力先、同じ画面の扱い(手順モード/画面一覧モード)。`%APPDATA%\step_recorder\settings.json` に保存する。
+撮影モードの初期値、画面切り替わり検知の待ち時間、ホットキー、出力先、同じ画面の扱い(手順モード/画面一覧モード)、自動更新のオン/オフ(既定はオン。オフにすると起動時に更新を確認しない。切り替えはすぐ保存され、次回の起動から効く)。`%APPDATA%\step_recorder\settings.json` に保存する。
 
 ## 7. 範囲外(今回はやらない)
 

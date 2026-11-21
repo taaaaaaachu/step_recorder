@@ -47,6 +47,10 @@
                 <ComboBoxItem Content="手順モード(撮った順に並べる)"/>
                 <ComboBoxItem Content="画面一覧モード(画面ごとにまとめる)"/>
             </ComboBox>
+
+            <Label Grid.Row="8" Content="自動更新"/>
+            <CheckBox x:Name="AutoUpdate" Grid.Row="8" Grid.Column="1" Content="起動時に新しいバージョンを確認する" VerticalAlignment="Center"
+                      Checked="AutoUpdate_Changed" Unchecked="AutoUpdate_Changed"/>
         </Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="記録を開く..." Click="Open_Click"/>
