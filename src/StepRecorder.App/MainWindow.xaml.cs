@@ -59,7 +59,8 @@ public partial class MainWindow : Window
 
     bool Fail(string message)
     {
-        MessageBox.Show(this, message, "step_recorder", MessageBoxButton.OK, MessageBoxImage.Warning);
+        if (IsVisible) MessageBox.Show(this, message, "step_recorder", MessageBoxButton.OK, MessageBoxImage.Warning);
+        else MessageBox.Show(message, "step_recorder", MessageBoxButton.OK, MessageBoxImage.Warning);
         return false;
     }
 
@@ -107,13 +108,17 @@ public partial class MainWindow : Window
     {
         if (!ReadSettings()) return;
         var dlg = new OpenFileDialog { Filter = $"記録 ({SessionStore.FileName})|{SessionStore.FileName}", InitialDirectory = settings.OutputDir };
-        if (dlg.ShowDialog(this) != true) return;
-        var dir = Path.GetDirectoryName(dlg.FileName)!;
+        if (dlg.ShowDialog(this) == true) OpenSession(Path.GetDirectoryName(dlg.FileName)!);
+    }
+
+    internal void OpenSession(string dir)
+    {
         Session session;
         try { session = SessionStore.Load(dir); }
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidDataException)
         {
             Fail($"開けませんでした: {ex.Message}");
+            Show(); // 引数で開こうとして失敗したときも開始画面は出す
             return;
         }
         Hide();
