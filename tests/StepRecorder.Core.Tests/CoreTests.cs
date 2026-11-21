@@ -114,6 +114,10 @@ public class ExportTests
         Assert.Equal("""
             # App 画面一覧 (2026-11-21)
 
+            | 項目 | 内容 |
+            |---|---|
+            | 記録日時 | 2026-11-21 00:00 |
+
             ## 1. メイン
 
             ![メイン](images/0001.png)
@@ -165,5 +169,56 @@ public class ExportTests
             Assert.True(File.Exists(Path.Combine(dir, Export.HtmlFile)));
         }
         finally { Directory.Delete(dir, true); }
+    }
+}
+
+public class SessionHistoryTests
+{
+    [Fact]
+    public void 控えた順と逆に戻せる_変更の影響を受けない()
+    {
+        var s = new Session();
+        s.Steps.Add(new Step { Id = 1, Description = "a" });
+        var h = new SessionHistory();
+        Assert.False(h.CanUndo);
+
+        h.Push(s);
+        s.Steps[0].Description = "b";
+        h.Push(s);
+        s.Steps.Clear();
+
+        Assert.Equal("b", h.Undo()!.Steps[0].Description);
+        Assert.Equal("a", h.Undo()!.Steps[0].Description);
+        Assert.False(h.CanUndo);
+        Assert.Null(h.Undo());
+    }
+
+    [Fact]
+    public void 上限を超えたら古いものから捨てる()
+    {
+        var h = new SessionHistory(capacity: 2);
+        foreach (var name in new[] { "1", "2", "3" }) h.Push(new Session { ProcessName = name });
+        Assert.Equal("3", h.Undo()!.ProcessName);
+        Assert.Equal("2", h.Undo()!.ProcessName);
+        Assert.Null(h.Undo());
+    }
+}
+
+public class EvidenceTests
+{
+    [Fact]
+    public void 冒頭の表に取れた項目だけを載せる()
+    {
+        var s = new Session
+        {
+            ProcessName = "App",
+            CreatedAt = new DateTimeOffset(2026, 11, 21, 9, 5, 0, TimeSpan.Zero),
+            Evidence = new() { AppFile = "App.exe", AppVersion = "1.2.3", Screen = "1920×1080", ScalePercent = 125, RecorderVersion = "0.5.0" },
+        };
+        Assert.Equal(
+            [("対象アプリ", "App.exe"), ("バージョン", "1.2.3"), ("記録日時", "2026-11-21 09:05"), ("画面", "1920×1080(拡大率 125%)"), ("記録ツール", "step_recorder 0.5.0")],
+            Export.EvidenceRows(s));
+        Assert.Contains("<tr><th>バージョン</th><td>1.2.3</td></tr>", Export.ToHtml(s, GroupMode.Sequence));
+        Assert.Contains("| バージョン | 1.2.3 |", Export.ToMarkdown(s, GroupMode.Sequence));
     }
 }

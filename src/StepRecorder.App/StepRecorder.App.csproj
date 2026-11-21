@@ -22,6 +22,7 @@
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <AssemblyName>StepRecorder</AssemblyName>
     <RootNamespace>StepRecorder.App</RootNamespace>
+    <Version>0.0.0-dev</Version> <!-- リリースでは CI が -p:Version でタグの版にする -->
   </PropertyGroup>
 
 </Project>

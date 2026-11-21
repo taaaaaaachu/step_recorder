@@ -28,9 +28,28 @@ public static class Export
 
     public static string Title(Session s) => $"{s.ProcessName} 画面一覧 ({s.CreatedAt:yyyy-MM-dd})";
 
+    /// <summary>冒頭に載せるエビデンス情報の表の行。空の項目は載せない。</summary>
+    public static IReadOnlyList<(string Label, string Value)> EvidenceRows(Session s)
+    {
+        var e = s.Evidence;
+        var screen = e.ScalePercent > 0 && e.Screen != "" ? $"{e.Screen}(拡大率 {e.ScalePercent}%)" : e.Screen;
+        (string, string)[] rows =
+        [
+            ("対象アプリ", e.AppFile),
+            ("バージョン", e.AppVersion),
+            ("記録日時", $"{s.CreatedAt:yyyy-MM-dd HH:mm}"),
+            ("PC名", e.MachineName),
+            ("OS", e.Os),
+            ("画面", screen),
+            ("記録ツール", e.RecorderVersion == "" ? "" : $"step_recorder {e.RecorderVersion}"),
+        ];
+        return rows.Where(r => r.Item2 != "").ToList();
+    }
+
     public static string ToMarkdown(Session s, GroupMode mode)
     {
-        var sb = new StringBuilder($"# {Title(s)}\n");
+        var sb = new StringBuilder($"# {Title(s)}\n\n| 項目 | 内容 |\n|---|---|\n");
+        foreach (var (label, value) in EvidenceRows(s)) sb.Append($"| {label} | {value.Replace("|", "\\|")} |\n");
         foreach (var (sec, i) in Sections(s, mode).Select((x, i) => (x, i + 1)))
         {
             sb.Append($"\n## {i}. {sec.Title}\n\n![{sec.Title}]({sec.Image.ImageFile})\n");
@@ -59,12 +78,18 @@ public static class Export
             dialog { padding: 0; border: none; max-width: 98vw; max-height: 98vh; }
             dialog svg.shot { max-width: 98vw; max-height: 96vh; width: auto; cursor: zoom-out; border: none; }
             dialog::backdrop { background: rgba(0,0,0,.7); }
+            table.evidence { border-collapse: collapse; margin: 1em 0 2em; }
+            table.evidence th, table.evidence td { border: 1px solid #ccc; padding: .3em .8em; text-align: left; }
+            table.evidence th { background: #f4f4f4; font-weight: normal; color: #555; }
             </style>
             </head>
             <body>
             <h1>{{H(Title(s))}}</h1>
 
             """);
+        sb.Append("<table class=\"evidence\">\n");
+        foreach (var (label, value) in EvidenceRows(s)) sb.Append($"<tr><th>{H(label)}</th><td>{H(value)}</td></tr>\n");
+        sb.Append("</table>\n");
         foreach (var (sec, i) in Sections(s, mode).Select((x, i) => (x, i + 1)))
         {
             var st = sec.Image;

@@ -11,8 +11,6 @@ static class Updater
 
     static readonly UpdateManager Manager = new(new GithubSource(Repo, null, false));
 
-    public static string CurrentVersion => Manager.CurrentVersion?.ToString() ?? "開発版";
-
     /// <summary>起動時に呼ぶ。更新があれば確認してから適用・再起動する。通信の失敗は無視する(次回の起動で再確認)。</summary>
     public static async Task CheckAsync(Window owner)
     {

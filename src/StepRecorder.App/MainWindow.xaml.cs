@@ -17,7 +17,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Version.Text = $"バージョン {Updater.CurrentVersion}";
+        Version.Text = $"バージョン {AppVersion.Current}";
         ShowSettings();
         RefreshProcesses();
         Loaded += async (_, _) =>

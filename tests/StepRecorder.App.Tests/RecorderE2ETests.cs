@@ -52,6 +52,11 @@ public sealed class RecorderE2ETests : IDisposable
 
         var session = Stop(engine);
         Assert.Equal("SampleTarget", session.ProcessName);
+        Assert.Equal("SampleTarget.exe", session.Evidence.AppFile);
+        Assert.NotEqual("", session.Evidence.AppVersion);
+        Assert.Matches(@"^\d+×\d+$", session.Evidence.Screen);
+        Assert.True(session.Evidence.ScalePercent >= 100);
+        Assert.Equal(Environment.MachineName, session.Evidence.MachineName);
         Assert.True(session.Steps.Count >= 3, $"ステップ数 {session.Steps.Count}");
 
         var manual = session.Steps[0];

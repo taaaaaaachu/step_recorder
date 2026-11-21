@@ -62,7 +62,7 @@ sealed class RecorderEngine
         foreach (var text in new[] { settings.HotkeyCapture, settings.HotkeyPause, settings.HotkeyStop })
             if (HotkeyInput.TryParse(text, out var mods, out var vk)) ownHotkeys.Add((mods, vk));
         lastTargetRoot = target.MainWindowHandle;
-        rec = new Recording(new Session { CreatedAt = DateTimeOffset.Now, ProcessName = processName });
+        rec = new Recording(new Session { CreatedAt = DateTimeOffset.Now, ProcessName = processName, Evidence = EvidenceCollector.Collect(target) });
         mouseProc = MouseProc;
         keyProc = KeyProc;
         winProc = WinProc;

@@ -55,7 +55,23 @@ public sealed class Session
     public int Version { get; set; } = 1;
     public DateTimeOffset CreatedAt { get; set; }
     public string ProcessName { get; set; } = "";
+    public EvidenceInfo Evidence { get; set; } = new();
     public List<Step> Steps { get; set; } = [];
+}
+
+/// <summary>エビデンスとして画面一覧の冒頭に載せる、記録した環境の情報。取れなかった項目は空。</summary>
+public sealed class EvidenceInfo
+{
+    /// <summary>対象アプリの exe のファイル名。</summary>
+    public string AppFile { get; set; } = "";
+    public string AppVersion { get; set; } = "";
+    public string MachineName { get; set; } = "";
+    public string Os { get; set; } = "";
+    /// <summary>対象アプリのウィンドウがあるモニターの解像度(例: "1920×1080")。</summary>
+    public string Screen { get; set; } = "";
+    /// <summary>そのモニターの拡大率(%)。0 は不明。</summary>
+    public int ScalePercent { get; set; }
+    public string RecorderVersion { get; set; } = "";
 }
 
 /// <summary>出力時の並べ方。</summary>
