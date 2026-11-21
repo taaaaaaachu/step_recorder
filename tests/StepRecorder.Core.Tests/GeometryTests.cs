@@ -39,3 +39,15 @@ public class GeometryTests
         Assert.False(Geometry.IsUsable(new PixelRect(0, 0, 3, 50)));
     }
 }
+
+public class CropForTests
+{
+    [Fact]
+    public void 操作したウィンドウの範囲を全体画像の座標で返す()
+    {
+        var all = new PixelRect(100, 50, 800, 600);
+        Assert.Equal(new PixelRect(300, 200, 200, 100), Geometry.CropFor(all, new PixelRect(400, 250, 200, 100)));
+        Assert.Null(Geometry.CropFor(all, all)); // 全体と同じならトリミングしない
+        Assert.Equal(new PixelRect(0, 0, 50, 50), Geometry.CropFor(all, new PixelRect(50, 0, 100, 100))); // はみ出す分は削る
+    }
+}

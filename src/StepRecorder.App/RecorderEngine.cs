@@ -287,6 +287,7 @@ sealed class RecorderEngine
         WindowCapture.SavePng(shot.Image, Path.Combine(dir, file));
         var step = rec.AddStep(trigger, new WindowInfo(Text(root), ClassName(root), processName), file,
             shot.Image.PixelWidth, shot.Image.PixelHeight, DateTimeOffset.Now, op);
+        step.Crop = shot.Crop; // 画像はアプリ全体。ダイアログなどを操作したときは、そのウィンドウだけが見えるようにトリミングしておく
         StepCountChanged?.Invoke(rec.Session.Steps.Count);
         return step;
     }

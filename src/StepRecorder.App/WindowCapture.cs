@@ -3,13 +3,23 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using StepRecorder.Core;
+using Geometry = StepRecorder.Core.Geometry;
 using static StepRecorder.App.Native;
 
 namespace StepRecorder.App;
 
-/// <summary>撮影結果。Bounds は画像の左上に当たるスクリーン座標を含む矩形。</summary>
-sealed record Shot(BitmapSource Image, RECT Bounds)
+/// <summary>
+/// 撮影結果。Image はアプリ全体(対象プロセスの見えているウィンドウをすべて重ねたもの)で、
+/// Bounds はその画像に当たるスクリーン上の矩形。Focus は操作したウィンドウのスクリーン上の矩形。
+/// </summary>
+sealed record Shot(BitmapSource Image, RECT Bounds, RECT Focus)
 {
+    /// <summary>操作したウィンドウを切り出すトリミング範囲。アプリ全体と同じなら null。</summary>
+    public PixelRect? Crop => Geometry.CropFor(ToPixel(Bounds), ToPixel(Focus));
+
+    static PixelRect ToPixel(RECT r) => new(r.Left, r.Top, r.Width, r.Height);
+
     public const int BytesPerPixel = 3; // Image は Bgr24
 
     /// <summary>画素の並び(前回の撮影との比較用)。</summary>
@@ -26,31 +36,39 @@ sealed record Shot(BitmapSource Image, RECT Bounds)
 }
 
 /// <summary>
-/// 対象プロセスのウィンドウだけを撮る。PrintWindow でウィンドウごとに描かせるので、
+/// 対象プロセスのウィンドウだけを撮る。PrintWindow でウィンドウごとに描かせて重ねるので、
 /// 他のアプリや常駐バーが上に重なっていても写り込まない。
-/// 同じプロセスのメニュー・ドロップダウン等(別の最上位ウィンドウ)も重ねて合成する。
 /// </summary>
 static class WindowCapture
 {
-    public static Shot? Capture(nint root)
+    /// <summary>
+    /// focus を含むアプリ全体を撮る。同じプロセスの見えているウィンドウ(メインウィンドウ・ダイアログ・メニューなど)を
+    /// Z オーダーの奥から順に重ねる。画面の外に置かれたウィンドウは含めない。
+    /// </summary>
+    public static Shot? Capture(nint focus)
     {
-        if (root == 0 || !IsWindow(root) || IsIconic(root)) return null;
-        var pid = ProcessId(root);
-        var frame = FrameBounds(root);
+        if (focus == 0 || !IsWindow(focus) || IsIconic(focus)) return null;
+        var pid = ProcessId(focus);
+        var frame = FrameBounds(focus);
         if (frame.Width <= 0 || frame.Height <= 0) return null;
 
-        // Z オーダーで root より手前にある、同じプロセスのポップアップ
-        var popups = new List<(nint Hwnd, RECT Rect)>();
-        for (var h = GetTopWindow(0); h != 0 && h != root; h = GetWindow(h, GW_HWNDNEXT))
+        var screenArea = new RECT
         {
-            if (!IsWindowVisible(h) || IsCloaked(h) || ProcessId(h) != pid || ClassName(h) == "SysShadow") continue;
-            var r = FrameBounds(h);
-            if (r.Width > 0 && r.Height > 0 && Intersects(r, frame)) popups.Add((h, r));
+            Left = GetSystemMetrics(SM_XVIRTUALSCREEN), Top = GetSystemMetrics(SM_YVIRTUALSCREEN),
+            Right = GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            Bottom = GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        };
+        var windows = new List<(nint Hwnd, RECT Rect)>();
+        for (var h = GetTopWindow(0); h != 0; h = GetWindow(h, GW_HWNDNEXT))
+        {
+            if (h != focus && (!IsWindowVisible(h) || IsIconic(h) || IsCloaked(h) || ProcessId(h) != pid || ClassName(h) == "SysShadow")) continue;
+            var r = h == focus ? frame : FrameBounds(h);
+            if (r.Width > 0 && r.Height > 0 && Intersects(r, screenArea)) windows.Add((h, r));
         }
-        popups.Reverse(); // 奥から順に描く
+        windows.Reverse(); // 奥から順に描く
 
         var u = frame;
-        foreach (var (_, r) in popups) u = Union(u, r);
+        foreach (var (_, r) in windows) u = Union(u, r);
 
         var screen = GetDC(0);
         var dc = CreateCompatibleDC(screen);
@@ -58,14 +76,14 @@ static class WindowCapture
         var old = SelectObject(dc, bmp);
         try
         {
-            Draw(root, frame, u, dc, screen);
-            foreach (var (h, r) in popups) Draw(h, r, u, dc, screen);
+            BitBlt(dc, 0, 0, u.Width, u.Height, 0, 0, 0, WHITENESS); // ウィンドウ同士の隙間は白にする
+            foreach (var (h, r) in windows) Draw(h, r, u, dc, screen);
             SelectObject(dc, old);
             var src = Imaging.CreateBitmapSourceFromHBitmap(bmp, 0, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
             // PrintWindow はアルファを 0 のままにすることがあるので、透過なしの形式に揃える
             var img = new FormatConvertedBitmap(src, PixelFormats.Bgr24, null, 0);
             img.Freeze();
-            return new Shot(img, u);
+            return new Shot(img, u, frame);
         }
         finally
         {

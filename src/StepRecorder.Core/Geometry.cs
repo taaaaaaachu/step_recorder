@@ -37,5 +37,19 @@ public static class Geometry
 
     public static bool IsUsable(PixelRect r) => r.Width >= MinSize && r.Height >= MinSize;
 
+    /// <summary>
+    /// アプリ全体の画像(スクリーン上の all)のうち、操作したウィンドウ(focus)を切り出すトリミング範囲。
+    /// 全体と同じなら null(トリミング不要)。
+    /// </summary>
+    public static PixelRect? CropFor(PixelRect all, PixelRect focus)
+    {
+        var l = Math.Max(all.X, focus.X);
+        var t = Math.Max(all.Y, focus.Y);
+        var r = Math.Min(all.X + all.Width, focus.X + focus.Width);
+        var b = Math.Min(all.Y + all.Height, focus.Y + focus.Height);
+        var crop = new PixelRect(l - all.X, t - all.Y, r - l, b - t);
+        return crop == new PixelRect(0, 0, all.Width, all.Height) || !IsUsable(crop) ? null : crop;
+    }
+
     static int Clamp(double v, int max) => (int)Math.Clamp(Math.Round(v), 0, max);
 }

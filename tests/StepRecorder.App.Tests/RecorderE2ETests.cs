@@ -66,6 +66,11 @@ public sealed class RecorderE2ETests : IDisposable
         var dialog = session.Steps[2];
         Assert.Equal(CaptureTrigger.WindowChange, dialog.Trigger);
         Assert.Equal("『確認』画面が表示された", dialog.Description);
+        // ダイアログは、メインウィンドウごと撮ったアプリ全体の画像を、ダイアログの範囲にトリミングした状態になる
+        Assert.NotNull(dialog.Crop);
+        Assert.True(dialog.ImageWidth >= click.ImageWidth && dialog.ImageHeight >= click.ImageHeight, "画像がアプリ全体になっていない");
+        Assert.True(dialog.Crop.Width < dialog.ImageWidth && dialog.Crop.Height < dialog.ImageHeight);
+        Assert.Null(click.Crop); // メインウィンドウだけのときはトリミングしない
 
         foreach (var s in session.Steps)
         {

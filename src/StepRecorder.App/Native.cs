@@ -12,11 +12,12 @@ static class Native
     public const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003, EVENT_OBJECT_SHOW = 0x8002, WINEVENT_OUTOFCONTEXT = 0;
     public const int OBJID_WINDOW = 0;
-    public const uint GA_ROOT = 2, PW_RENDERFULLCONTENT = 2, SRCCOPY = 0x00CC0020, GW_HWNDNEXT = 2;
+    public const uint GA_ROOT = 2, PW_RENDERFULLCONTENT = 2, SRCCOPY = 0x00CC0020, WHITENESS = 0x00FF0062, GW_HWNDNEXT = 2;
     public const int GWL_STYLE = -16, GWL_EXSTYLE = -20;
     public const long WS_CAPTION = 0x00C00000L, WS_EX_NOACTIVATE = 0x08000000L, WS_EX_TOOLWINDOW = 0x00000080L;
     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9, DWMWA_CLOAKED = 14;
     public const int SM_CXDOUBLECLK = 36, SM_CYDOUBLECLK = 37;
+    public const int SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77, SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
     public const int WM_IME_CONTROL = 0x0283, IMC_GETOPENSTATUS = 0x0005;
 
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
