@@ -26,7 +26,7 @@
                 <ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
             </Grid.RowDefinitions>
 
             <Label Content="対象アプリ"/>
@@ -60,8 +60,11 @@
                 <ComboBoxItem Content="画面一覧モード(画面ごとにまとめる)"/>
             </ComboBox>
 
-            <Label Grid.Row="8" Content="自動更新"/>
-            <CheckBox x:Name="AutoUpdate" Grid.Row="8" Grid.Column="1" Content="起動時に新しいバージョンを確認する" VerticalAlignment="Center" Click="AutoUpdate_Click"/>
+            <Label Grid.Row="8" Content="マウスカーソル"/>
+            <CheckBox x:Name="CaptureCursor" Grid.Row="8" Grid.Column="1" Content="スクリーンショットに写す" VerticalAlignment="Center"/>
+
+            <Label Grid.Row="9" Content="自動更新"/>
+            <CheckBox x:Name="AutoUpdate" Grid.Row="9" Grid.Column="1" Content="起動時に新しいバージョンを確認する" VerticalAlignment="Center" Click="AutoUpdate_Click"/>
         </Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="記録を開く..." Click="Open_Click"/>

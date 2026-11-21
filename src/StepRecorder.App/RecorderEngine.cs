@@ -18,6 +18,7 @@ sealed class RecorderEngine
     readonly string processName;
     readonly string dir;
     readonly int drawWaitMs;
+    readonly bool captureCursor;
     readonly HashSet<(HotkeyModifiers, int)> ownHotkeys = []; // 記録用のホットキー自体は記録しない
     readonly Recording rec;
     readonly BlockingCollection<Action> queue = new();
@@ -58,6 +59,7 @@ sealed class RecorderEngine
         processName = target.ProcessName;
         this.dir = dir;
         drawWaitMs = settings.DrawWaitMs;
+        captureCursor = settings.CaptureCursor;
         Mode = settings.DefaultMode;
         foreach (var text in new[] { settings.HotkeyCapture, settings.HotkeyPause, settings.HotkeyStop })
             if (HotkeyInput.TryParse(text, out var mods, out var vk)) ownHotkeys.Add((mods, vk));
@@ -85,7 +87,7 @@ sealed class RecorderEngine
     {
         Flush();
         var root = TargetRoot();
-        if (WindowCapture.Capture(root) is { } shot) AddShot(CaptureTrigger.Manual, root, shot, null);
+        if (Capture(root) is { } shot) AddShot(CaptureTrigger.Manual, root, shot, null);
     });
 
     /// <summary>記録を止め、溜まった処理を終えてからセッションを返す。</summary>
@@ -190,7 +192,7 @@ sealed class RecorderEngine
             lastClick = null;
             return;
         }
-        if (WindowCapture.Capture(root) is not { } shot) return;
+        if (Capture(root) is not { } shot) return;
         var b = shot.Bounds;
         var click = new Operation
         {
@@ -235,13 +237,15 @@ sealed class RecorderEngine
     {
         if (Paused || !IsWindowVisible(hwnd) || hwnd == lastShownHwnd) return; // 同じウィンドウに戻っただけなら撮らない
         Flush();
-        if (WindowCapture.Capture(hwnd) is not { } shot) return;
+        if (Capture(hwnd) is not { } shot) return;
         lastShownHwnd = hwnd;
         var op = new Operation { Kind = OperationKind.WindowShown, Time = DateTimeOffset.Now, Element = new(Text(hwnd), "Window", "", null) };
         AddShot(CaptureTrigger.WindowChange, hwnd, shot, op);
     }
 
     void After(int ms, Action a) => Task.Delay(ms).ContinueWith(_ => Enqueue(a));
+
+    Shot? Capture(nint hwnd) => WindowCapture.Capture(hwnd, captureCursor);
 
     void OnContentChanged(nint hwnd, ElementInfo? tab)
     {
@@ -271,7 +275,7 @@ sealed class RecorderEngine
         pendingHwnd = 0;
         if (Paused || !IsWindowVisible(hwnd)) return;
         Flush();
-        if (WindowCapture.Capture(hwnd) is not { } shot) return;
+        if (Capture(hwnd) is not { } shot) return;
         if (hwnd == lastShotHwnd && lastShotPixels != null
             && ContentChangeRules.ChangedRatio(lastShotPixels, shot.Pixels, Shot.BytesPerPixel) < ContentMinChange) return;
         var step = AddShot(CaptureTrigger.WindowChange, hwnd, shot, new Operation { Kind = OperationKind.ContentChanged, Time = now, Element = tab });

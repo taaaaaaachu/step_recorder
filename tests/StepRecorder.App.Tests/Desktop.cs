@@ -87,6 +87,9 @@ static class Desktop
         Send(Mouse(0x0002), Mouse(0x0004)); // LEFTDOWN, LEFTUP
     }
 
+    /// <summary>カーソルを (x, y) へ動かす(クリックはしない)。</summary>
+    public static void MoveCursor(int x, int y) => SetCursorPos(x, y);
+
     /// <summary>ホイールボタン(中ボタン)を押したまま (x1, y1) から (x2, y2) へドラッグする。</summary>
     public static void MiddleDrag(nint hwnd, int x1, int y1, int x2, int y2)
     {

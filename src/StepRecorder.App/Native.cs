@@ -25,6 +25,8 @@ static class Native
     [StructLayout(LayoutKind.Sequential)] public struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public nint dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] public struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public nint dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] public struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
+    [StructLayout(LayoutKind.Sequential)] public struct CURSORINFO { public int cbSize; public uint flags; public nint hCursor; public POINT ptScreenPos; }
+    [StructLayout(LayoutKind.Sequential)] public struct ICONINFO { public bool fIcon; public int xHotspot, yHotspot; public nint hbmMask, hbmColor; }
     [StructLayout(LayoutKind.Sequential)] public struct MSG { public nint hwnd; public uint message; public nint wParam, lParam; public uint time; public POINT pt; }
 
     public delegate nint HookProc(int nCode, nint wParam, nint lParam);
@@ -69,6 +71,10 @@ static class Native
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(nint hwnd, int attr, out RECT value, int size);
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(nint hwnd, int attr, out int value, int size);
 
+    public const uint CURSOR_SHOWING = 1, DI_NORMAL = 3;
+    [DllImport("user32.dll")] public static extern bool GetCursorInfo(ref CURSORINFO info);
+    [DllImport("user32.dll")] public static extern bool GetIconInfo(nint icon, out ICONINFO info);
+    [DllImport("user32.dll")] public static extern bool DrawIconEx(nint hdc, int x, int y, nint icon, int cx, int cy, uint step, nint brush, uint flags);
     [DllImport("user32.dll")] public static extern bool PrintWindow(nint hwnd, nint hdc, uint flags);
     [DllImport("user32.dll")] public static extern nint GetDC(nint hwnd);
     [DllImport("user32.dll")] public static extern int ReleaseDC(nint hwnd, nint hdc);

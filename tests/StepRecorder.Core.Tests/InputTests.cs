@@ -72,6 +72,9 @@ public class SettingsTests
 
             new Settings { AutoUpdate = false }.Save(path);
             Assert.False(Settings.Load(path).AutoUpdate);
+            Assert.False(s.CaptureCursor); // 既定はカーソルを写さない
+            new Settings { CaptureCursor = true }.Save(path);
+            Assert.True(Settings.Load(path).CaptureCursor);
 
             File.WriteAllText(path, "{ broken");
             Assert.Equal(300, Settings.Load(path).DrawWaitMs);

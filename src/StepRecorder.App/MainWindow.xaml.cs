@@ -40,6 +40,7 @@ public partial class MainWindow : Window
         HkPause.Text = settings.HotkeyPause;
         HkStop.Text = settings.HotkeyStop;
         Group.SelectedIndex = (int)settings.GroupMode;
+        CaptureCursor.IsChecked = settings.CaptureCursor;
         AutoUpdate.IsChecked = settings.AutoUpdate;
     }
 
@@ -60,6 +61,7 @@ public partial class MainWindow : Window
         settings.HotkeyPause = HkPause.Text.Trim();
         settings.HotkeyStop = HkStop.Text.Trim();
         settings.GroupMode = (GroupMode)Group.SelectedIndex;
+        settings.CaptureCursor = CaptureCursor.IsChecked == true;
         settings.Save(Settings.DefaultPath);
         return true;
     }

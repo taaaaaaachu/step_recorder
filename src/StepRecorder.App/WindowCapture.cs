@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -44,8 +45,9 @@ static class WindowCapture
     /// <summary>
     /// focus を含むアプリ全体を撮る。同じプロセスの見えているウィンドウ(メインウィンドウ・ダイアログ・メニューなど)を
     /// Z オーダーの奥から順に重ねる。画面の外に置かれたウィンドウは含めない。
+    /// cursor なら、撮った瞬間のマウスカーソルも重ねて描く(PrintWindow ではカーソルは写らないため)。
     /// </summary>
-    public static Shot? Capture(nint focus)
+    public static Shot? Capture(nint focus, bool cursor = false)
     {
         if (focus == 0 || !IsWindow(focus) || IsIconic(focus)) return null;
         var pid = ProcessId(focus);
@@ -78,6 +80,7 @@ static class WindowCapture
         {
             BitBlt(dc, 0, 0, u.Width, u.Height, 0, 0, 0, WHITENESS); // ウィンドウ同士の隙間は白にする
             foreach (var (h, r) in windows) Draw(h, r, u, dc, screen);
+            if (cursor) DrawCursor(dc, u);
             SelectObject(dc, old);
             var src = Imaging.CreateBitmapSourceFromHBitmap(bmp, 0, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
             // PrintWindow はアルファを 0 のままにすることがあるので、透過なしの形式に揃える
@@ -113,6 +116,17 @@ static class WindowCapture
             DeleteObject(bmp);
             DeleteDC(dc);
         }
+    }
+
+    /// <summary>今のマウスカーソルを、画像(スクリーン上の u)の該当位置に描く。カーソルが隠れていれば描かない。</summary>
+    static void DrawCursor(nint dc, RECT u)
+    {
+        var ci = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+        if (!GetCursorInfo(ref ci) || (ci.flags & CURSOR_SHOWING) == 0 || !GetIconInfo(ci.hCursor, out var ii)) return;
+        // GetIconInfo が作ったビットマップは呼んだ側で消す
+        if (ii.hbmMask != 0) DeleteObject(ii.hbmMask);
+        if (ii.hbmColor != 0) DeleteObject(ii.hbmColor);
+        DrawIconEx(dc, ci.ptScreenPos.X - ii.xHotspot - u.Left, ci.ptScreenPos.Y - ii.yHotspot - u.Top, ci.hCursor, 0, 0, 0, 0, DI_NORMAL);
     }
 
     static bool Intersects(RECT a, RECT b) => a.Left < b.Right && b.Left < a.Right && a.Top < b.Bottom && b.Top < a.Bottom;

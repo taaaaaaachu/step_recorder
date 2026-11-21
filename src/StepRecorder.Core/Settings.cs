@@ -14,6 +14,8 @@ public sealed class Settings
     public GroupMode GroupMode { get; set; } = GroupMode.Sequence;
     /// <summary>起動時に GitHub Releases の新しい版を確認するか。</summary>
     public bool AutoUpdate { get; set; } = true;
+    /// <summary>スクリーンショットにマウスカーソルを写すか。</summary>
+    public bool CaptureCursor { get; set; }
 
     public static string DefaultPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "step_recorder", "settings.json");

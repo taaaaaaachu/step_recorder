@@ -108,6 +108,31 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.Equal("サンプル画面", session.Steps[1].ScreenName);
     }
 
+    [E2EFact]
+    public void カーソルを写すかどうかを切り替えられる()
+    {
+        target = Launch(SampleExe);
+        var main = target.MainWindowHandle;
+        var frame = Native.FrameBounds(main);
+        var (x, y) = (frame.Left + 60, frame.Top + 150); // 部品の無い所
+        MoveCursor(x, y);
+        Wait(300);
+
+        var without = WindowCapture.Capture(main, cursor: false)!;
+        var with = WindowCapture.Capture(main, cursor: true)!;
+        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } outDir)
+            WindowCapture.SavePng(with.Image, Path.Combine(outDir, "cursor.png"));
+        Assert.Equal((without.Image.PixelWidth, without.Image.PixelHeight), (with.Image.PixelWidth, with.Image.PixelHeight));
+
+        // 違いはカーソルの位置(ホットスポットから右下へ数十ピクセル)にだけある
+        var (a, b, w) = (without.Pixels, with.Pixels, without.Image.PixelWidth);
+        var changed = Enumerable.Range(0, a.Length / 3).Where(i => a[i * 3] != b[i * 3] || a[i * 3 + 1] != b[i * 3 + 1] || a[i * 3 + 2] != b[i * 3 + 2])
+            .Select(i => (X: i % w, Y: i / w)).ToList();
+        Assert.NotEmpty(changed);
+        var (cx, cy) = (x - with.Bounds.Left, y - with.Bounds.Top);
+        Assert.All(changed, p => Assert.True(p.X >= cx - 8 && p.X <= cx + 64 && p.Y >= cy - 8 && p.Y <= cy + 64, $"カーソル以外の所が違う: {p}"));
+    }
+
     /// <summary>止めてセッションを保存する。記録中の例外(error.log)があれば失敗させる。</summary>
     Session Stop(RecorderEngine engine)
     {
