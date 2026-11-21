@@ -2,8 +2,6 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:StepRecorder.App"
-             ShutdownMode="OnMainWindowClose">
-    <Application.Resources>
-         
-    </Application.Resources>
+             ShutdownMode="OnMainWindowClose"
+             ThemeMode="Light"> <!-- Windows 11 風の Fluent テーマ。暗い配色は固定色の箇所と合わないので明るい方に固定 -->
 </Application>
