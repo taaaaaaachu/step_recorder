@@ -197,6 +197,37 @@ public partial class EditorWindow : Window
         ZoomBy(e.Delta > 0 ? ZoomStep : 1 / ZoomStep, e.GetPosition(Scroller));
     }
 
+    // ホイールボタン(中ボタン)のドラッグで画像をつかんで動かす
+    Point? panFrom;
+    double panFromX, panFromY;
+
+    void Scroller_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != System.Windows.Input.MouseButton.Middle) return;
+        panFrom = e.GetPosition(Scroller);
+        (panFromX, panFromY) = (Scroller.HorizontalOffset, Scroller.VerticalOffset);
+        Scroller.CaptureMouse();
+        Scroller.Cursor = Cursors.SizeAll;
+        e.Handled = true;
+    }
+
+    void Scroller_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (panFrom is not { } from) return;
+        var p = e.GetPosition(Scroller);
+        Scroller.ScrollToHorizontalOffset(panFromX - (p.X - from.X));
+        Scroller.ScrollToVerticalOffset(panFromY - (p.Y - from.Y));
+    }
+
+    void Scroller_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != System.Windows.Input.MouseButton.Middle || panFrom == null) return;
+        panFrom = null;
+        Scroller.ReleaseMouseCapture();
+        Scroller.Cursor = null;
+        e.Handled = true;
+    }
+
     void Scroller_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (fit) FitZoom();

@@ -87,6 +87,22 @@ static class Desktop
         Send(Mouse(0x0002), Mouse(0x0004)); // LEFTDOWN, LEFTUP
     }
 
+    /// <summary>ホイールボタン(中ボタン)を押したまま (x1, y1) から (x2, y2) へドラッグする。</summary>
+    public static void MiddleDrag(nint hwnd, int x1, int y1, int x2, int y2)
+    {
+        var pt = new Native.POINT { X = x1, Y = y1 };
+        if (Native.ProcessId(Native.WindowFromPoint(pt)) != Native.ProcessId(hwnd))
+            throw new InvalidOperationException("ドラッグ位置に別のウィンドウが重なっているので中止した");
+        SetCursorPos(x1, y1);
+        Send(Mouse(0x0020)); // MIDDLEDOWN
+        for (var i = 1; i <= 10; i++)
+        {
+            SetCursorPos(x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10);
+            Wait(20);
+        }
+        Send(Mouse(0x0040)); // MIDDLEUP
+    }
+
     /// <summary>(x, y) で Ctrl を押しながらホイールを回す。notches が正なら奥へ。</summary>
     public static void CtrlWheel(nint hwnd, int x, int y, int notches)
     {

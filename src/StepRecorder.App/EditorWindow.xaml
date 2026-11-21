@@ -73,7 +73,8 @@
 
             <Border BorderBrush="#ccc" BorderThickness="1" Background="#f4f4f4">
                 <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                              SizeChanged="Scroller_SizeChanged" PreviewMouseWheel="Scroller_PreviewMouseWheel">
+                              SizeChanged="Scroller_SizeChanged" PreviewMouseWheel="Scroller_PreviewMouseWheel"
+                              PreviewMouseDown="Scroller_PreviewMouseDown" PreviewMouseMove="Scroller_PreviewMouseMove" PreviewMouseUp="Scroller_PreviewMouseUp">
                     <Grid x:Name="Stage" Margin="4" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Grid.LayoutTransform><ScaleTransform x:Name="Zoom"/></Grid.LayoutTransform>
                         <Image x:Name="Picture" Stretch="Fill"/>
