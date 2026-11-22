@@ -89,6 +89,9 @@ public static class Export
             section { margin: 2.5em 0; }
             svg.shot { display: block; max-width: 100%; height: auto; border: 1px solid #ccc; cursor: zoom-in; }
             .clip { display: block; max-width: 100%; height: auto; border: 1px solid #ccc; background: #000; }
+            .clip-wrap { position: relative; width: fit-content; max-width: 100%; }
+            .keys { position: absolute; left: 0; right: 0; bottom: max({{Number(KeyOverlay.Bottom)}}em, 56px); /* 一時停止中などに出るプレーヤーの操作バーと重ねない(焼き込みには操作バーが無いので比率どおり) */ display: flex; flex-direction: column; align-items: center; gap: {{Number(KeyOverlay.Gap)}}em; pointer-events: none; font-weight: bold; }
+            .keys span { background: rgba(32,32,32,.85); color: #fff; border-radius: {{Number(KeyOverlay.Radius)}}em; padding: {{Number(KeyOverlay.PadY)}}em {{Number(KeyOverlay.PadX)}}em; white-space: pre; max-width: calc(100% - 2em); overflow: hidden; text-overflow: ellipsis; }
             label.rate { display: block; width: fit-content; margin: .4em 0 0; color: #555; }
             label.rate select { font: inherit; }
             svg.shot rect { fill: none; stroke: #e00; stroke-width: 3; vector-effect: non-scaling-stroke; }
@@ -125,7 +128,7 @@ public static class Export
             foreach (var (st, k) in sec.Steps.Select((x, k) => (x, k)))
             {
                 if (paged) sb.Append($"<div class=\"page\" data-page=\"{k}\"{(k > 0 ? " hidden" : "")}>\n");
-                if (st.VideoFile != null) AppendClip(sb, st);
+                if (st.VideoFile != null) AppendClip(sb, s, st);
                 else AppendShot(sb, st);
                 if (paged) sb.Append("</div>\n");
             }
@@ -167,7 +170,7 @@ public static class Export
               v.addEventListener('pause', rewind);
               v.addEventListener('ended', rewind);
               // 速さの選択。最初はステップに指定された速さ。defaultPlaybackRate にも入れないと、読み込みで等速に戻る
-              const rate = v.nextElementSibling.querySelector('select');
+              const rate = (v.closest('.clip-wrap') ?? v).nextElementSibling.querySelector('select'); // キーを重ねる動画は枠で包んでいる
               const applyRate = () => { v.defaultPlaybackRate = v.playbackRate = +rate.value; };
               applyRate();
               rate.addEventListener('change', applyRate);
@@ -183,6 +186,24 @@ public static class Export
                 if (v.currentTime >= end) v.pause(); else requestAnimationFrame(stopAtEnd);
               };
               v.addEventListener('play', () => { if (v.currentTime < end) requestAnimationFrame(stopAtEnd); });
+            });
+            // 録画中に押したキーを、再生に合わせて重ねる(配布用の書き出しでは動画に焼き込むので出さない)。
+            // data-keys は [出し始め, 消す, 表示] の秒(動画ファイルの時刻)。大きさは動画の高さに比例させる(焼き込みと同じ比率)
+            document.querySelectorAll('video[data-keys]').forEach(v => {
+              const chips = JSON.parse(v.dataset.keys), box = v.parentElement.querySelector('.keys');
+              const size = +v.dataset.keySize, rows = +v.dataset.keyRows;
+              let shown = null;
+              const draw = () => {
+                box.style.fontSize = `${size * v.clientHeight / rows}px`;
+                const t = v.currentTime, now = chips.filter(c => c[0] <= t && t < c[1]).slice(-MAX_KEYS).map(c => c[2]);
+                if (shown !== null && now.join('\n') === shown) return;
+                shown = now.join('\n');
+                box.replaceChildren(...now.map(text => Object.assign(document.createElement('span'), { textContent: text })));
+              };
+              const loop = () => { draw(); if (!v.paused) requestAnimationFrame(loop); };
+              v.addEventListener('play', () => requestAnimationFrame(loop));
+              ['seeked', 'timeupdate', 'loadedmetadata', 'pause'].forEach(e => v.addEventListener(e, draw));
+              new ResizeObserver(() => { shown = null; draw(); }).observe(v);
             });
             // 画面一覧モードで、同じ画面のステップを前後に切り替える(説明の行をクリックしてもそのステップへ)
             document.querySelectorAll('section').forEach(sec => {
@@ -208,7 +229,7 @@ public static class Export
             </body>
             </html>
 
-            """);
+            """.Replace("MAX_KEYS", KeyOverlay.MaxVisible.ToString(CultureInfo.InvariantCulture)));
         return sb.ToString();
     }
 
@@ -240,7 +261,7 @@ public static class Export
     /// ponytail: mp4 のトリミングは CSS の object-view-box(Edge・Chrome のみ。Firefox では全体が映る)。
     /// 配布用の書き出しではトリミング済みのファイルを作るので関係ない。
     /// </summary>
-    static void AppendClip(StringBuilder sb, Step st)
+    static void AppendClip(StringBuilder sb, Session s, Step st)
     {
         var (w, h) = (st.ImageWidth, st.ImageHeight);
         var c = st.Crop ?? new PixelRect(0, 0, w, h);
@@ -253,7 +274,12 @@ public static class Export
             $" style=\"object-view-box: inset({c.Y}px {w - c.X - c.Width}px {h - c.Y - c.Height}px {c.X}px); aspect-ratio: {c.Width} / {c.Height}\"";
         // 区間の開始・終了は、再生し終えたら区間の最初に戻すために持たせる(スクリプトで使う)
         var range = (st.VideoStart is { } a ? $" data-start=\"{Seconds(a)}\"" : "") + (st.VideoEnd is { } b ? $" data-end=\"{Seconds(b)}\"" : "");
-        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{style}></video>\n");
+        var chips = KeyOverlay.Chips(KeyOverlay.StrokesFor(s, st));
+        var keys = chips.Count == 0 ? "" :
+            $" data-keys=\"{H(KeysJson(chips))}\" data-key-size=\"{Number(KeyOverlay.FontSize(c.Height))}\" data-key-rows=\"{c.Height}\"";
+        if (chips.Count > 0) sb.Append("<div class=\"clip-wrap\">");
+        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{keys}{style}></video>");
+        sb.Append(chips.Count > 0 ? "<div class=\"keys\"></div></div>\n" : "\n");
         AppendRate(sb, st.Speed);
     }
 
@@ -279,6 +305,13 @@ public static class Export
 
     static string Seconds(TimeSpan t) => t.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
 
+    static string Number(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    /// <summary>HTML のスクリプトに渡すキーの表示([出し始め, 消す, 表示] の秒)。</summary>
+    static string KeysJson(IReadOnlyList<KeyChip> chips) =>
+        System.Text.Json.JsonSerializer.Serialize(chips.Select(c => new object[] { Math.Round(c.Start.TotalSeconds, 3), Math.Round(c.End.TotalSeconds, 3), c.Text }),
+            new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }); // 属性に入れるときに H() で HTML エスケープする
+
     /// <summary>session.json・steps.md・index.html をまとめて書き出す。</summary>
     public static void SaveAll(Session s, string dir, GroupMode mode)
     {
@@ -290,7 +323,7 @@ public static class Export
     /// <summary>
     /// 配布用に、outDir へ index.html・steps.md と、使っている画像・動画だけを書き出す。
     /// session.json と全編の動画は含めない(あとから編集はできない)。
-    /// 動画のステップは makeClip(ステップ, 動画の書き出し先, ポスター画像の書き出し先) で、区間・トリミング(GIF なら速さも)を反映した
+    /// 動画のステップは makeClip(ステップ, 動画の書き出し先, ポスター画像の書き出し先) で、区間・トリミング・キーの表示(GIF なら速さも)を反映した
     /// ファイルにしてもらう(ポスターは mp4 のときだけ。GIF では null)。
     /// </summary>
     public static void ExportForDistribution(Session s, string srcDir, string outDir, GroupMode mode, ClipFormat format,
@@ -309,6 +342,7 @@ public static class Export
                 makeClip(s.Steps.First(x => x.Id == st.Id), Path.Combine(outDir, clip), gif ? null : Path.Combine(outDir, poster));
                 if (st.Crop is { } c) (st.ImageWidth, st.ImageHeight) = (c.Width, c.Height); // トリミング済みのファイルになる
                 (st.VideoFile, st.ImageFile, st.VideoStart, st.VideoEnd, st.Crop) = (clip, poster, null, null, null);
+                st.Keys = null; // キーは動画に焼き込み済み。HTML では重ねない
                 if (gif) st.VideoSpeed = null; // GIF はプレーヤーが無いので焼き込み済み。mp4 は等速のままで、HTML のプレーヤーが変える
                 continue;
             }

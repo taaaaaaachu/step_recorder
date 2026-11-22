@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Automation;
@@ -31,6 +32,7 @@ sealed class RecorderEngine
     ClickEvent? lastClick;
     Step? lastClickStep;
     AutomationElement? typing;
+    (AutomationElement? Element, bool Password) passwordField; // 1 打鍵ごとに UI Automation に問い合わせないよう、欄ごとに覚える
     nint lastTargetRoot;
     readonly Timer flushTimer;
 
@@ -226,13 +228,16 @@ sealed class RecorderEngine
     {
         if (n >= 0 && !Paused && (int)w is WM_KEYDOWN or WM_SYSKEYDOWN)
         {
-            var vk = (int)Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(l).vkCode;
+            var key = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(l);
+            var vk = (int)key.vkCode;
+            char? packet = vk == VK_PACKET ? (char)key.scanCode : null; // 文字だけを送り込む打鍵(SendInput の KEYEVENTF_UNICODE)は、文字が scanCode に入る
             var fg = GetForegroundWindow();
             if (target.OwnsKey(fg))
             {
                 bool ctrl = KeyDown(VK_CONTROL), alt = KeyDown(VK_MENU), shift = KeyDown(VK_SHIFT), win = KeyDown(VK_LWIN) || KeyDown(VK_RWIN);
                 var time = DateTimeOffset.Now;
-                Enqueue(() => OnKey(fg, vk, ctrl, alt, shift, win, time));
+                var pressed = Stopwatch.GetTimestamp(); // 動画上の時刻は、ワーカーで処理するまでの遅れを引いて求める
+                Enqueue(() => OnKey(fg, vk, ctrl, alt, shift, win, time, pressed, packet));
             }
         }
         return CallNextHookEx(0, n, w, l);
@@ -273,7 +278,7 @@ sealed class RecorderEngine
         lastClick = ev;
     }
 
-    void OnKey(nint fg, int vk, bool ctrl, bool alt, bool shift, bool win, DateTimeOffset time)
+    void OnKey(nint fg, int vk, bool ctrl, bool alt, bool shift, bool win, DateTimeOffset time, long pressed, char? packet)
     {
         var mods = (ctrl ? HotkeyModifiers.Ctrl : 0) | (alt ? HotkeyModifiers.Alt : 0) | (shift ? HotkeyModifiers.Shift : 0) | (win ? HotkeyModifiers.Win : 0);
         if (ownHotkeys.Contains((mods, vk))) return;
@@ -292,6 +297,26 @@ sealed class RecorderEngine
             }
             flushTimer.Change(1500, Timeout.Infinite); // 入力が止まったら確定させる
         }
+        RecordKey(fg, vk, ctrl, alt, shift, win, pressed, packet);
+    }
+
+    /// <summary>
+    /// 録画している間に押したキーを、動画に重ねるために動画上の時刻と一緒に残す(録画ボタンの動画はそのステップに、全編は記録に)。
+    /// パスワード欄で打った文字は伏せる。
+    /// </summary>
+    void RecordKey(nint fg, int vk, bool ctrl, bool alt, bool shift, bool win, long pressed, char? packet)
+    {
+        var recorder = clip?.Recorder ?? full;
+        if (recorder == null || KeyLabel.Of(vk, ctrl, alt, shift, win, packet ?? TypedChar(vk, shift, fg)) is not { } label) return;
+        var text = label.Text;
+        if (label.IsChar && typing is { } field)
+        {
+            if (!ReferenceEquals(passwordField.Element, field)) passwordField = (field, Uia.IsPassword(field));
+            if (passwordField.Password) text = "●";
+        }
+        var at = recorder.CurrentTime - Stopwatch.GetElapsedTime(pressed);
+        var keys = clip is var (_, step) ? step.Keys ??= [] : rec.Session.Keys ??= [];
+        keys.Add(new KeyStroke(at < TimeSpan.Zero ? TimeSpan.Zero : at, text, label.IsChar));
     }
 
     /// <summary>入力中の欄の値を読み、入力操作として記録する。同じ欄への続きの入力は Recording が1つにまとめる。</summary>

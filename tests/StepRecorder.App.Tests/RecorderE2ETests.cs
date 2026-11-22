@@ -209,6 +209,57 @@ public sealed class RecorderE2ETests : IDisposable
         Stop(engine); // error.log が無いこと
     }
 
+    [E2EFact]
+    public void 録画中に押したキーを動画上の時刻と一緒に残す()
+    {
+        target = Launch(SampleExe);
+        var main = target.MainWindowHandle;
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Video });
+        engine.Start();
+        Wait(800);
+        ClickOn(main, "nameBox");
+        Wait(500);
+        PressKeys(main, 0x41); // a
+        PressKeys(main, 0x10, 0x42); // Shift+B
+        TypeText(main, "c"); // 文字だけを送り込む打鍵(VK_PACKET)
+        Wait(300);
+        PressKeys(main, 0x11, 0x41); // Ctrl+A
+        PressKeys(main, 0x25); // ←
+        Wait(500);
+
+        var session = Stop(engine);
+        var keys = session.Keys!;
+        Assert.Equal(["a", "B", "c", "Ctrl+A", "←"], keys.Select(k => k.Text));
+        Assert.Equal([true, true, true, false, false], keys.Select(k => k.IsChar));
+        Assert.All(keys.Zip(keys.Skip(1)), p => Assert.True(p.First.Time <= p.Second.Time));
+        Assert.InRange(keys[0].Time.TotalSeconds, 1.0, 2.2); // 動画上の時刻(録り始めから)
+        Assert.Equal(["aBc", "Ctrl+A", "←"], KeyOverlay.Chips(KeyOverlay.StrokesFor(session, new Step { VideoFile = "video.mp4" })).Select(c => c.Text));
+    }
+
+    [E2EFact]
+    public void 録画ボタンの動画で押したキーはそのステップに残す()
+    {
+        target = Launch(SampleExe);
+        var main = target.MainWindowHandle;
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Click });
+        engine.Start();
+        ClickOn(main, "nameBox"); // 先にクリックのステップを作っておく(キーはこちらに入らないこと)
+        Wait(500);
+        engine.ToggleClip();
+        Wait(800);
+        PressKeys(main, 0x0D); // Enter
+        Wait(500);
+        engine.ToggleClip();
+        Wait(300);
+
+        var session = Stop(engine);
+        Assert.Null(session.Keys);
+        Assert.Null(session.Steps[0].Keys);
+        var key = Assert.Single(session.Steps[1].Keys!);
+        Assert.Equal("Enter", key.Text);
+        Assert.InRange(key.Time.TotalSeconds, 0.5, 1.6); // 録画ボタンの動画の時刻
+    }
+
     /// <summary>止めてセッションを保存する。記録中の例外(error.log)があれば失敗させる。</summary>
     Session Stop(RecorderEngine engine, List<string>? stages = null)
     {

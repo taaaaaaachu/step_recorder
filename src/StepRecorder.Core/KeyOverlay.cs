@@ -25,13 +25,22 @@ public static class KeyOverlay
     /// <summary>続けて打った文字は、末尾のこの文字数だけ出す。</summary>
     public const int MaxRunLength = 24;
 
+    // 見た目。文字の大きさに対する比率で決める(焼き込み・編集画面・HTML の CSS で同じ値を使う)
+    public const double PadX = 0.45, PadY = 0.15, Gap = 0.3, Radius = 0.3, Bottom = 0.8;
+
+    /// <summary>高さ height(画素)の動画に出す文字の大きさ(画素)。</summary>
+    public static double FontSize(double height) => Math.Clamp(height / 18, 12, 44);
+
+    /// <summary>キーを出さない設定かどうかに関わらず、そのステップで記録したキー(Recorded)。</summary>
+    public static IReadOnlyList<KeyStroke> StrokesFor(Session session, Step step) => step.HideKeys ? [] : Recorded(session, step);
+
     /// <summary>
-    /// 動画のステップに重ねるキー(そのステップの動画ファイルの時刻)。キーを出さない設定か、動画のステップでなければ空。
+    /// 動画のステップで押したキー(そのステップの動画ファイルの時刻)。動画のステップでなければ空。
     /// 全編から切り出した区間は、全編のキーのうち区間の中のもの。
     /// </summary>
-    public static IReadOnlyList<KeyStroke> StrokesFor(Session session, Step step)
+    public static IReadOnlyList<KeyStroke> Recorded(Session session, Step step)
     {
-        if (step.VideoFile == null || step.HideKeys) return [];
+        if (step.VideoFile == null) return [];
         if (step.VideoFile != session.VideoFile) return step.Keys ?? [];
         var (start, end) = (step.VideoStart ?? TimeSpan.Zero, step.VideoEnd ?? TimeSpan.MaxValue);
         return (session.Keys ?? []).Where(k => k.Time >= start && k.Time < end).ToList();

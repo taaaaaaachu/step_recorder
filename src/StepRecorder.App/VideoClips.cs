@@ -30,11 +30,13 @@ static class VideoClips
 
     /// <summary>
     /// start〜end(null なら最後まで)を、crop の範囲だけの mp4 に切り出す。速さは変えない(再生する側で変える)。
+    /// keys があれば焼き込む(時刻は元の動画の時刻)。
     /// MediaTranscoder の区間指定(ファイルからの変換)は E_POINTER で失敗するので、
     /// フレームを1枚ずつ取り出して録画と同じ方法でエンコードし直す。
     /// </summary>
-    public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null)
+    public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null, IReadOnlyList<KeyChip>? keys = null)
     {
+        var burner = new KeyBurner(keys ?? []);
         using var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
         var (w, h) = ((crop?.Width ?? reader.Width) & ~1, (crop?.Height ?? reader.Height) & ~1); // H.264 は縦横とも偶数
@@ -45,15 +47,21 @@ static class VideoClips
                 var t = TimeSpan.FromSeconds((double)i / VideoRecorder.Fps);
                 if (start + t >= stop) yield break;
                 progress?.Invoke(t / (stop - start));
-                yield return (ToNv12(Crop(reader.Frame(start + t), crop), w, h), t);
+                var bgra = Bgra(Crop(reader.Frame(start + t), crop), w, h);
+                burner.Apply(bgra, w, h, start + t);
+                yield return (Nv12.FromBgra(bgra, w, h), t);
             }
         }
         Task.Run(() => VideoRecorder.Encode(dst, w, h, Frames())).GetAwaiter().GetResult();
     }
 
-    /// <summary>start〜end(null なら最後まで)の crop の範囲を、speed 倍の速さで繰り返し再生する GIF アニメーションにする。</summary>
-    public static void ToGif(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null, double speed = 1)
+    /// <summary>
+    /// start〜end(null なら最後まで)の crop の範囲を、speed 倍の速さで繰り返し再生する GIF アニメーションにする。
+    /// keys があれば、縮めたあとの大きさで焼き込む(小さくした文字が潰れないように)。
+    /// </summary>
+    public static void ToGif(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null, double speed = 1, IReadOnlyList<KeyChip>? keys = null)
     {
+        var burner = new KeyBurner(keys ?? []);
         using var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
         var enc = new GifBitmapEncoder();
@@ -69,6 +77,13 @@ static class VideoClips
                 var scale = (double)GifMaxWidth / f.PixelWidth;
                 f = new TransformedBitmap(f, new ScaleTransform(scale, scale));
             }
+            if (!burner.IsEmpty)
+            {
+                var (w, h) = (f.PixelWidth, f.PixelHeight);
+                var bgra = Bgra(f, w, h);
+                burner.Apply(bgra, w, h, start + at);
+                f = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgr32, null, bgra, w * 4);
+            }
             enc.Frames.Add(BitmapFrame.Create(f));
         }
         using var ms = new MemoryStream();
@@ -78,15 +93,16 @@ static class VideoClips
     }
 
     /// <summary>
-    /// 配布用の書き出しで、動画のステップを区間・トリミング(GIF なら速さも)を反映したファイル(と、mp4 ならポスター画像)にする。
-    /// progress には進み具合(0〜1)を知らせる。
+    /// 配布用の書き出しで、動画のステップを区間・トリミング(GIF なら速さも)・キーの表示を反映したファイル(と、mp4 ならポスター画像)にする。
+    /// keys はそのステップに重ねるキー(KeyOverlay.StrokesFor)。progress には進み具合(0〜1)を知らせる。
     /// </summary>
-    public static void ExportClip(string dir, Step st, ClipFormat format, string clip, string? poster, Action<double>? progress = null)
+    public static void ExportClip(string dir, Step st, ClipFormat format, string clip, string? poster, IReadOnlyList<KeyStroke> keys, Action<double>? progress = null)
     {
         var src = Path.Combine(dir, st.VideoFile!);
         var start = st.VideoStart ?? TimeSpan.Zero;
-        if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip, progress, st.Speed);
-        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress);
+        var chips = KeyOverlay.Chips(keys);
+        if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip, progress, st.Speed, chips);
+        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress, chips);
         if (poster != null) WindowCapture.SavePng(Frame(clip, TimeSpan.Zero), poster);
     }
 
@@ -136,13 +152,13 @@ static class VideoClips
         return at + 1;
     }
 
-    /// <summary>エンコーダーに渡す形(NV12、w×h)にする。</summary>
-    static byte[] ToNv12(BitmapSource img, int w, int h)
+    /// <summary>左上の w×h を BGRA の画素にする。</summary>
+    static byte[] Bgra(BitmapSource img, int w, int h)
     {
         var src = new FormatConvertedBitmap(img, PixelFormats.Bgra32, null, 0);
         var buf = new byte[w * h * 4];
         src.CopyPixels(new Int32Rect(0, 0, w, h), buf, w * 4, 0);
-        return Nv12.FromBgra(buf, w, h);
+        return buf;
     }
 
     /// <summary>

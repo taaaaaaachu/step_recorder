@@ -30,6 +30,9 @@ static class Uia
         return new ElementInfo(NameOf(e), c.ControlType.ProgrammaticName.Replace("ControlType.", ""), c.AutomationId, rect);
     });
 
+    /// <summary>パスワード欄か。取れなければ念のため true(伏せる側に倒す)。</summary>
+    public static bool IsPassword(AutomationElement e) => Try(() => (object)e.Current.IsPassword) is not false;
+
     /// <summary>入力欄の現在値。パスワード欄は伏せ字。値を持たない部品は null。</summary>
     public static string? Value(AutomationElement e) => Try(() =>
     {

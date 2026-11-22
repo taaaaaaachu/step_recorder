@@ -54,6 +54,7 @@ public class KeyOverlayTests
         Assert.Equal(["Z"], KeyOverlay.StrokesFor(session, clip).Select(k => k.Text));
         range.HideKeys = true;
         Assert.Empty(KeyOverlay.StrokesFor(session, range));
+        Assert.Equal(["B"], KeyOverlay.Recorded(session, range).Select(k => k.Text)); // 切り替えのチェックを出すかどうかに使う
         Assert.Empty(KeyOverlay.StrokesFor(session, new Step { ImageFile = "images/0001.png" }));
     }
 
@@ -112,4 +113,43 @@ public class KeyOverlayTests
     [InlineData(0x5B)] // 左 Win
     [InlineData(0xFF)] // 名前の無いキー
     public void 修飾キーだけや名前の無いキーは出さない(int vk) => Assert.Null(KeyLabel.Of(vk, false, false, false, false, null));
+}
+
+public class KeyOverlayHtmlTests
+{
+    static Session WithKeys()
+    {
+        var s = new Session { TargetName = "App", VideoFile = "video.mp4", Keys = [new(TimeSpan.FromSeconds(2), "Ctrl+S", false), new(TimeSpan.FromSeconds(9), "<b>", true)] };
+        s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", VideoStart = TimeSpan.FromSeconds(1), VideoEnd = TimeSpan.FromSeconds(5) });
+        return s;
+    }
+
+    [Fact]
+    public void 編集用のHTMLでは区間の中のキーを再生に合わせて重ねる()
+    {
+        var html = Export.ToHtml(WithKeys(), GroupMode.Sequence);
+        var clip = html.Split('\n').Single(l => l.Contains("<video"));
+        // 区間の外(9 秒)のキーは入れない。時刻は動画ファイルの時刻
+        Assert.Equal("<div class=\"clip-wrap\"><video class=\"clip\" controls preload=\"metadata\" src=\"video.mp4#t=1,5\" poster=\"images/0001.png\" width=\"640\" data-start=\"1\" data-end=\"5\" "
+            + "data-keys=\"[[2,3.5,&quot;Ctrl+S&quot;]]\" data-key-size=\"20\" data-key-rows=\"360\"></video><div class=\"keys\"></div></div>", clip);
+        Assert.Contains("bottom: max(0.8em, 56px)", html); // 言語の設定に関わらず小数点
+        Assert.DoesNotContain("MAX_KEYS", html);
+    }
+
+    [Fact]
+    public void 出さない設定のステップと_焼き込んだ配布用には重ねない()
+    {
+        var hidden = WithKeys();
+        hidden.Steps[0].HideKeys = true;
+        Assert.DoesNotContain("data-keys=", Export.ToHtml(hidden, GroupMode.Sequence));
+
+        var dir = Path.Combine(Path.GetTempPath(), "sr-keys-html-" + Guid.NewGuid());
+        try
+        {
+            Directory.CreateDirectory(dir);
+            Export.ExportForDistribution(WithKeys(), dir, dir, GroupMode.Sequence, ClipFormat.Mp4, (_, _, _) => { });
+            Assert.DoesNotContain("data-keys=", File.ReadAllText(Path.Combine(dir, Export.HtmlFile)));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 }

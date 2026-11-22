@@ -10,6 +10,7 @@ static class Native
     public const int WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14;
     public const int WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104,
         WM_LBUTTONDOWN = 0x0201, WM_RBUTTONDOWN = 0x0204, WM_MBUTTONDOWN = 0x0207, WM_QUIT = 0x0012, WM_HOTKEY = 0x0312;
+    public const int VK_PACKET = 0xE7;
     public const int VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
     public const uint GA_ROOT = 2, PW_RENDERFULLCONTENT = 2, SRCCOPY = 0x00CC0020, WHITENESS = 0x00FF0062, GW_HWNDNEXT = 2, GW_OWNER = 4;
     public const int GWL_EXSTYLE = -20;
@@ -89,6 +90,27 @@ static class Native
     [DllImport("gdi32.dll")] public static extern bool BitBlt(nint dst, int x, int y, int w, int h, nint src, int sx, int sy, uint rop);
 
     public static bool KeyDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
+
+    /// <summary>
+    /// window のキーボード配列で vk を押したときに打たれる文字(Shift と CapsLock は効かせる)。文字にならないキーは null。
+    /// 押されているキーの状態は変えない(ToUnicodeEx のフラグ 4。デッドキーや IME の入力を乱さない)。
+    /// </summary>
+    public static char? TypedChar(int vk, bool shift, nint window)
+    {
+        var state = new byte[256];
+        if (shift) state[VK_SHIFT] = 0x80;
+        state[VK_CAPITAL] = (byte)(GetKeyState(VK_CAPITAL) & 1);
+        var layout = GetKeyboardLayout(GetWindowThreadProcessId(window, out _));
+        var text = new StringBuilder(8);
+        var n = ToUnicodeEx((uint)vk, MapVirtualKeyEx((uint)vk, 0 /*MAPVK_VK_TO_VSC*/, layout), state, text, text.Capacity, 4, layout);
+        return n == 1 ? text[0] : null; // デッドキー(-1)や 2 文字以上は出さない
+    }
+
+    const int VK_CAPITAL = 0x14;
+    [DllImport("user32.dll")] static extern short GetKeyState(int vk);
+    [DllImport("user32.dll")] static extern nint GetKeyboardLayout(uint thread);
+    [DllImport("user32.dll")] static extern uint MapVirtualKeyEx(uint code, uint type, nint layout);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ToUnicodeEx(uint vk, uint scan, byte[] state, StringBuilder text, int size, uint flags, nint layout);
 
     /// <summary>画面の取り込み(静止画・動画)に写らないようにする。画面には見えたまま。Windows 10 2004 以降。</summary>
     public static void ExcludeFromCapture(nint hwnd) => SetWindowDisplayAffinity(hwnd, 0x11 /*WDA_EXCLUDEFROMCAPTURE*/);
