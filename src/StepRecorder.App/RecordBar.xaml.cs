@@ -30,6 +30,10 @@ public partial class RecordBar : Window
     readonly Stopwatch shownClock = new();
     readonly System.Windows.Threading.DispatcherTimer hideTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
     nint handle;
+    double anchorX; // タブの中心。文言で幅が変わっても動かさず、ドラッグしたときだけ動かす
+
+    /// <summary>マウスが上にあるか。入力を送らないテストでは、利用者のカーソルに左右されないよう差し替える。</summary>
+    internal Func<bool> IsPointerOver { get; set; }
 
     /// <summary>停止後のセッション。</summary>
     public Session? Result { get; private set; }
@@ -57,13 +61,18 @@ public partial class RecordBar : Window
         var area = SystemParameters.WorkArea;
         Left = area.Left + area.Width / 2 - 220;
         Top = area.Top; // タブが画面の端にくっつくように
-        Loaded += (_, _) => Left = area.Left + (area.Width - ActualWidth) / 2;
+        Loaded += (_, _) =>
+        {
+            anchorX = area.Left + area.Width / 2;
+            Left = anchorX - ActualWidth / 2;
+        };
         ContentRendered += (_, _) =>
         {
             shownClock.Start();
             hideTimer.Start();
         };
         hideTimer.Tick += (_, _) => UpdateAutoHide();
+        IsPointerOver = IsCursorOver;
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -114,10 +123,14 @@ public partial class RecordBar : Window
     /// </summary>
     void UpdateAutoHide()
     {
-        var cursor = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
-        var over = GetCursorInfo(ref cursor) && GetWindowRect(handle, out var r) && r.Contains(cursor.ptScreenPos);
-        autoHide.Update(over, Native.KeyDown(VK_LBUTTON) || Native.KeyDown(VK_RBUTTON), shownClock.Elapsed);
+        autoHide.Update(IsPointerOver(), Native.KeyDown(VK_LBUTTON) || Native.KeyDown(VK_RBUTTON), shownClock.Elapsed);
         ShowOpen(autoHide.IsOpen);
+    }
+
+    bool IsCursorOver()
+    {
+        var cursor = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+        return GetCursorInfo(ref cursor) && GetWindowRect(handle, out var r) && r.Contains(cursor.ptScreenPos);
     }
 
     void BarTab_Click(object sender, RoutedEventArgs e)
@@ -130,11 +143,10 @@ public partial class RecordBar : Window
     void ShowOpen(bool open)
     {
         if (open == Panel.IsVisible) return;
-        var center = Left + ActualWidth / 2;
         Panel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         BarTab.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
         UpdateLayout();
-        Left = center - ActualWidth / 2;
+        Left = anchorX - ActualWidth / 2;
     }
 
     /// <summary>引っ込んでいても状態が分かるように、タブの色と印を変える。</summary>
@@ -144,7 +156,12 @@ public partial class RecordBar : Window
         BarTab.Content = engine.Paused ? "❚❚" : clipTimer.IsEnabled ? "■" : "●";
     }
 
-    void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
+    void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var from = Left;
+        DragMove(); // 離すまで戻らない
+        anchorX += Left - from;
+    }
 
     void Mode_Checked(object sender, RoutedEventArgs e) =>
         engine.Mode = sender == ModeManual ? RecordMode.Manual : RecordMode.Click;

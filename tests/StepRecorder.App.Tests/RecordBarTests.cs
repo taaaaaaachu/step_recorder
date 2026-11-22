@@ -28,7 +28,7 @@ public sealed class RecordBarTests : IDisposable
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
-    void Show(RecordMode mode = RecordMode.Click)
+    void Show(RecordMode mode = RecordMode.Click, bool realPointer = false)
     {
         Directory.CreateDirectory(dir);
         // 利用者のホットキーとぶつからない組み合わせ
@@ -42,6 +42,7 @@ public sealed class RecordBarTests : IDisposable
         thread = new Thread(() =>
         {
             bar = new RecordBar(new RecorderEngine(new AppTarget(sample), dir, settings), settings, dir);
+            if (!realPointer) bar.IsPointerOver = () => false;
             bar.ContentRendered += (_, _) =>
             {
                 hwnd = new WindowInteropHelper(bar).Handle;
@@ -127,6 +128,37 @@ public sealed class RecordBarTests : IDisposable
     }
 
     [DesktopFact]
+    public void 文言で幅が変わってもタブの位置がずれない()
+    {
+        Show();
+        WaitClosed();
+        Wait(300);
+        var first = Bounds().Left;
+        void TogglePause() => On(b =>
+        {
+            b.PauseButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            return true;
+        });
+
+        for (var i = 0; i < 2; i++)
+        {
+            TogglePause(); // ホットキーで(引っ込んだまま)止めて
+            PressTab();
+            Assert.True(Until(IsOpen, 2000), "出ない");
+            TogglePause(); // 出したバーで再開
+            WaitClosed();
+            Wait(300);
+            Assert.InRange(Bounds().Left - first, -1, 1);
+        }
+        PressTab();
+        Assert.True(Until(IsOpen, 2000), "出ない");
+        TogglePause(); // 出したバーで止める
+        WaitClosed();
+        Wait(300);
+        Assert.InRange(Bounds().Left - first, -1, 1);
+    }
+
+    [DesktopFact]
     public void タブで一時停止と録画中が分かる()
     {
         Show();
@@ -158,7 +190,9 @@ public sealed class RecordBarTests : IDisposable
     [E2EFact]
     public void マウスを乗せると出て_離すと引っ込み_中のボタンを押せる()
     {
-        Show();
+        Show(realPointer: true);
+        var start = Bounds();
+        MoveCursor((start.Left + start.Right) / 2, start.Bottom + 300); // 前からバーの所にあっても始められるように
         WaitClosed();
         Wait(300);
         var tab = Bounds();
