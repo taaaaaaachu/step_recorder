@@ -11,7 +11,7 @@ static class Native
     public const int WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104,
         WM_LBUTTONDOWN = 0x0201, WM_RBUTTONDOWN = 0x0204, WM_MBUTTONDOWN = 0x0207, WM_QUIT = 0x0012, WM_HOTKEY = 0x0312;
     public const int VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
-    public const uint GA_ROOT = 2, PW_RENDERFULLCONTENT = 2, SRCCOPY = 0x00CC0020, WHITENESS = 0x00FF0062, GW_HWNDNEXT = 2;
+    public const uint GA_ROOT = 2, PW_RENDERFULLCONTENT = 2, SRCCOPY = 0x00CC0020, WHITENESS = 0x00FF0062, GW_HWNDNEXT = 2, GW_OWNER = 4;
     public const int GWL_EXSTYLE = -20;
     public const long WS_EX_NOACTIVATE = 0x08000000L, WS_EX_TOOLWINDOW = 0x00000080L, WS_EX_TRANSPARENT = 0x00000020L;
     public const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
@@ -94,6 +94,25 @@ static class Native
     public static void ExcludeFromCapture(nint hwnd) => SetWindowDisplayAffinity(hwnd, 0x11 /*WDA_EXCLUDEFROMCAPTURE*/);
 
     public static RECT ToRect(PixelRect r) => new() { Left = r.X, Top = r.Y, Right = r.X + r.Width, Bottom = r.Y + r.Height };
+
+    /// <summary>プロセスの exe のフルパス。管理者権限のプロセスでも取れる。取れなければ null。</summary>
+    public static string? ProcessPath(uint pid)
+    {
+        var process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (process == 0) return null;
+        try
+        {
+            var path = new StringBuilder(1024);
+            var size = path.Capacity;
+            return QueryFullProcessImageName(process, 0, path, ref size) ? path.ToString() : null;
+        }
+        finally { CloseHandle(process); }
+    }
+
+    const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+    [DllImport("kernel32.dll")] static extern nint OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(nint handle);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool QueryFullProcessImageName(nint process, uint flags, StringBuilder path, ref int size);
 
     public static uint ProcessId(nint hwnd) { GetWindowThreadProcessId(hwnd, out var pid); return pid; }
 

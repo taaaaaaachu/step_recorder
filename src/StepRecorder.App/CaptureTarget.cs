@@ -11,7 +11,7 @@ abstract class CaptureTarget
     /// <summary>記録フォルダと画面一覧の表題に使う名前。</summary>
     public abstract string Name { get; }
 
-    /// <summary>今も記録できるか(終了していない・外されていない)。</summary>
+    /// <summary>今も記録できるか(見えているウィンドウがある・外されていない)。</summary>
     public abstract bool IsAvailable { get; }
 
     /// <summary>画面に見えているものを撮るか。撮るなら、自分のバーなどが写らないようにする必要がある。</summary>
@@ -37,46 +37,70 @@ abstract class CaptureTarget
 
     /// <summary>ステップに載せるウィンドウの情報。</summary>
     public abstract WindowInfo Describe(nint window);
+
+    /// <summary>一覧を作り直したときに、選んだままにしてよい同じ対象か。</summary>
+    public abstract bool IsSameTarget(CaptureTarget other);
 }
 
-/// <summary>アプリ(プロセス)。そのウィンドウだけを撮るので、他のアプリや常駐バーは写らない。</summary>
+/// <summary>
+/// アプリ。同じ exe のプロセスはまとめて 1 つのアプリとみなす(AppProcesses)。
+/// そのウィンドウだけを撮るので、他のアプリや常駐バーは写らない。
+/// </summary>
 sealed class AppTarget(Process process) : CaptureTarget
 {
-    readonly uint pid = (uint)process.Id;
+    readonly AppProcesses app = new((uint)process.Id);
     readonly string name = process.ProcessName;
+    readonly nint listed = process.MainWindowHandle; // 一覧に出したときのウィンドウ。もう隠れていることがある
 
     public override string Name => name;
 
-    public override bool IsAvailable => !process.HasExited;
+    public override bool IsAvailable => InitialWindow != 0;
 
-    public override nint InitialWindow => process.MainWindowHandle;
+    public override nint InitialWindow => app.MainWindow(prefer: listed);
 
-    public override EvidenceInfo CollectEvidence() => EvidenceCollector.Collect(process);
+    public override EvidenceInfo CollectEvidence()
+    {
+        try
+        {
+            // 選んだプロセス(タブ)は終了していることがあるので、今見えているウィンドウのプロセスから取る
+            if (InitialWindow is var window && window != 0)
+            {
+                using var current = Process.GetProcessById((int)ProcessId(window));
+                return EvidenceCollector.Collect(current);
+            }
+        }
+        catch (ArgumentException) { } // 取る間に終了した
+        return EvidenceCollector.Collect(process);
+    }
 
-    public override bool OwnsClick(nint window, POINT point) => ProcessId(window) == pid;
+    public override bool OwnsClick(nint window, POINT point) => app.Contains(window);
 
-    public override bool OwnsKey(nint foreground) => ProcessId(foreground) == pid;
+    public override bool OwnsKey(nint foreground) => app.Contains(foreground);
 
-    /// <summary>前面が対象プロセスならそれ、違えば最後に撮ったウィンドウ。</summary>
+    /// <summary>前面が対象アプリならそれ、違えば最後に撮ったウィンドウ。それも隠れていれば、見えているメインウィンドウ。</summary>
     public override bool TryGetActiveWindow(nint last, out nint window)
     {
         window = GetAncestor(GetForegroundWindow(), GA_ROOT);
-        if (ProcessId(window) == pid) return true;
-        if (IsWindow(last) && IsWindowVisible(last)) window = last;
-        else
-        {
-            try { window = Process.GetProcessById((int)pid).MainWindowHandle; }
-            catch (ArgumentException) { window = 0; }
-        }
+        if (app.Contains(window) && IsWindowVisible(window)) return true;
+        window = IsWindowVisible(last) && app.Contains(last) ? last : app.MainWindow();
         return window != 0;
     }
 
-    public override Shot? Capture(nint window, bool cursor) => WindowCapture.Capture(window, cursor);
+    public override Shot? Capture(nint window, bool cursor) => WindowCapture.Capture(Existing(window), cursor, app);
 
     public override VideoRecorder StartVideo(nint window, string path, bool cursor, Func<bool> paused) =>
-        VideoRecorder.Start(window, path, cursor, paused);
+        VideoRecorder.Start(app.MainWindow(prefer: window), path, cursor, paused, app);
 
-    public override WindowInfo Describe(nint window) => new(Text(window), ClassName(window), name);
+    public override WindowInfo Describe(nint window)
+    {
+        window = Existing(window);
+        return new(Text(window), ClassName(window), name);
+    }
+
+    public override bool IsSameTarget(CaptureTarget other) => other is AppTarget target && app.IsSameApp(target.app);
+
+    /// <summary>処理するまでに閉じていたら(タブを閉じるクリックなど)、今見えているウィンドウで代える。</summary>
+    nint Existing(nint window) => IsWindow(window) ? window : app.MainWindow();
 }
 
 /// <summary>モニター。見えているものを丸ごと撮り、その上でした操作を、どのアプリへのものでも記録する(step_recorder 自身は除く)。</summary>
@@ -122,6 +146,8 @@ sealed class MonitorTarget(DisplayMonitor monitor) : CaptureTarget
         var title = Text(window);
         return new(title == "" ? monitor.Title : title, ClassName(window), ProcessNameOf(window));
     }
+
+    public override bool IsSameTarget(CaptureTarget other) => other is MonitorTarget target && target.Monitor == monitor;
 
     static string ProcessNameOf(nint window)
     {

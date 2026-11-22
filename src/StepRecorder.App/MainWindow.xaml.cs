@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     }
 
     MonitorBadge? badge;
+    bool refreshing;
     readonly Settings settings = Settings.Load(Settings.DefaultPath);
 
     public MainWindow()
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
         Version.Text = $"バージョン {AppVersion.Current}";
         ShowSettings();
         RefreshTargets();
+        IsVisibleChanged += (_, _) => { if (IsVisible) RefreshTargets(); }; // 記録や編集から戻ったときに古くならないように
         Loaded += async (_, _) =>
         {
             if (settings.AutoUpdate) await Updater.CheckAsync(this);
@@ -71,7 +73,7 @@ public partial class MainWindow : Window
         return false;
     }
 
-    /// <summary>対象の一覧。モニターを先に、そのあとにアプリを並べる。</summary>
+    /// <summary>対象の一覧。モニターを先に、そのあとにアプリを並べる。選んでいたものは選んだままにする。</summary>
     void RefreshTargets()
     {
         var monitors = Monitors.All().Select(m => new TargetItem(new MonitorTarget(m), m.Label));
@@ -80,12 +82,22 @@ public partial class MainWindow : Window
             .Where(p => p.Id != self && p.MainWindowHandle != 0 && p.MainWindowTitle != "")
             .OrderBy(p => p.ProcessName, StringComparer.OrdinalIgnoreCase)
             .Select(p => new TargetItem(new AppTarget(p), $"{p.ProcessName} — {p.MainWindowTitle}"));
-        Targets.ItemsSource = monitors.Concat(apps).ToList();
+        var items = monitors.Concat(apps).ToList();
+        var selected = Targets.SelectedItem as TargetItem;
+        refreshing = true;
+        Targets.ItemsSource = items;
+        Targets.SelectedItem = selected == null ? null
+            : items.FirstOrDefault(i => i.Label == selected.Label && i.Target.IsSameTarget(selected.Target))
+                ?? items.FirstOrDefault(i => i.Target.IsSameTarget(selected.Target)); // タブが切り替わって題が変わっても同じアプリ
+        refreshing = false;
     }
+
+    void Targets_DropDownOpened(object? sender, EventArgs e) => RefreshTargets();
 
     /// <summary>モニターを選んだら、どのモニターかを枠で示す。</summary>
     void Targets_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (refreshing) return; // 一覧の作り直しでは枠を出し直さない
         CloseBadge();
         if (Targets.SelectedItem is not TargetItem { Target: MonitorTarget target }) return;
         badge = new MonitorBadge(target.Monitor);
@@ -167,7 +179,7 @@ public partial class MainWindow : Window
         if (Targets.SelectedItem is not TargetItem { Target: var target }) { Fail("対象(画面かアプリ)を選んでください"); return; }
         if (!target.IsAvailable)
         {
-            Fail(target is MonitorTarget ? "その画面は外されたか、解像度や位置が変わっています。選び直してください" : "対象アプリは終了しています");
+            Fail(target is MonitorTarget ? "その画面は外されたか、解像度や位置が変わっています。選び直してください" : "対象アプリのウィンドウが見つかりません(終了したか、隠れています)");
             RefreshTargets();
             return;
         }

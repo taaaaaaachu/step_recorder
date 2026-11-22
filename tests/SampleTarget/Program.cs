@@ -1,10 +1,10 @@
 namespace SampleTarget;
 
-/// <summary>E2E テストで操作される小さな WinForms アプリ。</summary>
+/// <summary>E2E テストで操作される小さな WinForms アプリ。引数に色の名前を渡すと中身がその色になる(複数起動したときに見分ける)。</summary>
 static class Program
 {
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
         var form = new Form { Text = "サンプル画面", ClientSize = new(380, 200), StartPosition = FormStartPosition.CenterScreen };
@@ -36,6 +36,7 @@ static class Program
         toggle.Click += (_, _) => (panelA.Visible, panelB.Visible) = (panelB.Visible, panelA.Visible);
         detail.Controls.AddRange([panelA, panelB, toggle]);
 
+        if (args is [var color, ..]) basic.BackColor = Color.FromName(color);
         tabs.TabPages.AddRange([basic, detail]);
         form.Controls.Add(tabs);
         Application.Run(form);

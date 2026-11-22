@@ -28,16 +28,16 @@ sealed record Shot(BitmapSource Image, RECT Bounds, RECT Focus)
 static class WindowCapture
 {
     /// <summary>
-    /// focus を含むアプリ全体を撮る。同じプロセスの見えているウィンドウ(メインウィンドウ・ダイアログ・メニューなど)を
+    /// focus を含むアプリ全体を撮る。同じアプリの見えているウィンドウ(メインウィンドウ・ダイアログ・メニューなど)を
     /// Z オーダーの奥から順に重ねる。画面の外に置かれたウィンドウは含めない。
     /// cursor なら、撮った瞬間のマウスカーソルも重ねて描く(PrintWindow ではカーソルは写らないため)。
     /// </summary>
-    public static Shot? Capture(nint focus, bool cursor = false)
+    public static Shot? Capture(nint focus, bool cursor = false, AppProcesses? app = null)
     {
         if (focus == 0 || !IsWindow(focus) || IsIconic(focus)) return null;
         var frame = FrameBounds(focus);
         if (frame.Width <= 0 || frame.Height <= 0) return null;
-        var windows = AppWindows(focus);
+        var windows = AppWindows(focus, app ?? new AppProcesses(ProcessId(focus)));
 
         var u = frame;
         foreach (var (_, r) in windows) u = Union(u, r);
@@ -88,12 +88,11 @@ static class WindowCapture
     }
 
     /// <summary>
-    /// focus と同じプロセスの見えているウィンドウ(メインウィンドウ・ダイアログ・メニューなど)を、Z オーダーの奥から順に返す。
+    /// app の見えているウィンドウ(メインウィンドウ・ダイアログ・メニューなど)を、Z オーダーの奥から順に返す。
     /// 画面の外に置かれたウィンドウは含めない。focus は見えていなくても含める。
     /// </summary>
-    public static List<(nint Hwnd, RECT Rect)> AppWindows(nint focus)
+    public static List<(nint Hwnd, RECT Rect)> AppWindows(nint focus, AppProcesses app)
     {
-        var pid = ProcessId(focus);
         var screenArea = new RECT
         {
             Left = GetSystemMetrics(SM_XVIRTUALSCREEN), Top = GetSystemMetrics(SM_YVIRTUALSCREEN),
@@ -103,7 +102,7 @@ static class WindowCapture
         var windows = new List<(nint Hwnd, RECT Rect)>();
         for (var h = GetTopWindow(0); h != 0; h = GetWindow(h, GW_HWNDNEXT))
         {
-            if (h != focus && (!IsWindowVisible(h) || IsIconic(h) || IsCloaked(h) || ProcessId(h) != pid || ClassName(h) == "SysShadow")) continue;
+            if (h != focus && (!IsWindowVisible(h) || IsIconic(h) || IsCloaked(h) || !app.Contains(h) || ClassName(h) == "SysShadow")) continue;
             var r = FrameBounds(h);
             if (r.Width > 0 && r.Height > 0 && Intersects(r, screenArea)) windows.Add((h, r));
         }

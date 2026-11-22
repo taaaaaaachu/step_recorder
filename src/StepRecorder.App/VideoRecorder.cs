@@ -23,8 +23,8 @@ namespace StepRecorder.App;
 /// <summary>
 /// 対象アプリのウィンドウか、モニターを mp4 に録画する(Windows.Graphics.Capture)。
 /// アプリは OBS のウィンドウキャプチャと同じくウィンドウごとに録るので、他のアプリが上に重なっても写らない。
-/// ダイアログなど同じプロセスのウィンドウは静止画と同じく Z オーダーの順に重ねる。
-/// 画面の大きさは録画開始時のメインウィンドウで固定し、位置はメインウィンドウに追従する。
+/// ダイアログなど同じアプリのウィンドウは静止画と同じく Z オーダーの順に重ねる。
+/// 画面の大きさは録画開始時のメインウィンドウで固定し、位置は今のメインウィンドウに追従する(AppProcesses.Follow)。
 /// モニターは 1 枚を丸ごと録る。大きさと位置は録画開始時のまま。
 /// </summary>
 sealed class VideoRecorder
@@ -73,8 +73,23 @@ sealed class VideoRecorder
     /// main を含むアプリのウィンドウを path に録画し始める。
     /// paused が true の間は録らず、時計も止める(停止していた時間は動画から詰まる)。
     /// </summary>
-    public static VideoRecorder Start(nint main, string path, bool cursor, Func<bool>? paused = null) =>
-        new(new(() => FrameBounds(main), () => WindowCapture.AppWindows(main), CreateWindowItem), path, cursor, paused ?? (() => false));
+    public static VideoRecorder Start(nint main, string path, bool cursor, Func<bool>? paused = null, AppProcesses? app = null)
+    {
+        app ??= new AppProcesses(ProcessId(main));
+        var (current, className, origin) = (main, ClassName(main), FrameBounds(main));
+        // Items を先に呼ぶ(そこで追う相手を決める)
+        List<(nint, RECT)> Items()
+        {
+            current = app.Follow(current, className, GetAncestor(GetForegroundWindow(), GA_ROOT));
+            return WindowCapture.AppWindows(current, app);
+        }
+        RECT Origin()
+        {
+            if (IsWindow(current)) origin = FrameBounds(current); // 閉じられて代わりも無ければ、最後の位置のまま
+            return origin;
+        }
+        return new(new(Origin, Items, CreateWindowItem), path, cursor, paused ?? (() => false));
+    }
 
     /// <summary>モニターに見えているものを丸ごと path に録画し始める。paused は Start と同じ。</summary>
     public static VideoRecorder StartMonitor(nint monitor, RECT bounds, string path, bool cursor, Func<bool>? paused = null) =>
@@ -130,7 +145,11 @@ sealed class VideoRecorder
                 clock.Start();
                 // 遅れたらその分のフレームは飛ばす(タイムスタンプは経過時間どおり)
                 var index = (long)(clock.Elapsed.TotalSeconds * Fps);
-                if (index >= next)
+                // タブの切り替え直後は、新しいウィンドウの絵が届くまで(長くても 1 秒)待つ。白いコマを挟まない
+                var arriving = next > 0 && items.Count > 0 && index - next < Fps
+                    && !items.Any(i => sources.TryGetValue(i.Handle, out var s) && s.Ready());
+                if (arriving) Thread.Sleep(10);
+                else if (index >= next)
                 {
                     var origin = input.Origin();
                     Array.Fill(canvas, (byte)0xFF); // ウィンドウ同士の隙間は白
