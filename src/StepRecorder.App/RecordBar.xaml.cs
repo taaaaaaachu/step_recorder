@@ -12,7 +12,7 @@ namespace StepRecorder.App;
 
 /// <summary>
 /// 記録中に最前面へ出す小さなバー。クリックしても前面を奪わない(対象アプリのフォーカスを保つ)。
-/// 使っていない間は小さなタブに引っ込み、マウスを乗せると滑り出る。
+/// 使っていない間は小さなタブに引っ込み、マウスを乗せると滑り出る。ピンで留めると引っ込まない。
 /// </summary>
 public partial class RecordBar : Window
 {
@@ -64,6 +64,7 @@ public partial class RecordBar : Window
             State.Text = "● 記録中(録画)";
         }
         recordingLabel = State.Text;
+        if (engine.CapturesScreen) ClipButton.ToolTip = PinButton.ToolTip = null; // ツールチップは別のウィンドウなので録画に写ってしまう
         var area = SystemParameters.WorkArea;
         Left = area.Left + (area.Width - Width) / 2;
         Top = area.Top; // タブが画面の端にくっつくように
@@ -83,11 +84,7 @@ public partial class RecordBar : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)((long)GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW));
         HwndSource.FromHwnd(hwnd).AddHook(WndProc);
-        if (engine.CapturesScreen)
-        {
-            ExcludeFromCapture(hwnd);
-            ClipButton.ToolTip = null; // ツールチップは別のウィンドウなので写ってしまう
-        }
+        if (engine.CapturesScreen) ExcludeFromCapture(hwnd);
 
         var failed = new List<string>();
         var hotkeys = new List<(int, string)> { (HkCapture, settings.HotkeyCapture), (HkPause, settings.HotkeyPause), (HkStop, settings.HotkeyStop) };
@@ -145,6 +142,8 @@ public partial class RecordBar : Window
         autoHide.Open(shownClock.Elapsed);
         ShowOpen(true);
     }
+
+    void Pin_Changed(object sender, RoutedEventArgs e) => autoHide.IsPinned = PinButton.IsChecked == true;
 
     /// <summary>引っ込むときはバーが上へ消えてからタブが下りる。出るときはタブが上がりながらバーが下りる。途中で逆にもなれる。</summary>
     void ShowOpen(bool open)

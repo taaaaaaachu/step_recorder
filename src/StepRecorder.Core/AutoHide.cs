@@ -15,6 +15,9 @@ public sealed class AutoHide
 
     public bool IsOpen { get; private set; } = true;
 
+    /// <summary>ピンで留めてある。出ている間は引っ込めない。</summary>
+    public bool IsPinned { get; set; }
+
     /// <summary>タブが押された。マウスが乗っていなくても(タッチ・読み上げ)しばらく出す。</summary>
     public void Open(TimeSpan now)
     {
@@ -27,7 +30,7 @@ public sealed class AutoHide
     {
         if (IsOpen)
         {
-            if (over)
+            if (over || IsPinned)
             {
                 if (now + CloseDelay > closeAt) closeAt = now + CloseDelay;
             }

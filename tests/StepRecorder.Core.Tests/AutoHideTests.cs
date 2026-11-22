@@ -73,6 +73,20 @@ public class AutoHideTests
     }
 
     [Fact]
+    public void ピンで留めると引っ込まず_外すと少しして引っ込む()
+    {
+        var hide = new AutoHide { IsPinned = true };
+        hide.Update(false, false, Ms(60_000));
+        Assert.True(hide.IsOpen);
+
+        hide.IsPinned = false;
+        hide.Update(false, false, Ms(60_799));
+        Assert.True(hide.IsOpen); // 外した瞬間には消えない
+        hide.Update(false, false, Ms(60_800));
+        Assert.False(hide.IsOpen);
+    }
+
+    [Fact]
     public void タブを押すとマウスが無くてもしばらく出る()
     {
         var hide = Closed();

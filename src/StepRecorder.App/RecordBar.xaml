@@ -31,6 +31,35 @@
         <Button x:Name="PauseButton" Content="一時停止" Click="Pause_Click"/>
         <Button Content="停止" Click="Stop_Click"/>
         <TextBlock x:Name="Count" Text="0 枚" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="40"/>
+        <!-- ピン。アイコンは Windows 同梱のフォントの線画(11 は Segoe Fluent Icons、10 は Segoe MDL2 Assets。どちらも E718) -->
+        <ToggleButton x:Name="PinButton" Margin="4,0,0,0" Checked="Pin_Changed" Unchecked="Pin_Changed" ToolTip="バーを引っ込めない"
+                      AutomationProperties.AutomationId="PinButton" AutomationProperties.Name="バーを引っ込めない">
+            <ToggleButton.Style>
+                <Style TargetType="ToggleButton">
+                    <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border x:Name="Face" Width="24" Height="22" CornerRadius="3" Background="Transparent">
+                                    <TextBlock x:Name="Icon" Text="&#xE718;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
+                                               Foreground="#FFB8B8B8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Face" Property="Background" Value="#FF454545"/>
+                                        <Setter TargetName="Icon" Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="Face" Property="Background" Value="#FFE04040"/>
+                                        <Setter TargetName="Icon" Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ToggleButton.Style>
+        </ToggleButton>
     </StackPanel>
     </Border>
     <!-- 引っ込んでいる間に出すタブ。マウスを乗せるか押すとバーが出る。赤 ● 記録中、赤 ■ 動画のステップを録画中、灰 ❚❚ 一時停止 -->

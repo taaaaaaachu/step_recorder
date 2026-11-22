@@ -168,6 +168,22 @@ public sealed class RecordBarTests : IDisposable
     }
 
     [DesktopFact]
+    public void ピンで留めると引っ込まず_外すと引っ込む()
+    {
+        Show();
+        Snapshot("pin-off");
+        var pin = (TogglePattern)Find(hwnd, "PinButton").GetCurrentPattern(TogglePattern.Pattern);
+        pin.Toggle(); // 読み上げなどからの押し方(Click は上がらない)でも効くこと
+        Assert.Equal(ToggleState.On, pin.Current.ToggleState); // 読み上げでも状態が分かる
+        Wait(4500); // マウスが無ければ、とうに引っ込んでいる時間
+        Assert.True(IsOpen(), "留めたのに引っ込んだ");
+        Snapshot("pin-on");
+
+        pin.Toggle();
+        WaitClosed();
+    }
+
+    [DesktopFact]
     public void タブで一時停止と録画中が分かる()
     {
         Show();
@@ -259,7 +275,7 @@ public sealed class RecordBarTests : IDisposable
         {
             b.State.Text = "● 記録中";
             b.ClipButton.Content = "■ 録画停止 100:00:05";
-            b.Count.Text = "99999 枚";
+            b.Count.Text = "99999 枚"; // ピンの分も含めて測る
             b.UpdateLayout();
             b.Panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             return (b.Panel.DesiredSize.Width - b.Panel.Margin.Left, b.ActualWidth);
@@ -328,6 +344,28 @@ public sealed class RecordBarTests : IDisposable
         using var reader = VideoClips.Reader.Open(path);
         for (var t = TimeSpan.Zero; t < reader.Duration; t += TimeSpan.FromSeconds(1.0 / VideoRecorder.Fps))
             Assert.Equal(0, NotBlue(new CroppedBitmap(reader.Frame(t), area)));
+    }
+
+    [DesktopFact]
+    public void モニターを録るときはツールチップを出さない()
+    {
+        Exception? error = null;
+        var sta = new Thread(() =>
+        {
+            try
+            {
+                var settings = new Settings();
+                // 表示しないので、フックもホットキーも録画も始まらない
+                var hidden = new RecordBar(new RecorderEngine(new MonitorTarget(Monitors.All()[0]), dir, settings), settings, dir);
+                Assert.Null(hidden.PinButton.ToolTip);
+                Assert.Null(hidden.ClipButton.ToolTip);
+            }
+            catch (Exception e) { error = e; }
+        });
+        sta.SetApartmentState(ApartmentState.STA);
+        sta.Start();
+        sta.Join();
+        Assert.Null(error);
     }
 
     [E2EFact]
