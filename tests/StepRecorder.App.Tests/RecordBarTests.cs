@@ -179,11 +179,12 @@ public sealed class RecordBarTests : IDisposable
         Assert.Equal(ToggleState.On, pin.Current.ToggleState); // 読み上げでも状態が分かる
         Wait(4500); // マウスが無ければ、とうに引っ込んでいる時間
         Assert.True(IsOpen(), "留めたのに引っ込んだ");
-        Assert.Equal("\uE842", Icon()); // 押し込んだ形
+        double Angle() => On(b => (((System.Windows.Controls.TextBlock)b.PinButton.Template.FindName("Icon", b.PinButton)).RenderTransform as RotateTransform)?.Angle ?? 0);
+        Assert.Equal(("\uE840", -45d), (Icon(), Angle())); // 針が真下
         Snapshot("pin-on");
 
         pin.Toggle();
-        Assert.Equal("\uE718", Icon());
+        Assert.Equal(("\uE718", 0d), (Icon(), Angle()));
         WaitClosed();
     }
 

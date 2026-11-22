@@ -31,7 +31,7 @@
         <Button x:Name="PauseButton" Content="一時停止" Click="Pause_Click"/>
         <Button Content="停止" Click="Stop_Click"/>
         <TextBlock x:Name="Count" Text="0 枚" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="40"/>
-        <!-- ピン。アイコンは Windows 同梱のフォント(11 は Segoe Fluent Icons、10 は Segoe MDL2 Assets)。外すと線画の E718、留めると針が刺さって隠れた E842。E840 は 11 では E718 と同じ絵なので使わない -->
+        <!-- ピン。アイコンは Windows 同梱のフォントの線画(11 は Segoe Fluent Icons、10 は Segoe MDL2 Assets)。外すと E718、留めると針が真下を向いたピン。E840 はどちらのフォントでも針が左下 45 度なので、-45 度回す(E718 は 10 では横向きなので回しても揃わない) -->
         <ToggleButton x:Name="PinButton" Margin="4,0,0,0" Checked="Pin_Changed" Unchecked="Pin_Changed" ToolTip="バーを引っ込めない"
                       AutomationProperties.AutomationId="PinButton" AutomationProperties.Name="バーを引っ込めない">
             <ToggleButton.Style>
@@ -42,7 +42,7 @@
                             <ControlTemplate TargetType="ToggleButton">
                                 <Border x:Name="Face" Width="24" Height="22" CornerRadius="3" Background="Transparent">
                                     <TextBlock x:Name="Icon" Text="&#xE718;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
-                                               Foreground="#FFB8B8B8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                               Foreground="#FFB8B8B8" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
@@ -52,7 +52,11 @@
                                     <Trigger Property="IsChecked" Value="True">
                                         <Setter TargetName="Face" Property="Background" Value="#FFE04040"/>
                                         <Setter TargetName="Icon" Property="Foreground" Value="White"/>
-                                        <Setter TargetName="Icon" Property="Text" Value="&#xE842;"/>
+                                        <Setter TargetName="Icon" Property="Text" Value="&#xE840;"/>
+                                        <Setter TargetName="Icon" Property="RenderTransform">
+                                            <Setter.Value><RotateTransform Angle="-45"/></Setter.Value>
+                                        </Setter>
+                                        <Setter TargetName="Icon" Property="Margin" Value="0,-3,0,0"/> <!-- 回すと針の分だけ下に寄る -->
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
