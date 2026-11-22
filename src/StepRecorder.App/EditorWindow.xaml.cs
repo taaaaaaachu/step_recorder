@@ -519,11 +519,9 @@ public partial class EditorWindow : Window
         sliderQuiet = false;
     }
 
-    static string Clock(TimeSpan t) => t.ToString(@"m\:ss\.f");
-
     void TimeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        TimeLabel.Text = Clock(SliderTime);
+        TimeLabel.Text = TimeText.Position(SliderTime);
         if (!TimeSlider.IsMouseCaptureWithin) ShowPlayhead(); // ドラッグ中に動かすと、つまみがマウスから逃げる
         if (sliderQuiet) return;
         ShowVideoView();
@@ -599,7 +597,7 @@ public partial class EditorWindow : Window
     void RangeEnd_Click(object sender, RoutedEventArgs e) { rangeEnd = SliderTime; ShowRange(); }
 
     void ShowRange() =>
-        RangeLabel.Text = $"区間 {(rangeStart is { } a ? Clock(a) : "?")} 〜 {(rangeEnd is { } b ? Clock(b) : "?")}";
+        RangeLabel.Text = $"{(rangeStart is { } a ? TimeText.Position(a) : "?")} 〜 {(rangeEnd is { } b ? TimeText.Position(b) : "?")}";
 
     void AddRange_Click(object sender, RoutedEventArgs e)
     {

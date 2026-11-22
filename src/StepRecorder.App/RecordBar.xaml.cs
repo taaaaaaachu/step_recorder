@@ -102,7 +102,7 @@ public partial class RecordBar : Window
         ShowClipTime();
     }
 
-    void ShowClipTime() => ClipButton.Content = $@"■ 録画停止 {DateTime.Now - clipStarted:m\:ss}";
+    void ShowClipTime() => ClipButton.Content = $"■ 録画停止 {TimeText.Seconds(DateTime.Now - clipStarted)}";
 
     void Pause_Click(object sender, RoutedEventArgs e)
     {

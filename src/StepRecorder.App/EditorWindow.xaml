@@ -110,7 +110,7 @@
                     <DockPanel Margin="0,6,0,0">
                         <!-- 読み上げ名は画像のズームのボタンと区別するため -->
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
-                            <TextBlock x:Name="TimeLabel" Text="0:00.0" MinWidth="48" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TimeLabel" Text="0:00.0" MinWidth="48" TextAlignment="Right" VerticalAlignment="Center" Margin="16,0,8,0"/>
                             <Button Content="−" MinWidth="30" Click="TimeZoomOut_Click" AutomationProperties.Name="タイムラインを縮小" ToolTip="タイムラインを縮小 (Ctrl+ホイール)"/>
                             <Button Content="+" MinWidth="30" Click="TimeZoomIn_Click" AutomationProperties.Name="タイムラインを拡大" ToolTip="タイムラインを拡大 (Ctrl+ホイール)"/>
                             <Button Content="全体" Margin="0" Click="TimeZoomFit_Click" AutomationProperties.Name="タイムライン全体" ToolTip="全編が収まる幅に戻す"/>
