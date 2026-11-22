@@ -40,7 +40,7 @@ static class VideoClips
                 var t = TimeSpan.FromSeconds((double)i / VideoRecorder.Fps);
                 if (start + t >= stop) yield break;
                 progress?.Invoke(t / (stop - start));
-                yield return (BottomUpBgra(Crop(reader.Frame(start + t), crop), w, h), t);
+                yield return (ToNv12(Crop(reader.Frame(start + t), crop), w, h), t);
             }
         }
         Task.Run(() => VideoRecorder.Encode(dst, w, h, Frames())).GetAwaiter().GetResult();
@@ -128,15 +128,13 @@ static class VideoClips
         return at + 1;
     }
 
-    /// <summary>エンコーダーに渡す形(下の行から並んだ BGRA、w×h)にする。</summary>
-    static byte[] BottomUpBgra(BitmapSource img, int w, int h)
+    /// <summary>エンコーダーに渡す形(NV12、w×h)にする。</summary>
+    static byte[] ToNv12(BitmapSource img, int w, int h)
     {
         var src = new FormatConvertedBitmap(img, PixelFormats.Bgra32, null, 0);
         var buf = new byte[w * h * 4];
         src.CopyPixels(new Int32Rect(0, 0, w, h), buf, w * 4, 0);
-        var flipped = new byte[buf.Length];
-        for (var y = 0; y < h; y++) Buffer.BlockCopy(buf, y * w * 4, flipped, (h - 1 - y) * w * 4, w * 4);
-        return flipped;
+        return Nv12.FromBgra(buf, w, h);
     }
 
     /// <summary>MediaComposition でフレームを取り出す。</summary>

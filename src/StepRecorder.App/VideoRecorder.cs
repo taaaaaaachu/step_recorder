@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+using StepRecorder.Core;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -34,7 +35,7 @@ sealed class VideoRecorder
     readonly int width, height;
     readonly Stopwatch clock = new();
     readonly ManualResetEventSlim started = new();
-    readonly BlockingCollection<(byte[] Pixels, TimeSpan Time)> frames = new(boundedCapacity: Fps * 2);
+    readonly BlockingCollection<(byte[] Nv12, TimeSpan Time)> frames = new(boundedCapacity: Fps * 2); // 溜める前に NV12 にする(BGRA の 3/8 の大きさ)
     readonly Thread loop;
     readonly Task encoding;
     volatile bool stopping;
@@ -85,6 +86,7 @@ sealed class VideoRecorder
             clock.Start();
             started.Set();
             var next = 0L;
+            var canvas = new byte[width * height * 4];
             while (!stopping)
             {
                 var windows = WindowCapture.AppWindows(main);
@@ -101,11 +103,10 @@ sealed class VideoRecorder
                 if (index >= next)
                 {
                     var origin = FrameBounds(main);
-                    var canvas = new byte[width * height * 4];
                     Array.Fill(canvas, (byte)0xFF); // ウィンドウ同士の隙間は白
                     foreach (var (h, r) in windows)
                         if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - origin.Left, r.Top - origin.Top);
-                    frames.Add((canvas, TimeSpan.FromSeconds((double)index / Fps)));
+                    frames.Add((Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / Fps)));
                     next = index + 1;
                 }
                 var wait = TimeSpan.FromSeconds((double)next / Fps) - clock.Elapsed;
@@ -123,12 +124,13 @@ sealed class VideoRecorder
     // ---- エンコード ----
 
     /// <summary>
-    /// frames(下の行から並んだ BGRA と、動画上の時刻)を順に mp4 に書く。録画と切り出しで使う。
+    /// frames(NV12 と、動画上の時刻)を順に mp4 に書く。録画と切り出しで使う。
+    /// 色の変換は Windows に任せない(理由は Nv12 を参照)。
     /// frames は必要になった分だけ読むので、録画中のフレームを待ちながら渡してもよい。
     /// </summary>
-    public static async Task Encode(string path, int width, int height, IEnumerable<(byte[] Pixels, TimeSpan Time)> frames)
+    public static async Task Encode(string path, int width, int height, IEnumerable<(byte[] Nv12, TimeSpan Time)> frames)
     {
-        var props = VideoEncodingProperties.CreateUncompressed(MediaEncodingSubtypes.Bgra8, (uint)width, (uint)height);
+        var props = VideoEncodingProperties.CreateUncompressed(MediaEncodingSubtypes.Nv12, (uint)width, (uint)height);
         props.FrameRate.Numerator = Fps;
         props.FrameRate.Denominator = 1;
         var source = new MediaStreamSource(new VideoStreamDescriptor(props)) { BufferTime = TimeSpan.Zero };
@@ -138,7 +140,7 @@ sealed class VideoRecorder
         {
             // 次のフレームを渡す。無くなったら null を返して終わらせる
             if (!next.MoveNext()) { e.Request.Sample = null; return; }
-            var sample = MediaStreamSample.CreateFromBuffer(next.Current.Pixels.AsBuffer(), next.Current.Time);
+            var sample = MediaStreamSample.CreateFromBuffer(next.Current.Nv12.AsBuffer(), next.Current.Time);
             sample.Duration = TimeSpan.FromSeconds(1.0 / Fps);
             e.Request.Sample = sample;
         };
@@ -215,8 +217,7 @@ sealed class VideoRecorder
         }
 
         /// <summary>
-        /// 最新のフレームを、合成先の (x, y) に描く。まだ1枚も届いていなければ何もしない。
-        /// エンコーダーは BGRA を下の行から並んでいるものとして読むので、合成先は上下逆さまに描く。
+        /// 最新のフレームを、合成先(上の行から並んだ BGRA)の (x, y) に描く。まだ1枚も届いていなければ何もしない。
         /// </summary>
         public void DrawTo(byte[] canvas, int cw, int ch, int x, int y)
         {
@@ -225,7 +226,7 @@ sealed class VideoRecorder
             var count = Math.Min(w, cw - x) - from;
             if (count <= 0) return;
             for (var row = Math.Max(0, -y); row < h && y + row < ch; row++)
-                Buffer.BlockCopy(pixels, (row * w + from) * 4, canvas, ((ch - 1 - y - row) * cw + x + from) * 4, count * 4);
+                Buffer.BlockCopy(pixels, (row * w + from) * 4, canvas, ((y + row) * cw + x + from) * 4, count * 4);
         }
 
         /// <summary>最初のフレームが届いたか。</summary>
