@@ -14,8 +14,9 @@
             <Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Focusable" Value="False"/><Setter Property="MinWidth" Value="0"/>
         </Style>
     </Window.Resources>
+    <Grid>
     <!-- 記録中だと分かる赤い枠。Fluent のウインドウは自分の枠線を描かないので Border で描く -->
-    <Border BorderBrush="#FFE04040" BorderThickness="2">
+    <Border x:Name="Panel" BorderBrush="#FFE04040" BorderThickness="2">
     <StackPanel Orientation="Horizontal" Margin="8,5">
         <TextBlock x:Name="State" Text="● 記録中" Foreground="#FFFF6060" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
         <RadioButton x:Name="ModeClick" Content="クリック" Checked="Mode_Checked"/>
@@ -27,4 +28,24 @@
         <TextBlock x:Name="Count" Text="0 枚" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="40"/>
     </StackPanel>
     </Border>
+    <!-- 引っ込んでいる間に出すタブ。マウスを乗せるか押すとバーが出る。赤 ● 記録中、赤 ■ 動画のステップを録画中、灰 ❚❚ 一時停止 -->
+    <Button x:Name="BarTab" Visibility="Collapsed" Click="BarTab_Click" Background="#FFE04040" Content="●"
+            AutomationProperties.AutomationId="BarTab" AutomationProperties.Name="記録バーを開く">
+        <Button.Style>
+            <!-- Fluent のボタンは最小の高さと余白が大きく、タブにならない -->
+            <Style TargetType="Button">
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Width="56" Height="14" Background="{TemplateBinding Background}">
+                                <TextBlock Text="{TemplateBinding Content}" Foreground="White" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </Button.Style>
+    </Button>
+    </Grid>
 </Window>

@@ -10,7 +10,7 @@ static class Native
     public const int WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14;
     public const int WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104,
         WM_LBUTTONDOWN = 0x0201, WM_RBUTTONDOWN = 0x0204, WM_MBUTTONDOWN = 0x0207, WM_QUIT = 0x0012, WM_HOTKEY = 0x0312;
-    public const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
+    public const int VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
     public const uint GA_ROOT = 2, PW_RENDERFULLCONTENT = 2, SRCCOPY = 0x00CC0020, WHITENESS = 0x00FF0062, GW_HWNDNEXT = 2;
     public const int GWL_EXSTYLE = -20;
     public const long WS_EX_NOACTIVATE = 0x08000000L, WS_EX_TOOLWINDOW = 0x00000080L, WS_EX_TRANSPARENT = 0x00000020L;
@@ -21,7 +21,7 @@ static class Native
     public const int WM_IME_CONTROL = 0x0283, IMC_GETOPENSTATUS = 0x0005, IMC_SETOPENSTATUS = 0x0006;
 
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
-    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; public readonly int Width => Right - Left; public readonly int Height => Bottom - Top; public readonly PixelRect ToPixelRect() => new(Left, Top, Width, Height); }
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; public readonly int Width => Right - Left; public readonly int Height => Bottom - Top; public readonly PixelRect ToPixelRect() => new(Left, Top, Width, Height); public readonly bool Contains(POINT p) => p.X >= Left && p.X < Right && p.Y >= Top && p.Y < Bottom; }
     [StructLayout(LayoutKind.Sequential)] public struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public nint dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] public struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public nint dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] public struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }

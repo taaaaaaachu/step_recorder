@@ -1,13 +1,18 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using StepRecorder.Core;
 using static StepRecorder.App.Native;
 
 namespace StepRecorder.App;
 
-/// <summary>記録中に最前面へ出す小さなバー。クリックしても前面を奪わない(対象アプリのフォーカスを保つ)。</summary>
+/// <summary>
+/// 記録中に最前面へ出す小さなバー。クリックしても前面を奪わない(対象アプリのフォーカスを保つ)。
+/// 使っていない間は小さなタブに引っ込み、マウスを乗せると出る。
+/// </summary>
 public partial class RecordBar : Window
 {
     const int HkCapture = 1, HkPause = 2, HkStop = 3, HkClip = 4;
@@ -19,6 +24,12 @@ public partial class RecordBar : Window
     readonly System.Windows.Threading.DispatcherTimer clipTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     readonly Stopwatch clipClock = new(); // 一時停止の間は進めない(動画の長さに合わせる)
     readonly string recordingLabel;
+
+    readonly Brush recordingTab = new SolidColorBrush(Color.FromRgb(0xE0, 0x40, 0x40));
+    readonly AutoHide autoHide = new();
+    readonly Stopwatch shownClock = new();
+    readonly System.Windows.Threading.DispatcherTimer hideTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
+    nint handle;
 
     /// <summary>停止後のセッション。</summary>
     public Session? Result { get; private set; }
@@ -45,13 +56,20 @@ public partial class RecordBar : Window
         recordingLabel = State.Text;
         var area = SystemParameters.WorkArea;
         Left = area.Left + area.Width / 2 - 220;
-        Top = area.Top + 4;
+        Top = area.Top; // タブが画面の端にくっつくように
+        Loaded += (_, _) => Left = area.Left + (area.Width - ActualWidth) / 2;
+        ContentRendered += (_, _) =>
+        {
+            shownClock.Start();
+            hideTimer.Start();
+        };
+        hideTimer.Tick += (_, _) => UpdateAutoHide();
     }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        var hwnd = new WindowInteropHelper(this).Handle;
+        var hwnd = handle = new WindowInteropHelper(this).Handle;
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)((long)GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW));
         HwndSource.FromHwnd(hwnd).AddHook(WndProc);
         if (engine.CapturesScreen)
@@ -88,6 +106,44 @@ public partial class RecordBar : Window
         return 0;
     }
 
+    // ---- 自動で引っ込める ----
+
+    /// <summary>
+    /// MouseEnter/MouseLeave は使わない。前面にならないウィンドウで、しかも乗った所で大きさが変わるので取りこぼす。
+    /// カーソルの位置を見る。
+    /// </summary>
+    void UpdateAutoHide()
+    {
+        var cursor = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+        var over = GetCursorInfo(ref cursor) && GetWindowRect(handle, out var r) && r.Contains(cursor.ptScreenPos);
+        autoHide.Update(over, Native.KeyDown(VK_LBUTTON) || Native.KeyDown(VK_RBUTTON), shownClock.Elapsed);
+        ShowOpen(autoHide.IsOpen);
+    }
+
+    void BarTab_Click(object sender, RoutedEventArgs e)
+    {
+        autoHide.Open(shownClock.Elapsed);
+        ShowOpen(true);
+    }
+
+    /// <summary>バーとタブを入れ替える。横の中心は動かさない(ドラッグで移した所でそのまま引っ込む)。</summary>
+    void ShowOpen(bool open)
+    {
+        if (open == Panel.IsVisible) return;
+        var center = Left + ActualWidth / 2;
+        Panel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        BarTab.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        UpdateLayout();
+        Left = center - ActualWidth / 2;
+    }
+
+    /// <summary>引っ込んでいても状態が分かるように、タブの色と印を変える。</summary>
+    void ShowTabState()
+    {
+        BarTab.Background = engine.Paused ? Brushes.DimGray : recordingTab;
+        BarTab.Content = engine.Paused ? "❚❚" : clipTimer.IsEnabled ? "■" : "●";
+    }
+
     void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
 
     void Mode_Checked(object sender, RoutedEventArgs e) =>
@@ -103,12 +159,14 @@ public partial class RecordBar : Window
         {
             clipTimer.Stop();
             ClipButton.Content = "● 録画";
+            ShowTabState();
             return;
         }
         clipClock.Restart();
         if (engine.Paused) clipClock.Stop();
         clipTimer.Start();
         ShowClipTime();
+        ShowTabState();
     }
 
     void ShowClipTime() => ClipButton.Content = $"■ 録画停止 {TimeText.Seconds(clipClock.Elapsed)}";
@@ -120,6 +178,7 @@ public partial class RecordBar : Window
         else if (clipTimer.IsEnabled) clipClock.Start();
         PauseButton.Content = engine.Paused ? "再開" : "一時停止";
         State.Text = engine.Paused ? "‖ 一時停止" : recordingLabel;
+        ShowTabState();
     }
 
     async void Stop_Click(object sender, RoutedEventArgs e)
@@ -129,6 +188,7 @@ public partial class RecordBar : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         foreach (var id in new[] { HkCapture, HkPause, HkStop, HkClip }) UnregisterHotKey(hwnd, id);
         clipTimer.Stop();
+        hideTimer.Stop();
         engine.Paused = true; // 進み具合のウィンドウを出す前に録るのをやめる(最後に写り込ませない)
         // 溜まった撮影や動画の書き終えに時間がかかることがあるので、裏で止めて進み具合を出す
         Hide();
