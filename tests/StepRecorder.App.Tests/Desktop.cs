@@ -14,8 +14,17 @@ public sealed class E2EFactAttribute : FactAttribute
 {
     public E2EFactAttribute()
     {
-        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E") != "1")
-            Skip = "STEP_RECORDER_E2E=1 で有効になる(実行中はマウスとキーボードが動く)";
+        if (!Desktop.InputAllowed) Skip = "STEP_RECORDER_E2E=1 で有効になる(実行中はマウスとキーボードが動く)";
+    }
+}
+
+/// <summary>実際のデスクトップにウィンドウは出すが、マウスとキーボードは動かさない。STEP_RECORDER_DESKTOP=1 でも走る。</summary>
+public sealed class DesktopFactAttribute : FactAttribute
+{
+    public DesktopFactAttribute()
+    {
+        if (!Desktop.InputAllowed && Environment.GetEnvironmentVariable("STEP_RECORDER_DESKTOP") != "1")
+            Skip = "STEP_RECORDER_DESKTOP=1 で有効になる(実行中はウィンドウが開く。入力は送らない)";
     }
 }
 
@@ -37,12 +46,28 @@ static class Desktop
         Path.Combine(RepoRoot(), "tests", "SampleTarget", "bin",
             Path.GetFileName(Path.GetDirectoryName(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)))!, "net10.0-windows", "SampleTarget.exe");
 
-    /// <summary>起動してメインウィンドウが出るのを待ち、前面に出す。</summary>
-    public static Process Launch(string exe, string args = "")
+    /// <summary>マウスとキーボードを動かしてよいか。</summary>
+    public static bool InputAllowed => Environment.GetEnvironmentVariable("STEP_RECORDER_E2E") == "1";
+
+    static void RequireInput()
+    {
+        if (!InputAllowed) throw new InvalidOperationException("入力を送るテストは E2EFact にする");
+    }
+
+    /// <summary>起動してメインウィンドウが出るのを待つ(入力は送らない)。</summary>
+    public static Process Open(string exe, string args = "")
     {
         var p = Process.Start(exe, args);
         for (var i = 0; i < 100 && p.MainWindowHandle == 0; i++) { Wait(100); p.Refresh(); }
         Assert.NotEqual(0, p.MainWindowHandle);
+        return p;
+    }
+
+    /// <summary>起動してメインウィンドウが出るのを待ち、前面に出す。</summary>
+    public static Process Launch(string exe, string args = "")
+    {
+        RequireInput();
+        var p = Open(exe, args);
         // 裏のプロセスは前面を切り替えられないので、どのアプリも使わない F24 を1回送って入力の権利を得てから前面にする
         Send(Key(0x87), Key(0x87, KEYUP));
         SetForegroundWindow(p.MainWindowHandle);
@@ -91,12 +116,12 @@ static class Desktop
         var pt = new Native.POINT { X = x, Y = y };
         if (Native.ProcessId(Native.WindowFromPoint(pt)) != Native.ProcessId(hwnd))
             throw new InvalidOperationException("クリック位置に別のウィンドウが重なっているので中止した");
-        SetCursorPos(pt.X, pt.Y);
+        SetCursor(pt.X, pt.Y);
         Send(Mouse(0x0002), Mouse(0x0004)); // LEFTDOWN, LEFTUP
     }
 
     /// <summary>カーソルを (x, y) へ動かす(クリックはしない)。</summary>
-    public static void MoveCursor(int x, int y) => SetCursorPos(x, y);
+    public static void MoveCursor(int x, int y) => SetCursor(x, y);
 
     /// <summary>ホイールボタン(中ボタン)を押したまま (x1, y1) から (x2, y2) へドラッグする。</summary>
     public static void MiddleDrag(nint hwnd, int x1, int y1, int x2, int y2)
@@ -104,11 +129,11 @@ static class Desktop
         var pt = new Native.POINT { X = x1, Y = y1 };
         if (Native.ProcessId(Native.WindowFromPoint(pt)) != Native.ProcessId(hwnd))
             throw new InvalidOperationException("ドラッグ位置に別のウィンドウが重なっているので中止した");
-        SetCursorPos(x1, y1);
+        SetCursor(x1, y1);
         Send(Mouse(0x0020)); // MIDDLEDOWN
         for (var i = 1; i <= 10; i++)
         {
-            SetCursorPos(x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10);
+            SetCursor(x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10);
             Wait(20);
         }
         Send(Mouse(0x0040)); // MIDDLEUP
@@ -121,7 +146,7 @@ static class Desktop
         if (Native.ProcessId(Native.WindowFromPoint(pt)) != Native.ProcessId(hwnd))
             throw new InvalidOperationException("ホイール位置に別のウィンドウが重なっているので中止した");
         EnsureForeground(hwnd);
-        SetCursorPos(x, y);
+        SetCursor(x, y);
         Send(Key(0x11), new INPUT { type = 0, u = new() { mi = new() { dwFlags = 0x0800, mouseData = unchecked((uint)(notches * 120)) } } }, Key(0x11, KEYUP));
     }
 
@@ -146,7 +171,17 @@ static class Desktop
 
     const uint KEYUP = 0x0002, UNICODE = 0x0004;
 
-    static void Send(params INPUT[] inputs) => SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    static void Send(params INPUT[] inputs)
+    {
+        RequireInput();
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    static void SetCursor(int x, int y)
+    {
+        RequireInput();
+        SetCursorPos(x, y);
+    }
     static INPUT Mouse(uint flags) => new() { type = 0, u = new() { mi = new() { dwFlags = flags } } };
     static INPUT Key(ushort vk, uint flags = 0) => new() { type = 1, u = new() { ki = new() { wVk = vk, dwFlags = flags } } };
     static INPUT Char(char c, uint flags) => new() { type = 1, u = new() { ki = new() { wScan = c, dwFlags = UNICODE | flags } } };

@@ -15,7 +15,7 @@ public sealed class EncodeTests : IDisposable
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
-    [E2EFact]
+    [DesktopFact]
     public async Task エンコードしても薄いグレーが白に潰れず上下も正しい()
     {
         int[] levels = [0, 64, 128, 200, 230, 240, 248, 255];
@@ -41,7 +41,7 @@ public sealed class EncodeTests : IDisposable
     }
 
     /// <summary>取り出しを Windows に任せると、PC によっては HD の動画を BT.601 で読んで純赤が 232 になる。</summary>
-    [E2EFact]
+    [DesktopFact]
     public async Task 取り出したフレームの色がずれない()
     {
         MediaFactory.MFStartup().CheckError();
@@ -84,7 +84,7 @@ public sealed class EncodeTests : IDisposable
     }
 
     /// <summary>単発の取り出しと、続きから読む切り出しの両方で、時刻に最も近いフレーム(同じ近さなら前)が返る。</summary>
-    [E2EFact]
+    [DesktopFact]
     public async Task 時刻に合ったフレームを取り出し_切り出しでも順序が保たれる()
     {
         const int w = 320, h = 240;
@@ -117,7 +117,7 @@ public sealed class EncodeTests : IDisposable
     }
 
     /// <summary>倍速・スローの GIF は、長さが速さの分だけ変わる(mp4 は等速のままで、再生する側が変える)。</summary>
-    [E2EFact]
+    [DesktopFact]
     public async Task GIFは倍速とスローで書き出せる()
     {
         const int w = 320, h = 240;

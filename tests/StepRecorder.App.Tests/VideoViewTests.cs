@@ -35,7 +35,7 @@ public sealed class VideoViewTests : IDisposable
         return path;
     }
 
-    [E2EFact]
+    [DesktopFact]
     public async Task シークと再生で正しい色のフレームを出し_閉じるとファイルを離す()
     {
         var path = await MakeVideo();
@@ -75,7 +75,7 @@ public sealed class VideoViewTests : IDisposable
         });
     }
 
-    [E2EFact]
+    [DesktopFact]
     public async Task 速さを変えて再生し_区間の終わりを越えない()
     {
         var path = await MakeVideo();
@@ -101,7 +101,7 @@ public sealed class VideoViewTests : IDisposable
         });
     }
 
-    [E2EFact]
+    [DesktopFact]
     public void 開けない動画は落ちずに知らせる() => OnSta(() =>
     {
         var view = new VideoView();
