@@ -43,4 +43,14 @@ dotnet test                         # 単体テスト
 STEP_RECORDER_E2E=1 dotnet test     # 実デスクトップでの E2E(数秒間マウスとキーボードが動く)
 ```
 
+### 動画の色がおかしい PC の診断
+
+取り込み・RGB→YUV 変換(Windows の部品と GPU ドライバーを個別に)・エンコード・読み戻しを試し、どこで壊れるかを `report.txt` に書く。配布するアプリには含めない。
+
+```sh
+dotnet publish tools/ColorDiag -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o artifacts/ColorDiag
+```
+
+できた `StepRecorder.ColorDiag.exe` を対象の PC で実行する(インストール不要)。mp4 を exe にドロップすると、その動画が白潰れした状態で作られたものかも判定する。
+
 リリースは `v0.1.0` 形式のタグを push すると GitHub Actions が Velopack でパッケージを作り、Releases に公開する。

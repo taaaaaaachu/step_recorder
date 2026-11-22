@@ -9,3 +9,4 @@ using System.Windows;
                                                 // app, or any theme specific resource dictionaries)
 )]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("StepRecorder.App.Tests")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("StepRecorder.ColorDiag")] // 診断用(tools/ColorDiag)

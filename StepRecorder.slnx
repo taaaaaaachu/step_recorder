@@ -3,6 +3,9 @@
     <Project Path="src/StepRecorder.App/StepRecorder.App.csproj" />
     <Project Path="src/StepRecorder.Core/StepRecorder.Core.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/ColorDiag/ColorDiag.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SampleTarget/SampleTarget.csproj" />
     <Project Path="tests/StepRecorder.App.Tests/StepRecorder.App.Tests.csproj" />

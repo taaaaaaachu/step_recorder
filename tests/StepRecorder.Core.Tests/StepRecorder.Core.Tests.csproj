@@ -22,4 +22,9 @@
     <ProjectReference Include="..\..\src\StepRecorder.Core\StepRecorder.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 診断プログラムの判定は依存が無いので、ここでテストする -->
+    <Compile Include="../../tools/ColorDiag\Judge.cs" Link="ColorDiag\Judge.cs" />
+  </ItemGroup>
+
 </Project>
