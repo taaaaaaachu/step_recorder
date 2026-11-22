@@ -10,8 +10,12 @@ namespace StepRecorder.App;
 
 public partial class MainWindow : Window
 {
-    sealed record TargetItem(CaptureTarget Target, string Label);
+    sealed record TargetItem(CaptureTarget Target, string Label)
+    {
+        public override string ToString() => Label; // 一覧の項目の読み上げ名になる
+    }
 
+    MonitorBadge? badge;
     readonly Settings settings = Settings.Load(Settings.DefaultPath);
 
     public MainWindow()
@@ -19,7 +23,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         Version.Text = $"バージョン {AppVersion.Current}";
         ShowSettings();
-        RefreshProcesses();
+        RefreshTargets();
         Loaded += async (_, _) =>
         {
             if (settings.AutoUpdate) await Updater.CheckAsync(this);
@@ -67,14 +71,34 @@ public partial class MainWindow : Window
         return false;
     }
 
-    void RefreshProcesses()
+    /// <summary>対象の一覧。モニターを先に、そのあとにアプリを並べる。</summary>
+    void RefreshTargets()
     {
+        var monitors = Monitors.All().Select(m => new TargetItem(new MonitorTarget(m), m.Label));
         var self = Environment.ProcessId;
-        Processes.ItemsSource = Process.GetProcesses()
+        var apps = Process.GetProcesses()
             .Where(p => p.Id != self && p.MainWindowHandle != 0 && p.MainWindowTitle != "")
             .OrderBy(p => p.ProcessName, StringComparer.OrdinalIgnoreCase)
-            .Select(p => new TargetItem(new AppTarget(p), $"{p.ProcessName} — {p.MainWindowTitle}"))
-            .ToList();
+            .Select(p => new TargetItem(new AppTarget(p), $"{p.ProcessName} — {p.MainWindowTitle}"));
+        Targets.ItemsSource = monitors.Concat(apps).ToList();
+    }
+
+    /// <summary>モニターを選んだら、どのモニターかを枠で示す。</summary>
+    void Targets_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        CloseBadge();
+        if (Targets.SelectedItem is not TargetItem { Target: MonitorTarget target }) return;
+        badge = new MonitorBadge(target.Monitor);
+        badge.Closed += (s, _) => { if (badge == s) badge = null; };
+        badge.Show();
+    }
+
+    void CloseBadge() => badge?.Close();
+
+    protected override void OnClosed(EventArgs e)
+    {
+        CloseBadge();
+        base.OnClosed(e);
     }
 
     /// <summary>記録開始を待たず、切り替えたらすぐ保存する(次回の起動から効く)。</summary>
@@ -130,7 +154,7 @@ public partial class MainWindow : Window
     /// <summary>修飾キーを離したら入力待ちの表示を戻す。</summary>
     void Hotkey_PreviewKeyUp(object sender, KeyEventArgs e) => ((TextBox)sender).Text = HotkeyInput.Pending(Keyboard.Modifiers);
 
-    void Refresh_Click(object sender, RoutedEventArgs e) => RefreshProcesses();
+    void Refresh_Click(object sender, RoutedEventArgs e) => RefreshTargets();
 
     void Browse_Click(object sender, RoutedEventArgs e)
     {
@@ -140,9 +164,15 @@ public partial class MainWindow : Window
 
     void Start_Click(object sender, RoutedEventArgs e)
     {
-        if (Processes.SelectedItem is not TargetItem { Target: var target }) { Fail("対象アプリを選んでください"); return; }
-        if (!target.IsAvailable) { Fail("対象アプリは終了しています"); RefreshProcesses(); return; }
+        if (Targets.SelectedItem is not TargetItem { Target: var target }) { Fail("対象(画面かアプリ)を選んでください"); return; }
+        if (!target.IsAvailable)
+        {
+            Fail(target is MonitorTarget ? "その画面は外されたか、解像度や位置が変わっています。選び直してください" : "対象アプリは終了しています");
+            RefreshTargets();
+            return;
+        }
         if (!ReadSettings()) return;
+        CloseBadge();
 
         var dir = Path.Combine(settings.OutputDir, Settings.SessionFolderName(DateTimeOffset.Now, target.Name));
         Directory.CreateDirectory(dir);
