@@ -21,11 +21,36 @@ public sealed class MonitorTests : IDisposable
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
-    static ColorWindow Cover(DisplayMonitor m, Color color) => new(color, m.Bounds.X, m.Bounds.Y, m.Bounds.Width, m.Bounds.Height);
+    static ColorWindow Cover(DisplayMonitor m, Color color)
+    {
+        var cover = ColorWindow.Cover(m, color);
+        try { ColorWindow.EnsureCovered(m); }
+        catch
+        {
+            cover.Dispose();
+            throw;
+        }
+        return cover;
+    }
 
     static void AssertColor(Color expected, Color actual, string where) =>
         Assert.True(Math.Abs(expected.R - actual.R) <= 6 && Math.Abs(expected.G - actual.G) <= 6 && Math.Abs(expected.B - actual.B) <= 6,
             $"{where}: {expected} が {actual} になった");
+
+    [DesktopFact]
+    public void 全モニターを覆い_その手前に対象のアプリだけを出せる()
+    {
+        var covers = Monitors.All().Select(m => ColorWindow.Cover(m, Colors.Blue)).ToList();
+        try
+        {
+            sample = Open(SampleExe);
+            ColorWindow.Raise(sample.MainWindowHandle);
+            foreach (var m in Monitors.All()) ColorWindow.EnsureCovered(m, (uint)sample.Id);
+            var f = Native.FrameBounds(sample.MainWindowHandle);
+            Assert.Equal((uint)sample.Id, Native.ProcessId(Native.WindowFromPoint(new Native.POINT { X = (f.Left + f.Right) / 2, Y = (f.Top + f.Bottom) / 2 })));
+        }
+        finally { covers.ForEach(c => c.Dispose()); }
+    }
 
     [DesktopFact]
     public void どのモニターも_位置と色のとおりに撮れて録れる()

@@ -8,7 +8,7 @@ using static StepRecorder.App.Tests.Desktop;
 namespace StepRecorder.App.Tests;
 
 /// <summary>
-/// モニターを対象に実際に操作して記録する。実際の画面が写らないよう、背面を一色のウィンドウで覆い、その上にテスト用アプリを出す。
+/// モニターを対象に実際に操作して記録する。実際の画面が写らないよう、一色のウィンドウで覆い、その手前にテスト用アプリを出す。覆えていなければ撮らない。
 /// </summary>
 public sealed class MonitorRecorderE2ETests : IDisposable
 {
@@ -28,13 +28,10 @@ public sealed class MonitorRecorderE2ETests : IDisposable
     /// <summary>全モニターを覆ってからテスト用アプリを前面に出し、それが載っているモニターを返す。</summary>
     DisplayMonitor LaunchCovered()
     {
-        foreach (var m in Monitors.All())
-        {
-            var cover = new ColorWindow(Colors.Blue, m.Bounds.X, m.Bounds.Y, m.Bounds.Width, m.Bounds.Height);
-            cover.Invoke(w => w.Topmost = false);
-            covers.Add(cover);
-        }
+        foreach (var m in Monitors.All()) covers.Add(ColorWindow.Cover(m, Colors.Blue));
         sample = Launch(SampleExe);
+        ColorWindow.Raise(sample.MainWindowHandle);
+        foreach (var m in Monitors.All()) ColorWindow.EnsureCovered(m, (uint)sample.Id);
         var on = Native.MonitorFromWindow(sample.MainWindowHandle, Native.MONITOR_DEFAULTTONEAREST);
         return Monitors.All().Single(m => m.Handle == on);
     }
