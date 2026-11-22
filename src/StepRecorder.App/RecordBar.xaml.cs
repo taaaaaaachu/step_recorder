@@ -54,6 +54,11 @@ public partial class RecordBar : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)((long)GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW));
         HwndSource.FromHwnd(hwnd).AddHook(WndProc);
+        if (engine.CapturesScreen)
+        {
+            ExcludeFromCapture(hwnd);
+            ClipButton.ToolTip = null; // ツールチップは別のウィンドウなので写ってしまう
+        }
 
         var failed = new List<string>();
         var hotkeys = new List<(int, string)> { (HkCapture, settings.HotkeyCapture), (HkPause, settings.HotkeyPause), (HkStop, settings.HotkeyStop) };
@@ -128,6 +133,7 @@ public partial class RecordBar : Window
         // 溜まった撮影や動画の書き終えに時間がかかることがあるので、裏で止めて進み具合を出す
         Hide();
         Progress = new ProgressWindow("記録を終えています", "記録を止めています...", null);
+        if (engine.CapturesScreen) Progress.SourceInitialized += (s, _) => ExcludeFromCapture(new WindowInteropHelper((Window)s!).Handle);
         Progress.Show();
         var result = await Task.Run(() =>
         {

@@ -77,6 +77,9 @@ sealed class RecorderEngine
         hookThread = new Thread(HookLoop) { IsBackground = true, Name = "recorder-hooks" };
     }
 
+    /// <summary>画面に見えているものを撮るか(自分のウィンドウを写らないようにする必要がある)。</summary>
+    public bool CapturesScreen => target.CapturesScreen;
+
     public void Start()
     {
         worker.Start();
@@ -282,7 +285,11 @@ sealed class RecorderEngine
         }
         else if (kind == KeyKind.Typing)
         {
-            typing ??= Uia.Focused();
+            if (typing == null)
+            {
+                if (!target.OwnsKey(GetForegroundWindow())) return; // 処理するまでに対象の外へ移っていたら、そこの欄は読まない
+                typing = Uia.Focused();
+            }
             flushTimer.Change(1500, Timeout.Infinite); // 入力が止まったら確定させる
         }
     }

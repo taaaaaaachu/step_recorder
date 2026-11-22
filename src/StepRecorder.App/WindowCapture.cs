@@ -11,20 +11,19 @@ using static StepRecorder.App.Native;
 namespace StepRecorder.App;
 
 /// <summary>
-/// 撮影結果。Image はアプリ全体(対象プロセスの見えているウィンドウをすべて重ねたもの)で、
+/// 撮影結果。Image はアプリ全体(対象プロセスの見えているウィンドウをすべて重ねたもの)かモニター全体で、
 /// Bounds はその画像に当たるスクリーン上の矩形。Focus は操作したウィンドウのスクリーン上の矩形。
 /// </summary>
 sealed record Shot(BitmapSource Image, RECT Bounds, RECT Focus)
 {
-    /// <summary>操作したウィンドウを切り出すトリミング範囲。アプリ全体と同じなら null。</summary>
-    public PixelRect? Crop => Geometry.CropFor(ToPixel(Bounds), ToPixel(Focus));
-
-    static PixelRect ToPixel(RECT r) => new(r.Left, r.Top, r.Width, r.Height);
+    /// <summary>操作したウィンドウを切り出すトリミング範囲。画像全体と同じか、画像に載っていなければ null。</summary>
+    public PixelRect? Crop => Geometry.CropFor(Bounds.ToPixelRect(), Focus.ToPixelRect());
 }
 
 /// <summary>
-/// 対象プロセスのウィンドウだけを撮る。PrintWindow でウィンドウごとに描かせて重ねるので、
-/// 他のアプリや常駐バーが上に重なっていても写り込まない。
+/// 静止画を撮る。
+/// アプリが対象なら、そのウィンドウだけを PrintWindow でウィンドウごとに描かせて重ねるので、
+/// 他のアプリや常駐バーが上に重なっていても写り込まない。モニターが対象なら、見えているとおりに撮る。
 /// </summary>
 static class WindowCapture
 {
@@ -43,21 +42,42 @@ static class WindowCapture
         var u = frame;
         foreach (var (_, r) in windows) u = Union(u, r);
 
+        var image = Render(u, cursor, (dc, screen) =>
+        {
+            BitBlt(dc, 0, 0, u.Width, u.Height, 0, 0, 0, WHITENESS); // ウィンドウ同士の隙間は白にする
+            foreach (var (h, r) in windows) Draw(h, r, u, dc, screen);
+        });
+        return new Shot(image, u, frame);
+    }
+
+    /// <summary>
+    /// モニター(bounds)に見えているものをそのまま撮る。操作したウィンドウ focus の範囲は Shot.Focus に入れる。
+    /// ExcludeFromCapture したウィンドウは写らない。
+    /// </summary>
+    public static Shot CaptureMonitor(RECT bounds, nint focus, bool cursor = false)
+    {
+        var image = Render(bounds, cursor, (dc, screen) =>
+            BitBlt(dc, 0, 0, bounds.Width, bounds.Height, screen, bounds.Left, bounds.Top, SRCCOPY));
+        return new Shot(image, bounds, FrameBounds(focus));
+    }
+
+    /// <summary>スクリーン上の u に当たる画像を draw に描かせる。cursor なら最後にカーソルを重ねる。</summary>
+    static BitmapSource Render(RECT u, bool cursor, Action<nint, nint> draw)
+    {
         var screen = GetDC(0);
         var dc = CreateCompatibleDC(screen);
         var bmp = CreateCompatibleBitmap(screen, u.Width, u.Height);
         var old = SelectObject(dc, bmp);
         try
         {
-            BitBlt(dc, 0, 0, u.Width, u.Height, 0, 0, 0, WHITENESS); // ウィンドウ同士の隙間は白にする
-            foreach (var (h, r) in windows) Draw(h, r, u, dc, screen);
+            draw(dc, screen);
             if (cursor) DrawCursor(dc, u);
             SelectObject(dc, old);
             var src = Imaging.CreateBitmapSourceFromHBitmap(bmp, 0, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
             // PrintWindow はアルファを 0 のままにすることがあるので、透過なしの形式に揃える
             var img = new FormatConvertedBitmap(src, PixelFormats.Bgr24, null, 0);
             img.Freeze();
-            return new Shot(img, u, frame);
+            return img;
         }
         finally
         {

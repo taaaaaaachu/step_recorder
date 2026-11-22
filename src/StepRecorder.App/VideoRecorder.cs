@@ -21,17 +21,21 @@ using static StepRecorder.App.Native;
 namespace StepRecorder.App;
 
 /// <summary>
-/// 対象アプリのウィンドウを mp4 に録画する。OBS のウィンドウキャプチャと同じく Windows.Graphics.Capture で
-/// ウィンドウごとに録るので、他のアプリが上に重なっても写らない。ダイアログなど同じプロセスのウィンドウは
-/// 静止画と同じく Z オーダーの順に重ねる。
+/// 対象アプリのウィンドウか、モニターを mp4 に録画する(Windows.Graphics.Capture)。
+/// アプリは OBS のウィンドウキャプチャと同じくウィンドウごとに録るので、他のアプリが上に重なっても写らない。
+/// ダイアログなど同じプロセスのウィンドウは静止画と同じく Z オーダーの順に重ねる。
 /// 画面の大きさは録画開始時のメインウィンドウで固定し、位置はメインウィンドウに追従する。
+/// モニターは 1 枚を丸ごと録る。大きさと位置は録画開始時のまま。
 /// </summary>
 sealed class VideoRecorder
 {
     public const int Fps = 15;
     const DirectXPixelFormat PixelFormat = DirectXPixelFormat.B8G8R8A8UIntNormalized;
 
-    readonly nint main;
+    /// <summary>何を録るか。Origin が動画に当たるスクリーン上の範囲で、そこへ Items(奥から順)を重ねる。</summary>
+    sealed record Input(Func<RECT> Origin, Func<List<(nint Handle, RECT Rect)>> Items, Func<nint, GraphicsCaptureItem> CreateItem);
+
+    readonly Input input;
     readonly bool cursor;
     readonly Func<bool> paused;
     readonly int width, height;
@@ -51,14 +55,14 @@ sealed class VideoRecorder
     /// <summary>録画開始からの、一時停止を除いた経過時間(動画上の時刻と同じ)。</summary>
     public TimeSpan CurrentTime => clock.Elapsed;
 
-    VideoRecorder(nint main, string path, bool cursor, Func<bool> paused)
+    VideoRecorder(Input input, string path, bool cursor, Func<bool> paused)
     {
-        this.main = main;
+        this.input = input;
         this.cursor = cursor;
         this.paused = paused;
-        var frame = FrameBounds(main);
+        var frame = input.Origin();
         (width, height) = (frame.Width & ~1, frame.Height & ~1); // H.264 は縦横とも偶数
-        if (width <= 0 || height <= 0) throw new InvalidOperationException("録画するウィンドウの大きさが取れない");
+        if (width <= 0 || height <= 0) throw new InvalidOperationException("録画するものの大きさが取れない");
         encoding = Task.Run(() => Encode(path, width, height, frames.GetConsumingEnumerable()));
         loop = new Thread(CaptureLoop) { IsBackground = true, Name = "video-capture" };
         loop.Start();
@@ -69,7 +73,12 @@ sealed class VideoRecorder
     /// main を含むアプリのウィンドウを path に録画し始める。
     /// paused が true の間は録らず、時計も止める(停止していた時間は動画から詰まる)。
     /// </summary>
-    public static VideoRecorder Start(nint main, string path, bool cursor, Func<bool>? paused = null) => new(main, path, cursor, paused ?? (() => false));
+    public static VideoRecorder Start(nint main, string path, bool cursor, Func<bool>? paused = null) =>
+        new(new(() => FrameBounds(main), () => WindowCapture.AppWindows(main), CreateWindowItem), path, cursor, paused ?? (() => false));
+
+    /// <summary>モニターに見えているものを丸ごと path に録画し始める。paused は Start と同じ。</summary>
+    public static VideoRecorder StartMonitor(nint monitor, RECT bounds, string path, bool cursor, Func<bool>? paused = null) =>
+        new(new(() => bounds, () => [(monitor, bounds)], CreateMonitorItem), path, cursor, paused ?? (() => false));
 
     /// <summary>録画を止め、mp4 を書き終えるまで待つ。</summary>
     public void Stop()
@@ -77,21 +86,22 @@ sealed class VideoRecorder
         stopping = true;
         loop.Join();
         frames.CompleteAdding();
+        Task.WaitAny(encoding);
+        if (error != null) throw new InvalidOperationException("録画に失敗した", error); // エンコードの失敗(フレームが無い)より、その原因を伝える
         encoding.GetAwaiter().GetResult();
-        if (error != null) throw new InvalidOperationException("録画に失敗した", error);
     }
 
     // ---- キャプチャ ----
 
     void CaptureLoop()
     {
-        var sources = new Dictionary<nint, WindowSource>();
+        var sources = new Dictionary<nint, CaptureSource>();
         try
         {
             using var gpu = new Gpu();
             // 録り始めは WGC のフレームがまだ届いておらず真っ白になるので、全部のウィンドウの最初のフレームを待ってから時計を動かす
-            foreach (var (h, _) in WindowCapture.AppWindows(main))
-                if (WindowSource.TryCreate(gpu, h, cursor) is { } s) sources[h] = s;
+            foreach (var (h, _) in input.Items())
+                if (CaptureSource.TryCreate(gpu, h, input.CreateItem, cursor) is { } s) sources[h] = s;
             var deadline = DateTime.Now.AddSeconds(1);
             while (!sources.Values.All(s => s.Ready()) && DateTime.Now < deadline) Thread.Sleep(10);
             clock.Start();
@@ -101,14 +111,14 @@ sealed class VideoRecorder
             bool Resting() => next > 0 && paused(); // 録り始めの 1 枚は必ず書く(0 枚だとエンコーダーが失敗する)
             while (!stopping)
             {
-                var windows = WindowCapture.AppWindows(main);
-                foreach (var gone in sources.Keys.Except(windows.Select(w => w.Hwnd)).ToList())
+                var items = input.Items();
+                foreach (var gone in sources.Keys.Except(items.Select(i => i.Handle)).ToList())
                 {
                     sources[gone].Dispose();
                     sources.Remove(gone);
                 }
-                foreach (var (h, _) in windows)
-                    if (!sources.ContainsKey(h) && WindowSource.TryCreate(gpu, h, cursor) is { } s) sources[h] = s;
+                foreach (var (h, _) in items)
+                    if (!sources.ContainsKey(h) && CaptureSource.TryCreate(gpu, h, input.CreateItem, cursor) is { } s) sources[h] = s;
 
                 if (Resting())
                 {
@@ -122,9 +132,9 @@ sealed class VideoRecorder
                 var index = (long)(clock.Elapsed.TotalSeconds * Fps);
                 if (index >= next)
                 {
-                    var origin = FrameBounds(main);
+                    var origin = input.Origin();
                     Array.Fill(canvas, (byte)0xFF); // ウィンドウ同士の隙間は白
-                    foreach (var (h, r) in windows)
+                    foreach (var (h, r) in items)
                         if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - origin.Left, r.Top - origin.Top);
                     if (Resting()) continue; // 合成している間に止められたら、その絵は使わない
                     var frame = (Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / Fps));
@@ -217,8 +227,8 @@ sealed class VideoRecorder
         }
     }
 
-    /// <summary>1つのウィンドウの WGC。最後に届いたフレームの画素を持っておく。</summary>
-    sealed class WindowSource : IDisposable
+    /// <summary>1つのウィンドウかモニターの WGC。最後に届いたフレームの画素を持っておく。</summary>
+    sealed class CaptureSource : IDisposable
     {
         readonly Gpu gpu;
         readonly Direct3D11CaptureFramePool pool;
@@ -228,7 +238,7 @@ sealed class VideoRecorder
         byte[] pixels = [];
         int w, h;
 
-        WindowSource(Gpu gpu, GraphicsCaptureItem item, bool cursor)
+        CaptureSource(Gpu gpu, GraphicsCaptureItem item, bool cursor)
         {
             this.gpu = gpu;
             poolSize = item.Size;
@@ -239,9 +249,9 @@ sealed class VideoRecorder
             session.StartCapture();
         }
 
-        public static WindowSource? TryCreate(Gpu gpu, nint hwnd, bool cursor)
+        public static CaptureSource? TryCreate(Gpu gpu, nint handle, Func<nint, GraphicsCaptureItem> createItem, bool cursor)
         {
-            try { return new(gpu, CreateItem(hwnd), cursor); }
+            try { return new(gpu, createItem(handle), cursor); }
             catch (Exception e) when (e is COMException or ArgumentException) { return null; } // 録れないウィンドウ(ツールチップの一部など)は飛ばす
         }
 
@@ -317,16 +327,25 @@ sealed class VideoRecorder
     static readonly Guid CaptureItemInteropIid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
     static readonly Guid DxgiInterfaceAccessIid = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
 
-    static unsafe GraphicsCaptureItem CreateItem(nint hwnd)
+    // IGraphicsCaptureItemInterop の vtable: 3 が CreateForWindow、4 が CreateForMonitor
+    static GraphicsCaptureItem CreateWindowItem(nint hwnd) => CreateItem(hwnd, 3);
+
+    static GraphicsCaptureItem CreateMonitorItem(nint monitor)
+    {
+        try { return CreateItem(monitor, 4); }
+        // ウィンドウと違い、飛ばすと真っ白な動画になるだけなので失敗にする
+        catch (Exception e) when (e is COMException or ArgumentException) { throw new InvalidOperationException("モニターを取り込めない", e); }
+    }
+
+    static unsafe GraphicsCaptureItem CreateItem(nint handle, int slot)
     {
         using var factory = ActivationFactory.Get("Windows.Graphics.Capture.GraphicsCaptureItem");
         var interop = QueryInterface(factory.ThisPtr, CaptureItemInteropIid);
         try
         {
-            // IGraphicsCaptureItemInterop::CreateForWindow (vtable 3)
             var iid = GraphicsCaptureItemIid;
             nint ptr;
-            Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, nint, Guid*, nint*, int>)(*(*(nint**)interop + 3)))(interop, hwnd, &iid, &ptr));
+            Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, nint, Guid*, nint*, int>)(*(*(nint**)interop + slot)))(interop, handle, &iid, &ptr));
             var item = GraphicsCaptureItem.FromAbi(ptr);
             Marshal.Release(ptr);
             return item;

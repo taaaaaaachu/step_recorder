@@ -11,14 +11,25 @@ namespace StepRecorder.App;
 /// <summary>記録開始時に、エビデンスとして載せる環境の情報を集める。取れない項目は空のまま。</summary>
 static class EvidenceCollector
 {
+    static EvidenceInfo Common() => new()
+    {
+        MachineName = Environment.MachineName,
+        Os = RuntimeInformation.OSDescription,
+        RecorderVersion = AppVersion.Current,
+    };
+
+    /// <summary>モニターが対象なら、アプリの情報は無い。</summary>
+    public static EvidenceInfo Collect(DisplayMonitor monitor)
+    {
+        var e = Common();
+        e.Screen = $"{monitor.Bounds.Width}×{monitor.Bounds.Height}";
+        e.ScalePercent = Monitors.ScalePercent(monitor.Handle);
+        return e;
+    }
+
     public static EvidenceInfo Collect(Process target)
     {
-        var e = new EvidenceInfo
-        {
-            MachineName = Environment.MachineName,
-            Os = RuntimeInformation.OSDescription,
-            RecorderVersion = AppVersion.Current,
-        };
+        var e = Common();
         try
         {
             var path = target.MainModule!.FileName;

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using StepRecorder.Core;
 
 namespace StepRecorder.App;
 
@@ -19,7 +20,7 @@ static class Native
     public const int WM_IME_CONTROL = 0x0283, IMC_GETOPENSTATUS = 0x0005, IMC_SETOPENSTATUS = 0x0006;
 
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
-    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; public readonly int Width => Right - Left; public readonly int Height => Bottom - Top; }
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; public readonly int Width => Right - Left; public readonly int Height => Bottom - Top; public readonly PixelRect ToPixelRect() => new(Left, Top, Width, Height); }
     [StructLayout(LayoutKind.Sequential)] public struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public nint dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] public struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public nint dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] public struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
@@ -29,6 +30,7 @@ static class Native
 
     public delegate nint HookProc(int nCode, nint wParam, nint lParam);
     public delegate bool EnumWindowsProc(nint hwnd, nint lParam);
+    public delegate bool MonitorEnumProc(nint monitor, nint hdc, ref RECT rect, nint lParam);
 
     [DllImport("user32.dll", SetLastError = true)] public static extern nint SetWindowsHookEx(int idHook, HookProc fn, nint hMod, uint threadId);
     [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(nint hook);
@@ -54,7 +56,11 @@ static class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(nint hwnd, StringBuilder sb, int max);
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
     [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
-    public const uint MONITOR_DEFAULTTONEAREST = 2;
+    public const uint MONITOR_DEFAULTTONULL = 0, MONITOR_DEFAULTTONEAREST = 2, MONITORINFOF_PRIMARY = 1;
+    [DllImport("user32.dll")] public static extern bool EnumDisplayMonitors(nint hdc, nint clip, MonitorEnumProc proc, nint lParam);
+    [DllImport("user32.dll")] public static extern nint MonitorFromPoint(POINT pt, uint flags);
+    [DllImport("shcore.dll")] public static extern int GetDpiForMonitor(nint monitor, int type, out uint x, out uint y);
+    [DllImport("user32.dll")] static extern bool SetWindowDisplayAffinity(nint hwnd, uint affinity);
     [DllImport("user32.dll")] public static extern nint MonitorFromWindow(nint hwnd, uint flags);
     [DllImport("user32.dll")] public static extern bool GetMonitorInfo(nint monitor, ref MONITORINFO info);
     [DllImport("user32.dll")] public static extern uint GetDpiForWindow(nint hwnd);
@@ -81,6 +87,11 @@ static class Native
     [DllImport("gdi32.dll")] public static extern bool BitBlt(nint dst, int x, int y, int w, int h, nint src, int sx, int sy, uint rop);
 
     public static bool KeyDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
+
+    /// <summary>画面の取り込み(静止画・動画)に写らないようにする。画面には見えたまま。Windows 10 2004 以降。</summary>
+    public static void ExcludeFromCapture(nint hwnd) => SetWindowDisplayAffinity(hwnd, 0x11 /*WDA_EXCLUDEFROMCAPTURE*/);
+
+    public static RECT ToRect(PixelRect r) => new() { Left = r.X, Top = r.Y, Right = r.X + r.Width, Bottom = r.Y + r.Height };
 
     public static uint ProcessId(nint hwnd) { GetWindowThreadProcessId(hwnd, out var pid); return pid; }
 
