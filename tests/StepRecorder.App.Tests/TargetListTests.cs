@@ -20,6 +20,8 @@ public sealed class TargetListTests : IDisposable
     public void 一覧のモニターを選ぶと_そのモニターに枠が出て消える()
     {
         app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"));
+        // 逃がした設定で動いていること(利用者の設定を書き換えない)
+        Assert.Equal(Path.Combine(Profile, "records"), ValueOf(app.MainWindowHandle, "OutputDir"));
         var combo = Find(app.MainWindowHandle, "Targets");
         var list = (ExpandCollapsePattern)combo.GetCurrentPattern(ExpandCollapsePattern.Pattern);
 

@@ -54,10 +54,31 @@ static class Desktop
         if (!InputAllowed) throw new InvalidOperationException("入力を送るテストは E2EFact にする");
     }
 
-    /// <summary>起動してメインウィンドウが出るのを待つ(入力は送らない)。</summary>
+    /// <summary>
+    /// テストから起動するアプリの USERPROFILE。step_recorder は設定(settings.json)を保存するので、
+    /// 利用者の設定を書き換えないよう、テストの間だけの一時フォルダに逃がす(自動更新の確認もしない)。
+    /// </summary>
+    public static readonly string Profile = CreateProfile();
+
+    static string CreateProfile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "sr-test-profile-" + Guid.NewGuid());
+        foreach (var folder in new[] { @"AppData\Roaming", @"AppData\Local", "Documents" }) Directory.CreateDirectory(Path.Combine(root, folder));
+        new StepRecorder.Core.Settings { AutoUpdate = false, OutputDir = Path.Combine(root, "records") }
+            .Save(Path.Combine(root, @"AppData\Roaming\step_recorder\settings.json"));
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try { Directory.Delete(root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        };
+        return root;
+    }
+
+    /// <summary>起動してメインウィンドウが出るのを待つ(入力は送らない)。設定は Profile に逃がす。</summary>
     public static Process Open(string exe, string args = "")
     {
-        var p = Process.Start(exe, args);
+        var start = new ProcessStartInfo(exe, args) { UseShellExecute = false };
+        start.Environment["USERPROFILE"] = Profile;
+        var p = Process.Start(start)!;
         for (var i = 0; i < 100 && p.MainWindowHandle == 0; i++) { Wait(100); p.Refresh(); }
         Assert.NotEqual(0, p.MainWindowHandle);
         return p;
