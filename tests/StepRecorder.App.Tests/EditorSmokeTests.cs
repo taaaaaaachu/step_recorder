@@ -245,6 +245,27 @@ public sealed class EditorSmokeTests : IDisposable
         Assert.True(Until(() => SessionStore.Load(dir).Steps.Count == 1));
     }
 
+    [E2EFact]
+    public async Task ステップの無い録画のシークバーには途中の目盛りが出ない()
+    {
+        var nv12 = Nv12.FromBgra(new byte[320 * 240 * 4], 320, 240);
+        await VideoRecorder.Encode(Path.Combine(dir, "video.mp4"), 320, 240, Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))));
+        SessionStore.Save(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" }, dir);
+
+        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Wait(1000);
+        var shot = WindowCapture.Capture(editor)!;
+        var r = Find(editor, "TimeSlider").Current.BoundingRectangle;
+        // 2 秒の動画なので、1 秒おきの目盛りなら真ん中に出る。つまみは左端、溝は横線なので、真ん中の列が左右より暗ければ目盛り
+        var (px, width) = (VideoE2ETests.Bgr24(shot.Image), shot.Image.PixelWidth);
+        int At(int x, int y) => px[(y * width + x) * 3 + 1];
+        var mid = (int)(r.X + r.Width / 2) - shot.Bounds.Left;
+        for (var y = (int)r.Y - shot.Bounds.Top; y < (int)r.Bottom - shot.Bounds.Top; y++)
+            for (var x = mid - 10; x <= mid + 10; x++)
+                Assert.True(At(x, y) > Math.Min(At(mid - 30, y), At(mid + 30, y)) - 40, $"途中に目盛りがある({x},{y})");
+    }
+
     /// <summary>録画モードの記録を開くと、全編の動画からフレームと区間をステップに足せる。配布用にも書き出せる。</summary>
     [E2EFact]
     public void 録画モードの記録では全編からフレームと区間を足せる()

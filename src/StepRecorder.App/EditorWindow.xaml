@@ -100,13 +100,14 @@
                 <Button x:Name="PopOutButton" Content="別ウインドウで表示" Click="PopOut_Click" ToolTip="表示欄だけを別のウインドウに出します(閉じると戻ります)"/>
             </WrapPanel>
 
+            <!-- TickFrequency が大きいのは、Ticks が空のとき WPF が 1 秒おきに目盛りを描かないようにするため -->
             <!-- 録画モードの全編のシークバーと操作。動画はメインの表示欄に出す。好きな時刻のフレームや区間をステップとして足す -->
             <Border x:Name="TimelinePanel" DockPanel.Dock="Bottom" Margin="0,6,0,0" BorderBrush="#ccc" BorderThickness="1" Padding="6" Visibility="Collapsed">
                 <StackPanel>
                     <!-- シークバーは左右いっぱい。スクロールバーは常に出す(拡大したときに高さが変わると、押しているボタンが動いてしまう) -->
                     <ScrollViewer x:Name="TimeScroller" HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled" Focusable="False"
                                   SizeChanged="TimeScroller_SizeChanged" PreviewMouseWheel="TimeScroller_PreviewMouseWheel">
-                        <Slider x:Name="TimeSlider" AutomationProperties.AutomationId="TimeSlider" IsMoveToPointEnabled="True" TickPlacement="BottomRight"
+                        <Slider x:Name="TimeSlider" AutomationProperties.AutomationId="TimeSlider" IsMoveToPointEnabled="True" TickPlacement="BottomRight" TickFrequency="1E9"
                                 Margin="0,0,0,12" SmallChange="0.1" LargeChange="1" ValueChanged="TimeSlider_ValueChanged" Thumb.DragCompleted="TimeSlider_DragCompleted"
                                 ToolTip="目盛りはステップを撮った時刻。Ctrl+ホイールで拡大、ホイールで横に移動"/>
                     </ScrollViewer>
