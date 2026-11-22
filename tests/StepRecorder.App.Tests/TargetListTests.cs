@@ -29,10 +29,19 @@ public sealed class TargetListTests : IDisposable
             Wait(300);
             var item = combo.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, m.Label));
             Assert.NotNull(item); // 読み上げ名も一覧の文言になる
-            ((SelectionItemPattern)item.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+            var title = $"step_recorder {m.Title}";
+            var select = (SelectionItemPattern)item.GetCurrentPattern(SelectionItemPattern.Pattern);
+            // 実アプリでも、見えた瞬間の位置を見る(選ぶ前から休まずに見張る)
+            var first = Task.Factory.StartNew(() =>
+            {
+                for (var clock = Stopwatch.StartNew(); clock.ElapsedMilliseconds < 2000;)
+                    if (FindWindow(null, title) is var h && h != 0 && Native.IsWindowVisible(h) && Native.GetWindowRect(h, out var r)) return r.ToPixelRect();
+                return null;
+            }, TaskCreationOptions.LongRunning);
+            select.Select();
+            Assert.Equal(m.Bounds, first.Result); // 別の画面に出てから飛ばない
             list.Collapse();
 
-            var title = $"step_recorder {m.Title}";
             Assert.True(Until(() => FindWindow(null, title) is var h && h != 0 && Native.IsWindowVisible(h)
                 && Native.GetWindowRect(h, out var r) && r.ToPixelRect() == m.Bounds, 2000), $"{m.Label} に枠が出ない");
 

@@ -53,14 +53,14 @@ sealed class MonitorBadge : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)((long)GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT));
         ExcludeFromCapture(hwnd);
+        // 見える前に置く(表示してから移すと、既定の位置の画面に一瞬出てから飛ぶ)。
+        // Left/Top は拡大率の違うモニターの間でずれるので物理ピクセルで置く。移ると大きさが変わるので 2 回
+        for (var i = 0; i < 2; i++) SetWindowPos(hwnd, 0, bounds.X, bounds.Y, bounds.Width, bounds.Height, SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     protected override void OnContentRendered(EventArgs e)
     {
         base.OnContentRendered(e);
-        // Left/Top は拡大率の違うモニターの間でずれるので物理ピクセルで置く。移ると大きさが変わるので 2 回
-        var hwnd = new WindowInteropHelper(this).Handle;
-        for (var i = 0; i < 2; i++) SetWindowPos(hwnd, 0, bounds.X, bounds.Y, bounds.Width, bounds.Height, SWP_NOZORDER | SWP_NOACTIVATE);
         timer.Start();
     }
 
