@@ -70,6 +70,11 @@ public sealed class Step
     public double Speed => Math.Clamp(VideoSpeed ?? 1, PlaybackSpeed.Choices[0], PlaybackSpeed.Choices[^1]);
     /// <summary>録画モードで、このステップを撮ったときの全編の動画上の時刻。</summary>
     public TimeSpan? VideoTime { get; set; }
+    /// <summary>録画ボタンで録った動画のステップで押したキー(この動画の時刻)。全編から切り出した区間は Session.Keys を使う。無ければ null。</summary>
+    public List<KeyStroke>? Keys { get; set; }
+    /// <summary>動画にキーを重ねない。既定(false)は重ねる(false は書かない)。</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool HideKeys { get; set; }
 }
 
 public sealed class Session
@@ -82,6 +87,8 @@ public sealed class Session
     public List<Step> Steps { get; set; } = [];
     /// <summary>録画モードで録った全編の動画(例: "video.mp4")。録画モードでなければ null。</summary>
     public string? VideoFile { get; set; }
+    /// <summary>録画モードで、全編の動画の間に押したキー(全編の動画の時刻)。無ければ null。</summary>
+    public List<KeyStroke>? Keys { get; set; }
     /// <summary>残すものがあるか。録画モードでは、ステップが無くても全編の動画がある。</summary>
     [JsonIgnore]
     public bool HasContent => Steps.Count > 0 || VideoFile != null;

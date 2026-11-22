@@ -34,11 +34,11 @@ public static class KeyClassifier
         return (KeyKind.Typing, "");
     }
 
-    static string Combine(string name, bool ctrl, bool alt, bool shift, bool win) =>
+    internal static string Combine(string name, bool ctrl, bool alt, bool shift, bool win) =>
         string.Concat(ctrl ? "Ctrl+" : "", alt ? "Alt+" : "", shift ? "Shift+" : "", win ? "Win+" : "", name);
 
     /// <summary>ショートカットとして表記できるキーの名前。表記しないキーは null。</summary>
-    static string? KeyName(int vk) => vk switch
+    internal static string? KeyName(int vk) => vk switch
     {
         >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A => ((char)vk).ToString(),
         >= VK_F1 and <= VK_F24 => $"F{vk - VK_F1 + 1}",
@@ -57,8 +57,33 @@ public static class KeyClassifier
         0x27 => "→",
         0x28 => "↓",
         0x2D => "Insert",
+        0x2C => "PrintScreen",
+        0x13 => "Pause",
+        0x5D => "Apps",
         _ => null,
     };
+}
+
+/// <summary>動画に重ねるキーの表記。</summary>
+public static class KeyLabel
+{
+    /// <summary>
+    /// typed はそのキーで打たれる文字(Shift は効かせ、Ctrl などは効かせない。キーボードの配列で決まるので呼ぶ側で求める)。
+    /// 修飾キーと一緒なら「Ctrl+S」、文字なら打った文字そのもの(IsChar)、それ以外は「Enter」「Shift+Tab」など。出さないキーは null。
+    /// </summary>
+    public static (string Text, bool IsChar)? Of(int vk, bool ctrl, bool alt, bool shift, bool win, char? typed)
+    {
+        if (vk is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C or (>= 0xA0 and <= 0xA5)) return null; // 修飾キーだけ
+        var name = KeyClassifier.KeyName(vk);
+        var printable = typed is { } c && !char.IsControl(c);
+        if (ctrl || alt || win)
+        {
+            name ??= printable ? char.ToUpperInvariant(typed!.Value).ToString() : null;
+            return name == null ? null : (KeyClassifier.Combine(name, ctrl, alt, shift, win), false);
+        }
+        if (printable) return (typed!.Value.ToString(), true);
+        return name == null ? null : (KeyClassifier.Combine(name, false, false, shift, false), false);
+    }
 }
 
 /// <summary>
