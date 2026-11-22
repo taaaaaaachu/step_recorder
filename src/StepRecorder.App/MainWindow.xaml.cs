@@ -10,7 +10,7 @@ namespace StepRecorder.App;
 
 public partial class MainWindow : Window
 {
-    sealed record ProcessItem(Process Process, string Label);
+    sealed record TargetItem(CaptureTarget Target, string Label);
 
     readonly Settings settings = Settings.Load(Settings.DefaultPath);
 
@@ -73,7 +73,7 @@ public partial class MainWindow : Window
         Processes.ItemsSource = Process.GetProcesses()
             .Where(p => p.Id != self && p.MainWindowHandle != 0 && p.MainWindowTitle != "")
             .OrderBy(p => p.ProcessName, StringComparer.OrdinalIgnoreCase)
-            .Select(p => new ProcessItem(p, $"{p.ProcessName} — {p.MainWindowTitle}"))
+            .Select(p => new TargetItem(new AppTarget(p), $"{p.ProcessName} — {p.MainWindowTitle}"))
             .ToList();
     }
 
@@ -140,14 +140,14 @@ public partial class MainWindow : Window
 
     void Start_Click(object sender, RoutedEventArgs e)
     {
-        if (Processes.SelectedItem is not ProcessItem item) { Fail("対象アプリを選んでください"); return; }
-        if (item.Process.HasExited) { Fail("対象アプリは終了しています"); RefreshProcesses(); return; }
+        if (Processes.SelectedItem is not TargetItem { Target: var target }) { Fail("対象アプリを選んでください"); return; }
+        if (!target.IsAvailable) { Fail("対象アプリは終了しています"); RefreshProcesses(); return; }
         if (!ReadSettings()) return;
 
-        var dir = Path.Combine(settings.OutputDir, Settings.SessionFolderName(DateTimeOffset.Now, item.Process.ProcessName));
+        var dir = Path.Combine(settings.OutputDir, Settings.SessionFolderName(DateTimeOffset.Now, target.Name));
         Directory.CreateDirectory(dir);
         var recordVideo = settings.DefaultMode == RecordMode.Video;
-        var bar = new RecordBar(new RecorderEngine(item.Process, dir, settings), settings, dir);
+        var bar = new RecordBar(new RecorderEngine(target, dir, settings), settings, dir);
         bar.Closed += (_, _) =>
         {
             var log = Path.Combine(dir, "error.log");

@@ -72,7 +72,7 @@ public class ExportTests
 {
     static Session Sample()
     {
-        var rec = new Recording(new Session { ProcessName = "App", CreatedAt = new DateTimeOffset(2026, 11, 21, 0, 0, 0, TimeSpan.Zero) });
+        var rec = new Recording(new Session { TargetName = "App", CreatedAt = new DateTimeOffset(2026, 11, 21, 0, 0, 0, TimeSpan.Zero) });
         var main = new WindowInfo("メイン", "W", "App");
         var dlg = new WindowInfo("設定", "D", "App");
         rec.AddStep(CaptureTrigger.Manual, main, "images/0001.png", 200, 100, DateTimeOffset.Now);
@@ -222,9 +222,9 @@ public class SessionHistoryTests
     public void 上限を超えたら古いものから捨てる()
     {
         var h = new SessionHistory(capacity: 2);
-        foreach (var name in new[] { "1", "2", "3" }) h.Push(new Session { ProcessName = name });
-        Assert.Equal("3", h.Undo()!.ProcessName);
-        Assert.Equal("2", h.Undo()!.ProcessName);
+        foreach (var name in new[] { "1", "2", "3" }) h.Push(new Session { TargetName = name });
+        Assert.Equal("3", h.Undo()!.TargetName);
+        Assert.Equal("2", h.Undo()!.TargetName);
         Assert.Null(h.Undo());
     }
 }
@@ -236,7 +236,7 @@ public class EvidenceTests
     {
         var s = new Session
         {
-            ProcessName = "App",
+            TargetName = "App",
             CreatedAt = new DateTimeOffset(2026, 11, 21, 9, 5, 0, TimeSpan.Zero),
             Evidence = new() { AppFile = "App.exe", AppVersion = "1.2.3", Screen = "1920×1080", ScalePercent = 125, RecorderVersion = "0.5.0" },
         };
@@ -253,7 +253,7 @@ public class VideoExportTests
     /// <summary>静止画1枚と、録画モードの全編から区間を切り出した動画のステップ1つ。</summary>
     static Session Sample()
     {
-        var rec = new Recording(new Session { ProcessName = "App", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" });
+        var rec = new Recording(new Session { TargetName = "App", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" });
         var win = new WindowInfo("メイン", "W", "App");
         rec.AddStep(CaptureTrigger.Click, win, "images/0001.png", 200, 100, DateTimeOffset.Now);
         var clip = rec.AddStep(CaptureTrigger.Video, win, "images/0002.png", 200, 100, DateTimeOffset.Now);

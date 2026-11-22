@@ -34,7 +34,7 @@ public sealed class RecorderE2ETests : IDisposable
     {
         target = Launch(SampleExe);
         var main = target.MainWindowHandle;
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Click });
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Click });
         engine.Start();
 
         engine.CaptureManual();
@@ -53,7 +53,7 @@ public sealed class RecorderE2ETests : IDisposable
         Wait(800);
 
         var session = Stop(engine);
-        Assert.Equal("SampleTarget", session.ProcessName);
+        Assert.Equal("SampleTarget", session.TargetName);
         Assert.Equal("SampleTarget.exe", session.Evidence.AppFile);
         Assert.NotEqual("", session.Evidence.AppVersion);
         Assert.Matches(@"^\d+×\d+$", session.Evidence.Screen);
@@ -116,7 +116,7 @@ public sealed class RecorderE2ETests : IDisposable
     {
         target = Launch(SampleExe);
         var main = target.MainWindowHandle;
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Click });
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Click });
         engine.Start();
         Wait(300);
 
@@ -135,7 +135,7 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.Equal("videos/0001.mp4", clip.VideoFile);
         Assert.Equal("『氏名』欄をクリック", clip.Description);
         Assert.Empty(clip.Highlights);
-        var (duration, w, h) = VideoE2ETests.VideoInfo(Path.Combine(dir, clip.VideoFile));
+        var (duration, w, h) = VideoE2ETests.VideoInfo(Path.Combine(dir, clip.VideoFile!));
         Assert.InRange(duration.TotalSeconds, 1.2, 2.5);
         Assert.Equal((w, h), (clip.ImageWidth, clip.ImageHeight)); // ポスターは動画の最初のフレーム
         Assert.True(new FileInfo(Path.Combine(dir, clip.ImageFile)).Length > 1000);
@@ -146,7 +146,7 @@ public sealed class RecorderE2ETests : IDisposable
     {
         target = Launch(SampleExe);
         var main = target.MainWindowHandle;
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Video });
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Video });
         engine.Start();
         Wait(800);
         ClickOn(main, "nameBox");
@@ -173,7 +173,7 @@ public sealed class RecorderE2ETests : IDisposable
     {
         target = Open(SampleExe);
         Directory.CreateDirectory(Path.Combine(dir, "video.mp4")); // 同名のフォルダがあるので書けない
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Video });
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Video });
         engine.Start();
         Wait(500);
 
@@ -186,7 +186,7 @@ public sealed class RecorderE2ETests : IDisposable
     public void 一時停止すると全編の動画も止まる()
     {
         target = Open(SampleExe);
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Video });
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Video });
         engine.Start();
         Wait(1200);
         engine.Paused = true;
@@ -202,7 +202,7 @@ public sealed class RecorderE2ETests : IDisposable
     public void 始めてすぐ止めても失敗にしない()
     {
         target = Open(SampleExe);
-        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Video });
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Video });
         engine.Start();
         engine.Paused = true; // 停止ボタンは、まず録るのをやめてから止める
 

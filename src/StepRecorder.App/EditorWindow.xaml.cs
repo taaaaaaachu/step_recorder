@@ -643,7 +643,7 @@ public partial class EditorWindow : Window
         maybeUnused.Add(file);
         var index = Recording.IndexByVideoTime(session.Steps, time);
         var near = index > 0 ? session.Steps[index - 1] : session.Steps.FirstOrDefault();
-        var st = rec.AddStep(trigger, near?.Window ?? new("", "", session.ProcessName), file, image.PixelWidth, image.PixelHeight, DateTimeOffset.Now);
+        var st = rec.AddStep(trigger, near?.Window ?? new("", "", session.TargetName), file, image.PixelWidth, image.PixelHeight, DateTimeOffset.Now);
         st.ScreenName = near?.ScreenName ?? "";
         st.VideoTime = time;
         setup(st);

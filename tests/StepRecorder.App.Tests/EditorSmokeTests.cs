@@ -26,7 +26,7 @@ public sealed class EditorSmokeTests : IDisposable
     [E2EFact]
     public void 記録フォルダを渡すと編集画面が開く()
     {
-        var rec = new Recording(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now });
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
         for (var i = 0; i < 2; i++)
         {
             var file = rec.NextImageFile;
@@ -86,7 +86,7 @@ public sealed class EditorSmokeTests : IDisposable
     [E2EFact]
     public void 編集画面はズームできる()
     {
-        var rec = new Recording(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now });
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
         var file = rec.NextImageFile;
         WindowCapture.SavePng(Solid(3000, 2000, Colors.SteelBlue), Path.Combine(dir, file)); // 表示欄より大きい画像
         rec.AddStep(CaptureTrigger.Manual, new("大きい画面", "W", "Demo"), file, 3000, 2000, DateTimeOffset.Now);
@@ -129,7 +129,7 @@ public sealed class EditorSmokeTests : IDisposable
     [E2EFact]
     public void 説明欄でLANG1とLANG2がIMEを切り替える()
     {
-        var rec = new Recording(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now });
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
         var file = rec.NextImageFile;
         WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, file));
         rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), file, 400, 300, DateTimeOffset.Now);
@@ -158,7 +158,7 @@ public sealed class EditorSmokeTests : IDisposable
     [E2EFact]
     public void 表示欄を別ウインドウに出して戻せる()
     {
-        var rec = new Recording(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now });
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
         WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, rec.NextImageFile));
         rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), rec.NextImageFile, 400, 300, DateTimeOffset.Now);
         SessionStore.Save(rec.Session, dir);
@@ -189,7 +189,7 @@ public sealed class EditorSmokeTests : IDisposable
     [E2EFact]
     public void 画面一覧モードでは一覧を画面ごとに区切る()
     {
-        var rec = new Recording(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now });
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
         foreach (var name in new[] { "画面A", "画面B", "画面A" })
         {
             var file = rec.NextImageFile;
@@ -232,7 +232,7 @@ public sealed class EditorSmokeTests : IDisposable
         Array.Fill(px, (byte)120);
         var nv12 = Nv12.FromBgra(px, 320, 240);
         await VideoRecorder.Encode(Path.Combine(dir, "video.mp4"), 320, 240, Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))));
-        SessionStore.Save(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" }, dir);
+        SessionStore.Save(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" }, dir);
 
         app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
         var editor = app.MainWindowHandle;
@@ -259,7 +259,7 @@ public sealed class EditorSmokeTests : IDisposable
         }
         finally { sample.Kill(); }
         var poster = VideoClips.Frame(Path.Combine(dir, "video.mp4"), TimeSpan.FromSeconds(0.5));
-        var recording = new Recording(new Session { ProcessName = "SampleTarget", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" });
+        var recording = new Recording(new Session { TargetName = "SampleTarget", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" });
         WindowCapture.SavePng(poster, Path.Combine(dir, recording.NextImageFile));
         var first = recording.AddStep(CaptureTrigger.Click, new("サンプル画面", "W", "SampleTarget"), recording.NextImageFile, poster.PixelWidth, poster.PixelHeight, DateTimeOffset.Now);
         first.VideoTime = TimeSpan.FromSeconds(0.5);

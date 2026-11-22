@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Automation;
@@ -14,8 +13,7 @@ namespace StepRecorder.App;
 /// </summary>
 sealed class RecorderEngine
 {
-    readonly uint pid;
-    readonly string processName;
+    readonly CaptureTarget target;
     readonly string dir;
     readonly bool captureCursor;
     readonly bool recordVideo;
@@ -60,18 +58,17 @@ sealed class RecorderEngine
     /// <summary>動画のステップを録り始めた(true)・録り終えた(false)。ワーカースレッドから呼ばれる。</summary>
     public event Action<bool>? ClipChanged;
 
-    public RecorderEngine(Process target, string dir, Settings settings)
+    public RecorderEngine(CaptureTarget target, string dir, Settings settings)
     {
-        pid = (uint)target.Id;
-        processName = target.ProcessName;
+        this.target = target;
         this.dir = dir;
         captureCursor = settings.CaptureCursor;
         recordVideo = settings.DefaultMode == RecordMode.Video;
         Mode = settings.DefaultMode;
         foreach (var text in new[] { settings.HotkeyCapture, settings.HotkeyPause, settings.HotkeyStop, settings.HotkeyClip })
             if (HotkeyInput.TryParse(text, out var mods, out var vk)) ownHotkeys.Add((mods, vk));
-        lastTargetRoot = target.MainWindowHandle;
-        rec = new Recording(new Session { CreatedAt = DateTimeOffset.Now, ProcessName = processName, Evidence = EvidenceCollector.Collect(target) });
+        lastTargetRoot = target.InitialWindow;
+        rec = new Recording(new Session { CreatedAt = DateTimeOffset.Now, TargetName = target.Name, Evidence = target.CollectEvidence() });
         mouseProc = MouseProc;
         keyProc = KeyProc;
         flushTimer = new Timer(_ => Enqueue(Flush));
@@ -91,9 +88,8 @@ sealed class RecorderEngine
     public void CaptureManual() => Enqueue(() =>
     {
         Flush();
-        if (clip != null) return;
-        var root = TargetRoot();
-        if (Capture(root) is { } shot) AddShot(CaptureTrigger.Manual, root, shot, null);
+        if (clip != null || !target.TryGetActiveWindow(lastTargetRoot, out var root)) return;
+        if (target.Capture(root, captureCursor) is { } shot) AddShot(CaptureTrigger.Manual, root, shot, null);
     });
 
     /// <summary>記録を止め、溜まった処理を終えてからセッションを返す。stage にはいま何をしているかを知らせる(ワーカースレッドからも呼ぶ)。</summary>
@@ -123,14 +119,12 @@ sealed class RecorderEngine
         if (recordVideo || Paused && clip == null) return;
         Flush();
         if (clip != null) { StopClip(); return; }
-        // 操作しているウィンドウを録る。ステップは先に作り、録っている間の操作はこのステップに足す
-        var root = TargetRoot();
-        if (root == 0) return;
+        // ステップは録り始めたら作り、録っている間の操作はこのステップに足す
+        if (!target.TryGetActiveWindow(lastTargetRoot, out var root)) return;
         var file = rec.NextVideoFile;
-        var frame = FrameBounds(root);
-        var recorder = VideoRecorder.Start(root, Path.Combine(dir, file), captureCursor, () => paused);
-        var step = rec.AddStep(CaptureTrigger.Video, new WindowInfo(Text(root), ClassName(root), processName), rec.NextImageFile,
-            frame.Width & ~1, frame.Height & ~1, DateTimeOffset.Now);
+        var recorder = target.StartVideo(root, Path.Combine(dir, file), captureCursor, () => paused);
+        var step = rec.AddStep(CaptureTrigger.Video, target.Describe(root), rec.NextImageFile,
+            recorder.Width, recorder.Height, DateTimeOffset.Now);
         step.VideoFile = file;
         clip = (recorder, step);
         lastTargetRoot = root;
@@ -163,7 +157,7 @@ sealed class RecorderEngine
 
     void StartFullVideo()
     {
-        full = VideoRecorder.Start(lastTargetRoot, Path.Combine(dir, FullVideoFile), captureCursor, () => paused);
+        full = target.StartVideo(lastTargetRoot, Path.Combine(dir, FullVideoFile), captureCursor, () => paused);
     }
 
     void StopVideos()
@@ -214,7 +208,7 @@ sealed class RecorderEngine
         {
             var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(l);
             var root = GetAncestor(WindowFromPoint(info.pt), GA_ROOT);
-            if (ProcessId(root) == pid)
+            if (target.OwnsClick(root, info.pt))
             {
                 var button = (int)w switch { WM_RBUTTONDOWN => MouseButton.Right, WM_MBUTTONDOWN => MouseButton.Middle, _ => MouseButton.Left };
                 var ev = new ClickEvent(DateTimeOffset.Now, new(info.pt.X, info.pt.Y), button);
@@ -231,7 +225,7 @@ sealed class RecorderEngine
         {
             var vk = (int)Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(l).vkCode;
             var fg = GetForegroundWindow();
-            if (ProcessId(fg) == pid)
+            if (target.OwnsKey(fg))
             {
                 bool ctrl = KeyDown(VK_CONTROL), alt = KeyDown(VK_MENU), shift = KeyDown(VK_SHIFT), win = KeyDown(VK_LWIN) || KeyDown(VK_RWIN);
                 var time = DateTimeOffset.Now;
@@ -262,7 +256,7 @@ sealed class RecorderEngine
             lastClick = null;
             return;
         }
-        if (Capture(root) is not { } shot) return;
+        if (target.Capture(root, captureCursor) is not { } shot) return;
         var b = shot.Bounds;
         var click = new Operation
         {
@@ -303,28 +297,17 @@ sealed class RecorderEngine
             rec.AddOperation(new Operation { Kind = OperationKind.TextInput, Time = DateTimeOffset.Now, Element = Uia.Info(e, default), Text = v });
     }
 
-    Shot? Capture(nint hwnd) => WindowCapture.Capture(hwnd, captureCursor);
-
 
     Step AddShot(CaptureTrigger trigger, nint root, Shot shot, Operation? op)
     {
         lastTargetRoot = root;
         var file = rec.NextImageFile;
         WindowCapture.SavePng(shot.Image, Path.Combine(dir, file));
-        var step = rec.AddStep(trigger, new WindowInfo(Text(root), ClassName(root), processName), file,
+        var step = rec.AddStep(trigger, target.Describe(root), file,
             shot.Image.PixelWidth, shot.Image.PixelHeight, DateTimeOffset.Now, op);
         step.Crop = shot.Crop; // 画像はアプリ全体。ダイアログなどを操作したときは、そのウィンドウだけが見えるようにトリミングしておく
         step.VideoTime = full?.CurrentTime; // 録画モードなら、編集画面のタイムラインに目盛りを付ける
         StepCountChanged?.Invoke(rec.Session.Steps.Count);
         return step;
-    }
-
-    /// <summary>手動撮影の対象。前面が対象プロセスならそれ、違えば最後に撮ったウィンドウ。</summary>
-    nint TargetRoot()
-    {
-        var fg = GetAncestor(GetForegroundWindow(), GA_ROOT);
-        if (ProcessId(fg) == pid) return fg;
-        if (IsWindow(lastTargetRoot) && IsWindowVisible(lastTargetRoot)) return lastTargetRoot;
-        try { return Process.GetProcessById((int)pid).MainWindowHandle; } catch (ArgumentException) { return 0; }
     }
 }

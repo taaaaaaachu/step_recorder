@@ -76,7 +76,8 @@ public sealed class Session
 {
     public int Version { get; set; } = 1;
     public DateTimeOffset CreatedAt { get; set; }
-    public string ProcessName { get; set; } = "";
+    /// <summary>記録した対象(アプリのプロセス名か、モニターの名前)。</summary>
+    public string TargetName { get; set; } = "";
     public EvidenceInfo Evidence { get; set; } = new();
     public List<Step> Steps { get; set; } = [];
     /// <summary>録画モードで録った全編の動画(例: "video.mp4")。録画モードでなければ null。</summary>

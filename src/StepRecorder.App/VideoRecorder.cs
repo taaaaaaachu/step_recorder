@@ -35,6 +35,11 @@ sealed class VideoRecorder
     readonly bool cursor;
     readonly Func<bool> paused;
     readonly int width, height;
+
+    /// <summary>動画の大きさ。</summary>
+    public int Width => width;
+    public int Height => height;
+
     readonly Stopwatch clock = new();
     readonly ManualResetEventSlim started = new();
     readonly BlockingCollection<(byte[] Nv12, TimeSpan Time)> frames = new(boundedCapacity: Fps * 2); // 溜める前に NV12 にする(BGRA の 3/8 の大きさ)

@@ -36,6 +36,6 @@ public sealed class Settings
     }
 
     /// <summary>新しい記録用フォルダ名(例: 20261121-174100_App)。</summary>
-    public static string SessionFolderName(DateTimeOffset t, string processName) =>
-        $"{t:yyyyMMdd-HHmmss}_{string.Concat(processName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c))}";
+    public static string SessionFolderName(DateTimeOffset t, string targetName) =>
+        $"{t:yyyyMMdd-HHmmss}_{string.Concat(targetName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c))}";
 }
