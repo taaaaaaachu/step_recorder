@@ -62,6 +62,41 @@ public class Nv12Tests
         Assert.Equal([119, 156], nv[22..]); // 赤(90, 240)と黒 3 つ(128, 128)の平均
     }
 
+    [Theory]
+    [InlineData(2)] // BT.601
+    [InlineData(1026)] // BT.709
+    public void BGRAに戻すと元の色になる(int w)
+    {
+        for (var r = 0; r < 256; r += 51)
+            for (var g = 0; g < 256; g += 51)
+                for (var b = 0; b < 256; b += 51)
+                {
+                    var back = Nv12.ToBgra(Nv12.FromBgra(Solid(w, 2, r, g, b), w, 2), w, 2, w, 2);
+                    Assert.InRange(back[2], r - 3, r + 3);
+                    Assert.InRange(back[1], g - 3, g + 3);
+                    Assert.InRange(back[0], b - 3, b + 3);
+                    Assert.Equal(255, back[3]);
+                }
+    }
+
+    [Fact]
+    public void デコーダーが切り上げた分の余白を除いて読む()
+    {
+        // 映像は 2×2 の赤(BT.601)。明るさの面は 1 行 4 バイト・4 行に切り上げられている
+        var nv = new byte[4 * 4 + 4 * 2];
+        (nv[0], nv[1], nv[4], nv[5]) = (81, 81, 81, 81);
+        (nv[16], nv[17]) = (90, 240);
+        var back = Nv12.ToBgra(nv, 4, 4, 2, 2);
+
+        Assert.Equal(16, back.Length);
+        for (var i = 0; i < back.Length; i += 4)
+        {
+            Assert.InRange(back[i + 2], 252, 255);
+            Assert.InRange(back[i + 1], 0, 3);
+            Assert.InRange(back[i], 0, 3);
+        }
+    }
+
     [Fact]
     public void 奇数の大きさは受け付けない() => Assert.Throws<ArgumentException>(() => Nv12.FromBgra(new byte[3 * 2 * 4], 3, 2));
 }

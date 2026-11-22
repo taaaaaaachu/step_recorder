@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" /> <!-- 動画のフレームを色変換せずに(NV12 のまま)受け取る -->
     <!-- 自前の Main(Velopack 用)を使うため、自動生成の Main を作らせない -->
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />

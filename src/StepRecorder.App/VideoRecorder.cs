@@ -7,6 +7,7 @@ using StepRecorder.Core;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
+using Vortice.MediaFoundation;
 using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
@@ -152,6 +153,12 @@ sealed class VideoRecorder
         profile.Video.FrameRate.Numerator = Fps;
         profile.Video.FrameRate.Denominator = 1;
         profile.Video.Bitrate = (uint)Math.Clamp(width * height * Fps / 8, 1_000_000, 12_000_000); // 画面の録画は動きが少ないので控えめ
+
+        // 色の情報。書かないとブラウザーが高さだけで推測して、720 未満の動画の色がずれる(純赤が 248,36,0 になる)
+        profile.Video.Properties[MediaTypeAttributeKeys.YuvMatrix] = Nv12.IsBt709(width, height) ? 1u : 2u; // MFVideoTransferMatrix
+        profile.Video.Properties[MediaTypeAttributeKeys.VideoNominalRange] = 2u; // 16〜235
+        profile.Video.Properties[MediaTypeAttributeKeys.VideoPrimaries] = 2u; // 画面の色(sRGB)は BT.709 と同じ原色
+        profile.Video.Properties[MediaTypeAttributeKeys.TransferFunction] = 5u; // BT.709
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await using var file = File.Create(path);

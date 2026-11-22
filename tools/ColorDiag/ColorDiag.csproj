@@ -18,7 +18,6 @@
   <ItemGroup>
     <!-- 製品と同じ録画・エンコード・読み戻しのコードで調べる -->
     <ProjectReference Include="..\..\src\StepRecorder.App\StepRecorder.App.csproj" />
-    <PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" />
   </ItemGroup>
 
 </Project>

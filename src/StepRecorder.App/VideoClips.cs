@@ -1,9 +1,10 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using StepRecorder.Core;
-using Windows.Media.Editing;
+using Vortice.MediaFoundation;
 using Windows.Storage;
 
 namespace StepRecorder.App;
@@ -14,13 +15,17 @@ static class VideoClips
     const int GifFps = 10, GifMaxWidth = 960; // ponytail: GIF の重さはこの2つで決まる。重すぎるなら設定にする
 
     /// <summary>time の時点のフレーム。</summary>
-    public static BitmapSource Frame(string video, TimeSpan time) => Reader.Open(video).Frame(time);
+    public static BitmapSource Frame(string video, TimeSpan time)
+    {
+        using var reader = Reader.Open(video);
+        return reader.Frame(time);
+    }
 
     /// <summary>動画の長さと大きさ。</summary>
     public static (TimeSpan Duration, int Width, int Height) Info(string video)
     {
-        var r = Reader.Open(video);
-        return (r.Duration, r.Width, r.Height);
+        var info = Run(() => InfoAsync(video));
+        return (info.Duration, info.Width, info.Height);
     }
 
     /// <summary>
@@ -30,7 +35,7 @@ static class VideoClips
     /// </summary>
     public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null)
     {
-        var reader = Reader.Open(video);
+        using var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
         var (w, h) = ((crop?.Width ?? reader.Width) & ~1, (crop?.Height ?? reader.Height) & ~1); // H.264 は縦横とも偶数
         IEnumerable<(byte[], TimeSpan)> Frames()
@@ -49,7 +54,7 @@ static class VideoClips
     /// <summary>start〜end(null なら最後まで)の crop の範囲を、繰り返し再生する GIF アニメーションにする。</summary>
     public static void ToGif(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null)
     {
-        var reader = Reader.Open(video);
+        using var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
         var enc = new GifBitmapEncoder();
         for (var i = 0; start + TimeSpan.FromSeconds((double)i / GifFps) < stop; i++)
@@ -137,39 +142,117 @@ static class VideoClips
         return Nv12.FromBgra(buf, w, h);
     }
 
-    /// <summary>MediaComposition でフレームを取り出す。</summary>
-    sealed class Reader
+    /// <summary>
+    /// フレームを取り出す。デコーダーから NV12 のまま受け取り、RGB には自分で戻す(理由は Nv12 を参照)。
+    /// 時刻の昇順に頼まれたら続きから読むので速い。ファイルを開いたままなので Dispose すること。
+    /// </summary>
+    sealed class Reader : IDisposable
     {
-        readonly MediaComposition composition;
+        sealed record Decoded(long Time, byte[] Nv12, int Stride, int Rows);
+
+        static readonly long Tie = TimeSpan.FromMilliseconds(0.1).Ticks; // 時刻の丸めの誤差
+        static readonly long ReadOnLimit = TimeSpan.FromSeconds(1.5).Ticks; // これより先は読み進めずに飛ぶ(キーフレームは 1 秒おき)
+        static readonly long SeekMargin = TimeSpan.FromSeconds(0.2).Ticks; // 表示順と復号順のずれの分、手前へ飛ぶ
+
+        readonly IMFSourceReader source;
         public readonly int Width, Height;
         public readonly TimeSpan Duration;
+        Decoded? current, following;
+        long asked = long.MaxValue;
 
-        Reader(MediaComposition composition, int width, int height, TimeSpan duration) =>
-            (this.composition, Width, Height, Duration) = (composition, width, height, duration);
+        static Reader() => MediaFactory.MFStartup().CheckError();
+
+        Reader(IMFSourceReader source, VideoInfo info) =>
+            (this.source, Width, Height, Duration) = (source, info.Width, info.Height, info.Duration);
 
         public static Reader Open(string video) => Run(async () =>
         {
-            var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(video)); // WinRT は / 区切りを受け付けない
-            var props = await file.Properties.GetVideoPropertiesAsync();
-            var composition = new MediaComposition();
-            composition.Clips.Add(await MediaClip.CreateFromFileAsync(file));
-            return new Reader(composition, (int)props.Width, (int)props.Height, props.Duration);
+            var info = await InfoAsync(video);
+            var source = MediaFactory.MFCreateSourceReaderFromURL(Path.GetFullPath(video), null!);
+            try
+            {
+                using var nv12 = MediaFactory.MFCreateMediaType();
+                nv12.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Video);
+                nv12.Set(MediaTypeAttributeKeys.Subtype, VideoFormatGuids.NV12);
+                source.SetCurrentMediaType(SourceReaderIndex.FirstVideoStream, nv12);
+                return new Reader(source, info);
+            }
+            catch
+            {
+                source.Dispose();
+                throw;
+            }
         });
 
+        public void Dispose() => source.Dispose();
+
+        /// <summary>time に最も近いフレーム(同じ近さなら前の方)。終わりを過ぎていれば最後のフレーム。</summary>
         public BitmapSource Frame(TimeSpan time)
         {
-            var bytes = Run(async () =>
-            {
-                using var stream = (await composition.GetThumbnailAsync(time, Width, Height, VideoFramePrecision.NearestFrame)).AsStream();
-                using var ms = new MemoryStream();
-                await stream.CopyToAsync(ms);
-                return ms.ToArray();
-            });
-            // WPF の画像は作ったスレッドに属するので、呼んだ側のスレッドで読み込む
-            var img = BitmapFrame.Create(new MemoryStream(bytes), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+            // Media Foundation は MTA のスレッドで呼ぶ
+            var bgra = Run(() => Task.FromResult(Decode(time.Ticks)));
+            // WPF の画像は作ったスレッドに属するので、呼んだ側のスレッドで作る
+            var img = BitmapSource.Create(Width, Height, 96, 96, PixelFormats.Bgr32, null, bgra, Width * 4);
             img.Freeze();
             return img;
         }
+
+        byte[] Decode(long time)
+        {
+            time = Math.Clamp(time, 0, Duration.Ticks);
+            if (current == null || time < asked || time > current.Time + ReadOnLimit) Seek(time);
+            asked = time;
+            while ((following ??= Read()) is { } next && Math.Abs(next.Time - time) + Tie < Math.Abs(current!.Time - time))
+                (current, following) = (next, null);
+            return Nv12.ToBgra(current!.Nv12, current.Stride, current.Rows, Width, Height);
+        }
+
+        void Seek(long time)
+        {
+            following = null;
+            // 飛んだ先が time より後か、何も読めなければ(終わり近く)、もっと手前から読み直す
+            for (var back = SeekMargin; ; back *= 8)
+            {
+                var at = Math.Max(0, time - back);
+                source.SetCurrentPosition(at);
+                current = Read();
+                if (current != null && (current.Time <= time || at == 0)) return;
+                if (current == null && at == 0) throw new InvalidOperationException("動画にフレームが無い");
+            }
+        }
+
+        Decoded? Read()
+        {
+            while (true)
+            {
+                using var sample = source.ReadSample(SourceReaderIndex.FirstVideoStream, SourceReaderControlFlag.None, out _, out var flags, out var time);
+                if (sample != null)
+                {
+                    using var type = source.GetCurrentMediaType(SourceReaderIndex.FirstVideoStream);
+                    var size = type.GetUInt64(MediaTypeAttributeKeys.FrameSize); // 切り上げられた大きさ
+                    var stride = type.GetUInt32(MediaTypeAttributeKeys.DefaultStride, out var s).Success ? (int)s : (int)(size >> 32);
+                    using var buffer = sample.ConvertToContiguousBuffer();
+                    buffer.Lock(out var data, out _, out var length);
+                    try
+                    {
+                        var bytes = new byte[length];
+                        Marshal.Copy(data, bytes, 0, length);
+                        return new(time, bytes, stride, (int)(size & 0xFFFFFFFF));
+                    }
+                    finally { buffer.Unlock(); }
+                }
+                if ((flags & SourceReaderFlag.EndOfStream) != 0) return null;
+            }
+        }
+    }
+
+    sealed record VideoInfo(int Width, int Height, TimeSpan Duration);
+
+    static async Task<VideoInfo> InfoAsync(string video)
+    {
+        var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(video)); // WinRT は / 区切りを受け付けない
+        var props = await file.Properties.GetVideoPropertiesAsync();
+        return new((int)props.Width, (int)props.Height, props.Duration);
     }
 
     // WinRT の非同期をスレッドプールで待つ(UI スレッドで待つと固まるため)

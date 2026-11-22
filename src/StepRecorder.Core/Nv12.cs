@@ -1,8 +1,9 @@
 namespace StepRecorder.Core;
 
 /// <summary>
-/// BGRA(上の行から)を、H.264 エンコーダーがそのまま受け取る NV12 にする。明るさは 16〜235、色差は 16〜240。
-/// Windows に BGRA を渡して変換させると、PC によっては 219/255 に縮めずに 16 を足され、239 以上が全部真っ白になる。
+/// BGRA(上の行から)と NV12 の変換。明るさは 16〜235、色差は 16〜240。どちら向きも Windows には任せない。
+/// BGRA を渡して変換させると、PC によっては 219/255 に縮めずに 16 を足され、239 以上が全部真っ白になる。
+/// RGB で受け取ると、PC によっては HD の動画を BT.601 で読まれて色がずれる(純赤が 232 になる)。
 /// </summary>
 public static class Nv12
 {
@@ -12,9 +13,15 @@ public static class Nv12
     static readonly Matrix Bt601 = new(16829, 33039, 6416, -9714, -19070, 28784, 28784, -24103, -4681);
     static readonly Matrix Bt709 = new(11966, 40254, 4064, -6596, -22189, 28785, 28784, -26145, -2639);
 
+    // 逆向き。R = Y + Rv·V、G = Y - Gu·U - Gv·V、B = Y + Bu·U(Y は 255/219 倍してから)
+    readonly record struct Inverse(int Rv, int Gu, int Gv, int Bu);
+
+    const int LumaScale = 76309;
+    static readonly Inverse FromBt601 = new(104597, 25675, 53279, 132201);
+    static readonly Inverse FromBt709 = new(117489, 13975, 34925, 138438);
+
     /// <summary>
-    /// BT.709 を使う大きさか。Windows の変換・再生と同じ規則。mp4 に色の情報は書かない
-    /// (書くと、小さい動画からフレームを取り出したときに Windows が色を変えてしまう)ので、大きさの規則で揃える。
+    /// BT.709 を使う大きさか。Windows と同じ規則。書くときも読むときもこれで揃え、mp4 の色の情報にも書く。
     /// </summary>
     public static bool IsBt709(int width, int height) => width > 1024 || height > 576;
 
@@ -49,6 +56,34 @@ public static class Nv12
         }
         return dst;
     }
+
+    /// <summary>
+    /// 左上の width×height を、不透明な BGRA にする。stride は 1 行のバイト数、rows は明るさの面の行数
+    /// (デコーダーは縦横を 16 の倍数などに切り上げて渡すので、映像の大きさと違う)。
+    /// </summary>
+    public static byte[] ToBgra(byte[] nv12, int stride, int rows, int width, int height)
+    {
+        var m = IsBt709(width, height) ? FromBt709 : FromBt601;
+        var dst = new byte[width * height * 4];
+        for (var y = 0; y < height; y++)
+        {
+            var luma = nv12.AsSpan(y * stride, width);
+            var chroma = nv12.AsSpan(stride * rows + y / 2 * stride, (width + 1) & ~1);
+            var row = dst.AsSpan(y * width * 4, width * 4);
+            for (var x = 0; x < width; x++)
+            {
+                // ponytail: 色差は 2×2 に同じ値を使う(補間しない)。画面の録画では、切り出しで作り直しても滲みが増えないこの方が良い
+                int c = (luma[x] - 16) * LumaScale + (1 << 15), u = chroma[x & ~1] - 128, v = chroma[(x & ~1) + 1] - 128;
+                row[x * 4] = Clamp((c + m.Bu * u) >> 16);
+                row[x * 4 + 1] = Clamp((c - m.Gu * u - m.Gv * v) >> 16);
+                row[x * 4 + 2] = Clamp((c + m.Rv * v) >> 16);
+                row[x * 4 + 3] = 255;
+            }
+        }
+        return dst;
+    }
+
+    static byte Clamp(int v) => (byte)Math.Clamp(v, 0, 255);
 
     static byte Luma(in Matrix m, int r, int g, int b) => (byte)((m.Yr * r + m.Yg * g + m.Yb * b + (16 << 16) + (1 << 15)) >> 16);
 }
