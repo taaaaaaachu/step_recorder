@@ -41,7 +41,18 @@ sealed class RecorderEngine
     VideoRecorder? full;
 
     public volatile RecordMode Mode;
-    public volatile bool Paused;
+    volatile bool paused;
+
+    /// <summary>一時停止。操作も動画も録らない。動画に遅れずに効くよう、録画のスレッドが直接見る。</summary>
+    public bool Paused
+    {
+        get => paused;
+        set
+        {
+            paused = value;
+            if (value) Enqueue(Flush); // 止める前に打った分までで確定する(停止中に打った分を読まない)
+        }
+    }
 
     /// <summary>ステップ数が変わった。ワーカースレッドから呼ばれる。</summary>
     public event Action<int>? StepCountChanged;
@@ -117,7 +128,7 @@ sealed class RecorderEngine
         if (root == 0) return;
         var file = rec.NextVideoFile;
         var frame = FrameBounds(root);
-        var recorder = VideoRecorder.Start(root, Path.Combine(dir, file), captureCursor);
+        var recorder = VideoRecorder.Start(root, Path.Combine(dir, file), captureCursor, () => paused);
         var step = rec.AddStep(CaptureTrigger.Video, new WindowInfo(Text(root), ClassName(root), processName), rec.NextImageFile,
             frame.Width & ~1, frame.Height & ~1, DateTimeOffset.Now);
         step.VideoFile = file;
@@ -152,7 +163,7 @@ sealed class RecorderEngine
 
     void StartFullVideo()
     {
-        full = VideoRecorder.Start(lastTargetRoot, Path.Combine(dir, FullVideoFile), captureCursor);
+        full = VideoRecorder.Start(lastTargetRoot, Path.Combine(dir, FullVideoFile), captureCursor, () => paused);
     }
 
     void StopVideos()

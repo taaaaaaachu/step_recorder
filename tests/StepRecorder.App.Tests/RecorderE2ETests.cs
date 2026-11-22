@@ -182,6 +182,33 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.True(File.Exists(Path.Combine(dir, "error.log")));
     }
 
+    [DesktopFact]
+    public void 一時停止すると全編の動画も止まる()
+    {
+        target = Open(SampleExe);
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Video });
+        engine.Start();
+        Wait(1200);
+        engine.Paused = true;
+        Wait(2000);
+        engine.Paused = false;
+        Wait(800);
+
+        var session = Stop(engine);
+        Assert.InRange(VideoE2ETests.VideoInfo(Path.Combine(dir, session.VideoFile!)).Duration.TotalSeconds, 1.2, 2.4);
+    }
+
+    [DesktopFact]
+    public void 始めてすぐ止めても失敗にしない()
+    {
+        target = Open(SampleExe);
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Video });
+        engine.Start();
+        engine.Paused = true; // 停止ボタンは、まず録るのをやめてから止める
+
+        Stop(engine); // error.log が無いこと
+    }
+
     /// <summary>止めてセッションを保存する。記録中の例外(error.log)があれば失敗させる。</summary>
     Session Stop(RecorderEngine engine, List<string>? stages = null)
     {

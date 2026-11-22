@@ -109,6 +109,48 @@ public sealed class VideoE2ETests : IDisposable
         Assert.NotNull(stop.Result);
     }
 
+    [DesktopFact]
+    public void 一時停止中は録らず_停止していた時間は詰める()
+    {
+        using var window = new ColorWindow(Colors.Blue);
+        var path = Path.Combine(dir, "video.mp4");
+        var paused = false;
+
+        var rec = VideoRecorder.Start(window.Handle, path, cursor: false, () => Volatile.Read(ref paused));
+        Wait(1000);
+        Volatile.Write(ref paused, true);
+        Wait(200);
+        window.Paint(Colors.Red); // 停止中だけ見せる
+        Wait(1500);
+        var at = rec.CurrentTime;
+        Wait(300);
+        Assert.Equal(at, rec.CurrentTime); // 目盛りに使う時刻も止まる
+        window.Paint(Colors.Lime);
+        Wait(200);
+        Volatile.Write(ref paused, false);
+        Wait(1000);
+        rec.Stop();
+
+        Assert.InRange(VideoInfo(path).Duration.TotalSeconds, 1.6, 2.6); // 2.2 秒の停止は入らない
+        var colors = new List<Color>();
+        using var reader = VideoClips.Reader.Open(path);
+        for (var t = TimeSpan.Zero; t < reader.Duration; t += TimeSpan.FromSeconds(1.0 / VideoRecorder.Fps))
+            colors.Add(Center(reader.Frame(t)));
+        Assert.DoesNotContain(colors, c => c.R > 128); // 赤は 1 枚も無い
+        Assert.Contains(colors, c => c.B > 128);
+        Assert.Contains(colors, c => c.G > 128);
+    }
+
+    /// <summary>真ん中の画素の色。</summary>
+    internal static Color Center(BitmapSource s) => ColorAt(s, s.PixelWidth / 2, s.PixelHeight / 2);
+
+    internal static Color ColorAt(BitmapSource s, int x, int y)
+    {
+        var px = new byte[3];
+        new FormatConvertedBitmap(s, PixelFormats.Bgr24, null, 0).CopyPixels(new System.Windows.Int32Rect(x, y, 1, 1), px, 3, 0);
+        return Color.FromRgb(px[2], px[1], px[0]);
+    }
+
     /// <summary>a の各画素と、b の (ox, oy) からの同じ大きさの範囲との、色の差の平均。</summary>
     static double MeanDiff(BitmapSource a, BitmapSource b, int ox, int oy)
     {

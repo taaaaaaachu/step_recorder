@@ -33,6 +33,7 @@ sealed class VideoRecorder
 
     readonly nint main;
     readonly bool cursor;
+    readonly Func<bool> paused;
     readonly int width, height;
     readonly Stopwatch clock = new();
     readonly ManualResetEventSlim started = new();
@@ -42,13 +43,14 @@ sealed class VideoRecorder
     volatile bool stopping;
     Exception? error;
 
-    /// <summary>録画開始からの経過時間(動画上の時刻と同じ)。</summary>
+    /// <summary>録画開始からの、一時停止を除いた経過時間(動画上の時刻と同じ)。</summary>
     public TimeSpan CurrentTime => clock.Elapsed;
 
-    VideoRecorder(nint main, string path, bool cursor)
+    VideoRecorder(nint main, string path, bool cursor, Func<bool> paused)
     {
         this.main = main;
         this.cursor = cursor;
+        this.paused = paused;
         var frame = FrameBounds(main);
         (width, height) = (frame.Width & ~1, frame.Height & ~1); // H.264 は縦横とも偶数
         if (width <= 0 || height <= 0) throw new InvalidOperationException("録画するウィンドウの大きさが取れない");
@@ -58,8 +60,11 @@ sealed class VideoRecorder
         started.Wait(); // 最初のフレームが揃うまで待つ(CurrentTime を操作の時刻と合わせるため)
     }
 
-    /// <summary>main を含むアプリのウィンドウを path に録画し始める。</summary>
-    public static VideoRecorder Start(nint main, string path, bool cursor) => new(main, path, cursor);
+    /// <summary>
+    /// main を含むアプリのウィンドウを path に録画し始める。
+    /// paused が true の間は録らず、時計も止める(停止していた時間は動画から詰まる)。
+    /// </summary>
+    public static VideoRecorder Start(nint main, string path, bool cursor, Func<bool>? paused = null) => new(main, path, cursor, paused ?? (() => false));
 
     /// <summary>録画を止め、mp4 を書き終えるまで待つ。</summary>
     public void Stop()
@@ -88,6 +93,7 @@ sealed class VideoRecorder
             started.Set();
             var next = 0L;
             var canvas = new byte[width * height * 4];
+            bool Resting() => next > 0 && paused(); // 録り始めの 1 枚は必ず書く(0 枚だとエンコーダーが失敗する)
             while (!stopping)
             {
                 var windows = WindowCapture.AppWindows(main);
@@ -99,6 +105,14 @@ sealed class VideoRecorder
                 foreach (var (h, _) in windows)
                     if (!sources.ContainsKey(h) && WindowSource.TryCreate(gpu, h, cursor) is { } s) sources[h] = s;
 
+                if (Resting())
+                {
+                    clock.Stop();
+                    foreach (var s in sources.Values) s.Update(); // 受け取って捨て続ける。溜めると再開したときに停止中の画面が写る
+                    Thread.Sleep(1000 / Fps);
+                    continue;
+                }
+                clock.Start();
                 // 遅れたらその分のフレームは飛ばす(タイムスタンプは経過時間どおり)
                 var index = (long)(clock.Elapsed.TotalSeconds * Fps);
                 if (index >= next)
@@ -107,6 +121,7 @@ sealed class VideoRecorder
                     Array.Fill(canvas, (byte)0xFF); // ウィンドウ同士の隙間は白
                     foreach (var (h, r) in windows)
                         if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - origin.Left, r.Top - origin.Top);
+                    if (Resting()) continue; // 合成している間に止められたら、その絵は使わない
                     var frame = (Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / Fps));
                     while (!frames.TryAdd(frame, 100))
                         if (encoding.IsCompleted) return; // エンコードに失敗して誰も読まない。待ち続けると Stop が返らない
@@ -245,10 +260,17 @@ sealed class VideoRecorder
             return pixels.Length > 0;
         }
 
-        void Update()
+        /// <summary>届いているうちの最新のフレームを受け取る。</summary>
+        public void Update()
         {
-            using var frame = pool.TryGetNextFrame();
-            if (frame == null) return;
+            var latest = pool.TryGetNextFrame();
+            if (latest == null) return;
+            while (pool.TryGetNextFrame() is { } newer)
+            {
+                latest.Dispose();
+                latest = newer;
+            }
+            using var frame = latest;
             if (frame.ContentSize.Width != poolSize.Width || frame.ContentSize.Height != poolSize.Height)
             {
                 poolSize = frame.ContentSize;

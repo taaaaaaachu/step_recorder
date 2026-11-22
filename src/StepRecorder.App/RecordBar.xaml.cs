@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -16,7 +17,8 @@ public partial class RecordBar : Window
     readonly string dir;
     bool stopped;
     readonly System.Windows.Threading.DispatcherTimer clipTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-    DateTime clipStarted;
+    readonly Stopwatch clipClock = new(); // 一時停止の間は進めない(動画の長さに合わせる)
+    readonly string recordingLabel;
 
     /// <summary>停止後のセッション。</summary>
     public Session? Result { get; private set; }
@@ -40,6 +42,7 @@ public partial class RecordBar : Window
             ModeClick.Visibility = ModeManual.Visibility = ClipButton.Visibility = Visibility.Collapsed;
             State.Text = "● 記録中(録画)";
         }
+        recordingLabel = State.Text;
         var area = SystemParameters.WorkArea;
         Left = area.Left + area.Width / 2 - 220;
         Top = area.Top + 4;
@@ -97,18 +100,21 @@ public partial class RecordBar : Window
             ClipButton.Content = "● 録画";
             return;
         }
-        clipStarted = DateTime.Now;
+        clipClock.Restart();
+        if (engine.Paused) clipClock.Stop();
         clipTimer.Start();
         ShowClipTime();
     }
 
-    void ShowClipTime() => ClipButton.Content = $"■ 録画停止 {TimeText.Seconds(DateTime.Now - clipStarted)}";
+    void ShowClipTime() => ClipButton.Content = $"■ 録画停止 {TimeText.Seconds(clipClock.Elapsed)}";
 
     void Pause_Click(object sender, RoutedEventArgs e)
     {
         engine.Paused = !engine.Paused;
+        if (engine.Paused) clipClock.Stop();
+        else if (clipTimer.IsEnabled) clipClock.Start();
         PauseButton.Content = engine.Paused ? "再開" : "一時停止";
-        State.Text = engine.Paused ? "‖ 一時停止" : "● 記録中";
+        State.Text = engine.Paused ? "‖ 一時停止" : recordingLabel;
     }
 
     async void Stop_Click(object sender, RoutedEventArgs e)
@@ -118,6 +124,7 @@ public partial class RecordBar : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         foreach (var id in new[] { HkCapture, HkPause, HkStop, HkClip }) UnregisterHotKey(hwnd, id);
         clipTimer.Stop();
+        engine.Paused = true; // 進み具合のウィンドウを出す前に録るのをやめる(最後に写り込ませない)
         // 溜まった撮影や動画の書き終えに時間がかかることがあるので、裏で止めて進み具合を出す
         Hide();
         Progress = new ProgressWindow("記録を終えています", "記録を止めています...", null);
