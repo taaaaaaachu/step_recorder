@@ -254,6 +254,50 @@ public sealed class EditorSmokeTests : IDisposable
         void At(double sec) { slider.SetValue(sec); Wait(300); }
         void Press(string name) { ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, name)); Wait(800); }
 
+        // タイムラインのズーム。同じ場所をクリックして、マウスの下の時刻が動いていないことを確かめる
+        var timeline = Find(editor, "TimeScroller");
+        var timeScroll = (ScrollPattern)timeline.GetCurrentPattern(ScrollPattern.Pattern);
+        double Shown() => timeScroll.Current.HorizontallyScrollable ? timeScroll.Current.HorizontalViewSize : 100;
+        double Scrolled() => timeScroll.Current.HorizontalScrollPercent;
+        void Shot(string name)
+        {
+            if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } o)
+                WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(o, name + ".png"));
+        }
+        Assert.Equal(100, Shown());
+        Shot("timeline-fit");
+        var bar = timeline.Current.BoundingRectangle;
+        var track = Find(editor, "TimeSlider").Current.BoundingRectangle;
+        var (x, y) = ((int)(bar.X + bar.Width * 0.7), (int)(track.Y + track.Height / 2));
+        Click(editor, x, y);
+        Wait(500);
+        var pointed = slider.Current.Value;
+        Assert.InRange(pointed, 1.5, 2.6);
+        CtrlWheel(editor, x, y, 1);
+        Wait(300);
+        CtrlWheel(editor, x, y, 1);
+        Wait(500);
+        Assert.InRange(Shown(), 62, 66); // 1.25 倍を 2 回
+        Click(editor, x, y);
+        Wait(500);
+        Assert.InRange(slider.Current.Value, pointed - 0.02, pointed + 0.02);
+
+        for (var i = 0; i < 6; i++) Press("タイムラインを拡大");
+        Assert.InRange(Shown(), 100 / slider.Current.Maximum - 1, 100 / slider.Current.Maximum + 1); // 1 秒分までで止まる
+        At(0.05);
+        Assert.InRange(Scrolled(), 0, 5); // 現在位置が見える所へ動く
+        Shot("timeline-zoom");
+        Press("▶");
+        Assert.True(Until(() => Scrolled() > 10, 8000), "再生中に現在位置を追わない");
+        if (AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "‖")) != null) Press("‖");
+        At(slider.Current.Maximum - 0.05);
+        Assert.InRange(Scrolled(), 95, 100);
+        Shot("timeline-end");
+        Press("タイムラインを縮小");
+        Assert.InRange(Shown(), 100 / slider.Current.Maximum + 2, 99);
+        Press("タイムライン全体");
+        Assert.Equal(100, Shown());
+
         At(2.0);
         if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } seekDir) // シークすると、メインの表示欄に全編の動画が出る
         {

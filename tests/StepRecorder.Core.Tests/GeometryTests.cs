@@ -4,6 +4,32 @@ namespace StepRecorder.Core.Tests;
 
 public class GeometryTests
 {
+    [Theory]
+    [InlineData(0, 250, 1000, 1250)]
+    [InlineData(300, 700, 2000, 2500)]
+    [InlineData(1500, 500, 4000, 3200)]
+    public void タイムラインを拡大縮小してもマウスの下の時刻が動かない(double offset, double at, double oldWidth, double newWidth)
+    {
+        var moved = Geometry.ZoomScroll(offset, at, oldWidth, newWidth, 10);
+        Assert.Equal((offset + at - 10) / (oldWidth - 20), (moved + at - 10) / (newWidth - 20), 6);
+    }
+
+    [Fact]
+    public void タイムラインの端では左にはみ出さない()
+    {
+        Assert.Equal(0, Geometry.ZoomScroll(0, 0, 1000, 2000, 10));
+        Assert.Equal(0, Geometry.ZoomScroll(100, 900, 2000, 1000, 10));
+    }
+
+    [Fact]
+    public void 現在位置が見えなくなったときだけスクロールする()
+    {
+        Assert.Equal(100, Geometry.ScrollToShow(100, 800, 900));
+        Assert.Equal(750, Geometry.ScrollToShow(100, 800, 950));
+        Assert.Equal(300, Geometry.ScrollToShow(1000, 800, 500));
+        Assert.Equal(0, Geometry.ScrollToShow(1000, 800, 20));
+    }
+
     [Fact]
     public void 始点終点の向きに関係なく正規化し画像内に収める()
     {

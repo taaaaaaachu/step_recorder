@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -523,9 +524,63 @@ public partial class EditorWindow : Window
     void TimeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         TimeLabel.Text = Clock(SliderTime);
+        if (!TimeSlider.IsMouseCaptureWithin) ShowPlayhead(); // ドラッグ中に動かすと、つまみがマウスから逃げる
         if (sliderQuiet) return;
         ShowVideoView();
         Player.Position = SliderTime;
+    }
+
+    // ---- タイムラインのズーム ----
+    // シークバー自体の幅を広げて横にスクロールする。倍率 1 で全編が収まる
+
+    const double MinVisibleSeconds = 1; // いちばん拡大したときに見える長さ
+    double timeZoom = 1;
+
+    /// <summary>シークバーの両端の、つまみの中心が届かない幅。</summary>
+    double TrackInset() =>
+        TimeSlider.Template.FindName("PART_Track", TimeSlider) is Track { Thumb: { } thumb } track
+            ? track.TranslatePoint(new Point(), TimeSlider).X + thumb.ActualWidth / 2
+            : 0;
+
+    double PlayheadX() => Geometry.TrackX(TimeSlider.Value / Math.Max(TimeSlider.Maximum, double.Epsilon), TimeSlider.ActualWidth, TrackInset());
+
+    /// <summary>倍率を変える。anchor(見えている範囲での X)の時刻は動かさない。省略時は現在位置、それが見えていなければ中央。</summary>
+    void SetTimeZoom(double z, double? anchor = null)
+    {
+        var (offset, view, oldWidth) = (TimeScroller.HorizontalOffset, TimeScroller.ViewportWidth, TimeSlider.ActualWidth);
+        var head = PlayheadX() - offset;
+        var at = anchor ?? (head >= 0 && head <= view ? head : view / 2);
+        timeZoom = Math.Clamp(z, 1, Math.Max(1, TimeSlider.Maximum / MinVisibleSeconds));
+        ApplyTimeWidth();
+        TimeScroller.UpdateLayout();
+        TimeScroller.ScrollToHorizontalOffset(Geometry.ZoomScroll(offset, at, oldWidth, TimeSlider.ActualWidth, TrackInset()));
+        TimeScroller.UpdateLayout(); // 続けて回されても、動かしたあとの位置から計算する
+    }
+
+    void ApplyTimeWidth() => TimeSlider.Width = timeZoom > 1 ? TimeScroller.ViewportWidth * timeZoom : double.NaN;
+
+    void ShowPlayhead()
+    {
+        if (timeZoom <= 1) return;
+        TimeScroller.ScrollToHorizontalOffset(Geometry.ScrollToShow(TimeScroller.HorizontalOffset, TimeScroller.ViewportWidth, PlayheadX()));
+    }
+
+    void TimeZoomIn_Click(object sender, RoutedEventArgs e) => SetTimeZoom(timeZoom * ZoomStep);
+    void TimeZoomOut_Click(object sender, RoutedEventArgs e) => SetTimeZoom(timeZoom / ZoomStep);
+    void TimeZoomFit_Click(object sender, RoutedEventArgs e) => SetTimeZoom(1);
+    void TimeSlider_DragCompleted(object sender, DragCompletedEventArgs e) => ShowPlayhead();
+
+    void TimeScroller_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.WidthChanged) ApplyTimeWidth();
+    }
+
+    /// <summary>Ctrl+ホイールでマウスの位置の時刻を中心に拡大縮小、ホイールだけなら横にスクロールする。</summary>
+    void TimeScroller_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        if (Keyboard.Modifiers == ModifierKeys.Control) SetTimeZoom(timeZoom * Math.Pow(ZoomStep, e.Delta / 120.0), e.GetPosition(TimeScroller).X);
+        else TimeScroller.ScrollToHorizontalOffset(TimeScroller.HorizontalOffset - e.Delta);
     }
 
     void FullPlay_Click(object sender, RoutedEventArgs e)

@@ -102,9 +102,20 @@
                 <DockPanel>
                     <StackPanel VerticalAlignment="Center">
                         <DockPanel>
-                            <TextBlock x:Name="TimeLabel" DockPanel.Dock="Right" Text="0:00.0" MinWidth="60" TextAlignment="Right" VerticalAlignment="Center"/>
-                            <Slider x:Name="TimeSlider" AutomationProperties.AutomationId="TimeSlider" IsMoveToPointEnabled="True" TickPlacement="BottomRight"
-                                    SmallChange="0.1" LargeChange="1" ValueChanged="TimeSlider_ValueChanged" ToolTip="目盛りはステップを撮った時刻"/>
+                            <!-- 画像のズームのボタンと区別できるよう、読み上げ名を付ける -->
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="TimeLabel" Text="0:00.0" MinWidth="60" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <Button Content="−" MinWidth="30" Click="TimeZoomOut_Click" AutomationProperties.Name="タイムラインを縮小" ToolTip="タイムラインを縮小 (Ctrl+ホイール)"/>
+                                <Button Content="+" MinWidth="30" Click="TimeZoomIn_Click" AutomationProperties.Name="タイムラインを拡大" ToolTip="タイムラインを拡大 (Ctrl+ホイール)"/>
+                                <Button Content="全体" Click="TimeZoomFit_Click" AutomationProperties.Name="タイムライン全体" ToolTip="全編が収まる幅に戻す"/>
+                            </StackPanel>
+                            <!-- スクロールバーは常に出す。拡大したときに高さが変わると、押しているボタンが動いてしまう -->
+                            <ScrollViewer x:Name="TimeScroller" HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled" Focusable="False"
+                                          SizeChanged="TimeScroller_SizeChanged" PreviewMouseWheel="TimeScroller_PreviewMouseWheel">
+                                <Slider x:Name="TimeSlider" AutomationProperties.AutomationId="TimeSlider" IsMoveToPointEnabled="True" TickPlacement="BottomRight"
+                                        Margin="0,0,0,12" SmallChange="0.1" LargeChange="1" ValueChanged="TimeSlider_ValueChanged" Thumb.DragCompleted="TimeSlider_DragCompleted"
+                                        ToolTip="目盛りはステップを撮った時刻。Ctrl+ホイールで拡大、ホイールで横に移動"/>
+                            </ScrollViewer>
                         </DockPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                             <Button x:Name="FullPlayButton" Content="▶" MinWidth="36" Click="FullPlay_Click"/>

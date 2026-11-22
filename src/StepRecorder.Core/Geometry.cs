@@ -51,5 +51,19 @@ public static class Geometry
         return crop == new PixelRect(0, 0, all.Width, all.Height) || !IsUsable(crop) ? null : crop;
     }
 
+    /// <summary>幅 width のシークバーで、割合 ratio(0〜1)の位置の X。inset は両端の、つまみの中心が届かない幅。</summary>
+    public static double TrackX(double ratio, double width, double inset) => inset + ratio * (width - 2 * inset);
+
+    /// <summary>シークバーの幅を変えても、見えている範囲の at の位置にある時刻が動かないスクロール位置。</summary>
+    public static double ZoomScroll(double offset, double at, double oldWidth, double newWidth, double inset)
+    {
+        var ratio = (offset + at - inset) / Math.Max(1, oldWidth - 2 * inset);
+        return Math.Max(0, TrackX(ratio, newWidth, inset) - at);
+    }
+
+    /// <summary>x が見えるスクロール位置。見えていれば動かさず、外なら左から 1/4 の所に来るようにする。</summary>
+    public static double ScrollToShow(double offset, double viewport, double x) =>
+        x >= offset && x <= offset + viewport ? offset : Math.Max(0, x - viewport / 4);
+
     static int Clamp(double v, int max) => (int)Math.Clamp(Math.Round(v), 0, max);
 }
