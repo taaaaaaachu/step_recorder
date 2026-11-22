@@ -268,6 +268,13 @@ public sealed class EditorSmokeTests : IDisposable
         Shot("timeline-fit");
         var bar = timeline.Current.BoundingRectangle;
         var track = Find(editor, "TimeSlider").Current.BoundingRectangle;
+        // シークバーは左右いっぱい、ズームのボタンはその下の段の右端
+        var play = Find(editor, "FullPlayButton").Current.BoundingRectangle;
+        var all = Find(editor, new PropertyCondition(AutomationElement.NameProperty, "タイムライン全体")).Current.BoundingRectangle;
+        Assert.InRange(all.Y, play.Y - 1, play.Y + 1);
+        Assert.InRange(bar.Left, play.Left - 2, play.Left + 2);
+        Assert.InRange(bar.Right, all.Right - 2, all.Right + 2);
+        Assert.True(bar.Bottom <= all.Top, "ズームのボタンがシークバーの段にある");
         var (x, y) = ((int)(bar.X + bar.Width * 0.7), (int)(track.Y + track.Height / 2));
         Click(editor, x, y);
         Wait(500);
@@ -309,6 +316,9 @@ public sealed class EditorSmokeTests : IDisposable
         Press("区間の開始");
         At(1.8);
         Press("区間の終了");
+        var range = Find(editor, "RangeLabel").Current.BoundingRectangle;
+        Assert.InRange(range.Y + range.Height / 2, play.Y, play.Bottom); // 区間を出しても同じ段に収まる
+        Shot("timeline-range");
         Press("区間を動画ステップに追加");
         // 足した動画のステップが選ばれているので、再生できる(区間は 0.8 秒なので、押した直後から確かめる)
         ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "▶ 再生"));
