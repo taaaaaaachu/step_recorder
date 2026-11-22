@@ -109,7 +109,7 @@ sealed class VideoRecorder
             var next = 0L;
             var canvas = new byte[width * height * 4];
             bool Resting() => next > 0 && paused(); // 録り始めの 1 枚は必ず書く(0 枚だとエンコーダーが失敗する)
-            while (!stopping)
+            while (!stopping || next == 0) // 最初の周回より先に止められても 1 枚は書く
             {
                 var items = input.Items();
                 foreach (var gone in sources.Keys.Except(items.Select(i => i.Handle)).ToList())

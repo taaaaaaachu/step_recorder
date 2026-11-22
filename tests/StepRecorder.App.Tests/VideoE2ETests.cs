@@ -110,6 +110,18 @@ public sealed class VideoE2ETests : IDisposable
     }
 
     [DesktopFact]
+    public void 録り始めた直後に止めても_何度でも1枚は書ける()
+    {
+        using var window = new ColorWindow(Colors.Blue);
+        for (var i = 0; i < 25; i++) // 停止が最初の 1 枚より先に届くかは間合いによる
+        {
+            var path = Path.Combine(dir, $"short-{i}.mp4");
+            VideoRecorder.Start(window.Handle, path, cursor: false, () => true).Stop();
+            Assert.True(new FileInfo(path).Length > 0);
+        }
+    }
+
+    [DesktopFact]
     public void 一時停止中は録らず_停止していた時間は詰める()
     {
         using var window = new ColorWindow(Colors.Blue);
