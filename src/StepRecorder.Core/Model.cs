@@ -99,7 +99,7 @@ public static class PlaybackSpeed
 /// <summary>配布用に書き出すときの、動画のステップの形式。</summary>
 public enum ClipFormat { Mp4, Gif }
 
-/// <summary>エビデンスとして画面一覧の冒頭に載せる、記録した環境の情報。取れなかった項目は空。</summary>
+/// <summary>エビデンスとして操作記録の冒頭に載せる、記録した環境の情報。取れなかった項目は空。</summary>
 public sealed class EvidenceInfo
 {
     /// <summary>対象アプリの exe のファイル名。</summary>

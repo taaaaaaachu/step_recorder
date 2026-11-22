@@ -126,7 +126,7 @@ public class ExportTests
     {
         var md = Export.ToMarkdown(Sample(), GroupMode.ByScreen);
         Assert.Equal("""
-            # App 画面一覧 (2026-11-21)
+            # App 操作記録 (2026-11-21)
 
             | 項目 | 内容 |
             |---|---|

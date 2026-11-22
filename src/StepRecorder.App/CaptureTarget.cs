@@ -8,7 +8,7 @@ namespace StepRecorder.App;
 /// <summary>何を記録するか。どの操作を拾い、どう撮り、どう録るかは対象ごとに違う。</summary>
 abstract class CaptureTarget
 {
-    /// <summary>記録フォルダと画面一覧の表題に使う名前。</summary>
+    /// <summary>記録フォルダと操作記録の表題に使う名前。</summary>
     public abstract string Name { get; }
 
     /// <summary>今も記録できるか(見えているウィンドウがある・外されていない)。</summary>

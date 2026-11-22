@@ -36,7 +36,7 @@ public static class Export
     public static IEnumerable<string> LinesOf(Step st) =>
         st.Description.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-    public static string Title(Session s) => $"{s.TargetName} 画面一覧 ({s.CreatedAt:yyyy-MM-dd})";
+    public static string Title(Session s) => $"{s.TargetName} 操作記録 ({s.CreatedAt:yyyy-MM-dd})";
 
     /// <summary>冒頭に載せるエビデンス情報の表の行。空の項目は載せない。</summary>
     public static IReadOnlyList<(string Label, string Value)> EvidenceRows(Session s)
