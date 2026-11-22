@@ -31,7 +31,7 @@
         <Button x:Name="PauseButton" Content="一時停止" Click="Pause_Click"/>
         <Button Content="停止" Click="Stop_Click"/>
         <TextBlock x:Name="Count" Text="0 枚" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="40"/>
-        <!-- ピン。アイコンは Windows 同梱のフォントの線画(11 は Segoe Fluent Icons、10 は Segoe MDL2 Assets。どちらも E718) -->
+        <!-- ピン。アイコンは Windows 同梱のフォント(11 は Segoe Fluent Icons、10 は Segoe MDL2 Assets)。外すと線画の E718、留めると針が刺さって隠れた E842。E840 は 11 では E718 と同じ絵なので使わない -->
         <ToggleButton x:Name="PinButton" Margin="4,0,0,0" Checked="Pin_Changed" Unchecked="Pin_Changed" ToolTip="バーを引っ込めない"
                       AutomationProperties.AutomationId="PinButton" AutomationProperties.Name="バーを引っ込めない">
             <ToggleButton.Style>
@@ -52,6 +52,7 @@
                                     <Trigger Property="IsChecked" Value="True">
                                         <Setter TargetName="Face" Property="Background" Value="#FFE04040"/>
                                         <Setter TargetName="Icon" Property="Foreground" Value="White"/>
+                                        <Setter TargetName="Icon" Property="Text" Value="&#xE842;"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>

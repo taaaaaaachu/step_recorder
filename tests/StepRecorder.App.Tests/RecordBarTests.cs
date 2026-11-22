@@ -173,13 +173,17 @@ public sealed class RecordBarTests : IDisposable
         Show();
         Snapshot("pin-off");
         var pin = (TogglePattern)Find(hwnd, "PinButton").GetCurrentPattern(TogglePattern.Pattern);
+        string Icon() => On(b => ((System.Windows.Controls.TextBlock)b.PinButton.Template.FindName("Icon", b.PinButton)).Text);
+        Assert.Equal("\uE718", Icon());
         pin.Toggle(); // 読み上げなどからの押し方(Click は上がらない)でも効くこと
         Assert.Equal(ToggleState.On, pin.Current.ToggleState); // 読み上げでも状態が分かる
         Wait(4500); // マウスが無ければ、とうに引っ込んでいる時間
         Assert.True(IsOpen(), "留めたのに引っ込んだ");
+        Assert.Equal("\uE842", Icon()); // 押し込んだ形
         Snapshot("pin-on");
 
         pin.Toggle();
+        Assert.Equal("\uE718", Icon());
         WaitClosed();
     }
 
