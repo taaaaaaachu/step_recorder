@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows.Media.Imaging;
 using StepRecorder.Core;
 using Vortice.MediaFoundation;
 
@@ -113,5 +114,53 @@ public sealed class EncodeTests : IDisposable
         VideoClips.Cut(path, TimeSpan.FromSeconds(0.8), TimeSpan.FromSeconds(2.8), null, cut);
         foreach (var k in new[] { 0, 3, 8, 11, 17, 22, 26 })
             Assert.Equal(Expected(0.8 + k / 15.0), IndexAt(cut, (k + 1) / 15.0));
+    }
+
+    /// <summary>倍速・スローの切り出しは、長さが速さの分だけ変わり、中身もその時刻のフレームになる。</summary>
+    [E2EFact]
+    public async Task 倍速とスローで切り出せる()
+    {
+        const int w = 320, h = 240;
+        static byte Shade(int i) => (byte)(20 + i * 3);
+        var path = Path.Combine(dir, "speed-src.mp4");
+        await VideoRecorder.Encode(path, w, h, Enumerable.Range(0, 75).Select(i => // 5 秒
+        {
+            var px = new byte[w * h * 4];
+            Array.Fill(px, Shade(i));
+            return (Nv12.FromBgra(px, w, h), TimeSpan.FromSeconds(i / 15.0));
+        }));
+        var (start, end) = (TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(4)); // 3 秒の区間
+        // 時刻 sec に再生で出るフレーム(mp4 の時刻は 1 枚分うしろ。同じ近さなら前)
+        static int Shown(double sec) => Math.Clamp((int)Math.Ceiling(sec * 15 - 1.5 - 1e-6), 0, 74);
+
+        foreach (var speed in new[] { 0.25, 0.5, 0.75, 1.5, 2, 8 })
+        {
+            var mp4 = Path.Combine(dir, $"speed-{speed}.mp4");
+            var reported = new List<double>();
+            VideoClips.Cut(path, start, end, null, mp4, reported.Add, speed);
+            Assert.InRange(VideoClips.Info(mp4).Duration.TotalSeconds, 3 / speed - 0.07, 3 / speed + 0.14);
+            Assert.All(reported, v => Assert.InRange(v, 0, 1));
+            var frames = (int)Math.Ceiling(3 / speed * 15 - 1e-6);
+            foreach (var k in new[] { 0, frames / 2, frames - 2 })
+            {
+                var px = new byte[w * h * 4];
+                VideoClips.Frame(mp4, TimeSpan.FromSeconds((k + 1) / 15.0)).CopyPixels(px, w * 4, 0);
+                var expected = Shade(Shown(1 + k / 15.0 * speed));
+                Assert.InRange(px[(h / 2 * w + w / 2) * 4 + 1], expected - 4, expected + 4); // ±1 枚
+            }
+
+            var gif = Path.Combine(dir, $"speed-{speed}.gif");
+            VideoClips.ToGif(path, start, end, null, gif, null, speed);
+            using var stream = File.OpenRead(gif);
+            var decoder = new GifBitmapDecoder(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+            var delays = decoder.Frames.Select(f => (int)(ushort)((BitmapMetadata)f.Metadata).GetQuery("/grctlext/Delay")).ToList();
+            Assert.InRange(delays.Sum() / 100.0, 3 / speed - 0.05, 3 / speed + 0.14);
+            Assert.InRange(decoder.Frames.Count, 1, 31); // スローでも等速の 30 コマより増えない
+        }
+
+        // ごく短い区間を 8 倍速にして 1 コマになっても書き出せる
+        var tiny = Path.Combine(dir, "tiny.mp4");
+        VideoClips.Cut(path, start, start + TimeSpan.FromSeconds(0.2), null, tiny, null, 8);
+        Assert.Equal(w, VideoClips.Frame(tiny, TimeSpan.Zero).PixelWidth);
     }
 }

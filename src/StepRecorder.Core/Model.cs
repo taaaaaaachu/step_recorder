@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text.Json.Serialization;
+
 namespace StepRecorder.Core;
 
 /// <summary>画像内のピクセル座標で表す矩形。</summary>
@@ -60,6 +63,11 @@ public sealed class Step
     /// <summary>動画のうち使う区間。null なら最初から/最後まで。</summary>
     public TimeSpan? VideoStart { get; set; }
     public TimeSpan? VideoEnd { get; set; }
+    /// <summary>動画のステップの再生の速さ(2 なら倍速、0.5 なら半分)。null なら等速。使うときは Speed を見る。</summary>
+    public double? VideoSpeed { get; set; }
+    /// <summary>実際に使う速さ。session.json は手で直せるので、0 や極端な値は範囲に収める。</summary>
+    [JsonIgnore]
+    public double Speed => Math.Clamp(VideoSpeed ?? 1, PlaybackSpeed.Choices[0], PlaybackSpeed.Choices[^1]);
     /// <summary>録画モードで、このステップを撮ったときの全編の動画上の時刻。</summary>
     public TimeSpan? VideoTime { get; set; }
 }
@@ -73,6 +81,15 @@ public sealed class Session
     public List<Step> Steps { get; set; } = [];
     /// <summary>録画モードで録った全編の動画(例: "video.mp4")。録画モードでなければ null。</summary>
     public string? VideoFile { get; set; }
+}
+
+/// <summary>動画のステップの再生の速さ。</summary>
+public static class PlaybackSpeed
+{
+    /// <summary>選べる速さ(遅い順)。</summary>
+    public static readonly double[] Choices = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 8];
+
+    public static string Label(double speed) => speed == 1 ? "等速" : $"{speed.ToString("0.##", CultureInfo.InvariantCulture)} 倍速";
 }
 
 /// <summary>配布用に書き出すときの、動画のステップの形式。</summary>

@@ -67,7 +67,7 @@ public static class Export
             // GIF は画像としてそのまま、mp4 はポスター画像に動画へのリンクを添える
             if (st.VideoFile?.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) == true) sb.Append($"![{sec.Title}]({st.VideoFile})\n");
             else sb.Append($"![{sec.Title}]({st.ImageFile})\n");
-            if (st.VideoFile?.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) == false) sb.Append($"\n[▶ 動画を再生]({ClipSource(st)})\n");
+            if (st.VideoFile?.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) == false) sb.Append($"\n[▶ 動画を再生{(st.Speed == 1 ? "" : $"({PlaybackSpeed.Label(st.Speed)})")}]({ClipSource(st)})\n");
             if (sec.Lines.Count > 0) sb.Append('\n');
             foreach (var (line, n) in sec.Lines.Select((x, n) => (x, n + 1)))
                 sb.Append($"{n}. {line}\n");
@@ -164,6 +164,14 @@ public static class Export
               const rewind = () => { if (v.ended || v.currentTime >= end - 0.05) v.currentTime = start; };
               v.addEventListener('pause', rewind);
               v.addEventListener('ended', rewind);
+              // ステップの速さ。defaultPlaybackRate にも入れないと、読み込みで等速に戻る
+              if (v.dataset.speed) v.defaultPlaybackRate = v.playbackRate = +v.dataset.speed;
+              // ブラウザが区間の終わりに気づくのは 0.1 秒ほど遅く、8 倍速だと区間の外が 0.7 秒分見えてしまう。描画ごとに見て止める
+              const stopAtEnd = () => {
+                if (v.paused) return;
+                if (v.currentTime >= end) v.pause(); else requestAnimationFrame(stopAtEnd);
+              };
+              v.addEventListener('play', () => { if (v.currentTime < end) requestAnimationFrame(stopAtEnd); });
             });
             // 画面一覧モードで、同じ画面のステップを前後に切り替える(説明の行をクリックしてもそのステップへ)
             document.querySelectorAll('section').forEach(sec => {
@@ -233,8 +241,9 @@ public static class Export
         var style = st.Crop == null ? "" :
             $" style=\"object-view-box: inset({c.Y}px {w - c.X - c.Width}px {h - c.Y - c.Height}px {c.X}px); aspect-ratio: {c.Width} / {c.Height}\"";
         // 区間の開始・終了は、再生し終えたら区間の最初に戻すために持たせる(スクリプトで使う)
+        var speed = st.Speed == 1 ? "" : $" data-speed=\"{st.Speed.ToString("0.##", CultureInfo.InvariantCulture)}\"";
         var range = (st.VideoStart is { } a ? $" data-start=\"{Seconds(a)}\"" : "") + (st.VideoEnd is { } b ? $" data-end=\"{Seconds(b)}\"" : "");
-        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{style}></video>\n");
+        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{speed}{style}></video>\n");
     }
 
     /// <summary>動画のステップの参照先。区間があればメディアフラグメントを付ける。</summary>
@@ -258,7 +267,7 @@ public static class Export
     /// <summary>
     /// 配布用に、outDir へ index.html・steps.md と、使っている画像・動画だけを書き出す。
     /// session.json と全編の動画は含めない(あとから編集はできない)。
-    /// 動画のステップは makeClip(ステップ, 動画の書き出し先, ポスター画像の書き出し先) で、区間とトリミングを反映した
+    /// 動画のステップは makeClip(ステップ, 動画の書き出し先, ポスター画像の書き出し先) で、区間・速さ・トリミングを反映した
     /// ファイルにしてもらう(ポスターは mp4 のときだけ。GIF では null)。
     /// </summary>
     public static void ExportForDistribution(Session s, string srcDir, string outDir, GroupMode mode, ClipFormat format,
@@ -276,7 +285,7 @@ public static class Export
                 var poster = $"clips/{st.Id:D4}.png";
                 makeClip(s.Steps.First(x => x.Id == st.Id), Path.Combine(outDir, clip), gif ? null : Path.Combine(outDir, poster));
                 if (st.Crop is { } c) (st.ImageWidth, st.ImageHeight) = (c.Width, c.Height); // トリミング済みのファイルになる
-                (st.VideoFile, st.ImageFile, st.VideoStart, st.VideoEnd, st.Crop) = (clip, poster, null, null, null);
+                (st.VideoFile, st.ImageFile, st.VideoStart, st.VideoEnd, st.VideoSpeed, st.Crop) = (clip, poster, null, null, null, null);
                 continue;
             }
             var to = Path.Combine(outDir, st.ImageFile);

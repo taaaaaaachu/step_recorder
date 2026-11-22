@@ -89,6 +89,8 @@
                 <Button Content="選択した枠を削除" Click="DeleteHighlight_Click" ToolTip="Delete"/>
                 <Button Content="トリミング解除" Click="ClearCrop_Click"/>
                 <Button x:Name="PlayButton" Content="▶ 再生" Click="Play_Click" Visibility="Collapsed"/>
+                <ComboBox x:Name="SpeedBox" MinWidth="110" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" SelectionChanged="Speed_SelectionChanged"
+                          AutomationProperties.Name="再生の速さ" ToolTip="この動画のステップの速さ。再生・HTML・配布用の書き出しに反映されます"/>
                 <Separator Margin="6,2,12,2"/>
                 <Button Content="−" Click="ZoomOut_Click" ToolTip="縮小 (Ctrl+ホイール / Ctrl+-)" MinWidth="30"/>
                 <TextBlock x:Name="ZoomLabel" AutomationProperties.AutomationId="ZoomLabel" Text="100%" MinWidth="44" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,6,0"/>

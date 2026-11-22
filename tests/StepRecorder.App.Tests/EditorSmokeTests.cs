@@ -330,10 +330,41 @@ public sealed class EditorSmokeTests : IDisposable
         }
         // 0.8 秒の区間を終えると、自分で止まる
         Assert.True(Until(() => AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "▶ 再生")) != null, 4000), "区間の終わりで止まらない");
+        // 速さを変えられて、元に戻せて、保存される
+        var speedBox = Find(editor, "SpeedBox");
+        void ChooseSpeed(string label)
+        {
+            var expand = (ExpandCollapsePattern)speedBox.GetCurrentPattern(ExpandCollapsePattern.Pattern);
+            expand.Expand();
+            Wait(300);
+            ((SelectionItemPattern)speedBox.FindFirst(TreeScope.Descendants, new AndCondition(
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
+                new PropertyCondition(AutomationElement.NameProperty, label))).GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+            expand.Collapse();
+            Wait(600);
+        }
+        string SelectedSpeed() => ((SelectionPattern)speedBox.GetCurrentPattern(SelectionPattern.Pattern)).Current.GetSelection()[0].Current.Name;
+        bool Listed(string mark) => Find(editor, "Steps").FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text))
+            .Cast<AutomationElement>().Any(t => t.Current.Name.Contains(mark));
+
+        ChooseSpeed("0.25 倍速");
+        Assert.True(Listed("▶ 0.25 倍速"), "一覧に速さが付かない");
+        Shot("editor-speed");
+        // 0.8 秒の区間が 3.2 秒かかる
+        Press("▶ 再生");
+        Wait(1000);
+        Assert.NotNull(AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "■ 停止")));
+        Assert.True(Until(() => AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "▶ 再生")) != null, 5000), "スローの再生が終わらない");
+        Press("元に戻す");
+        Assert.Equal("等速", SelectedSpeed());
+        Assert.False(Listed("▶ 0.25 倍速"), "元に戻しても一覧に速さが残る");
+        ChooseSpeed("2 倍速");
+
         PressKeys(editor, 0x11, 0x53); // Ctrl+S
         Wait(800);
 
         var saved = SessionStore.Load(dir);
+        Assert.Equal(2, saved.Steps[1].Speed);
         Assert.Equal([0.5, 1.0, 2.0], saved.Steps.Select(s => Math.Round(s.VideoTime!.Value.TotalSeconds, 1))); // 時刻の順に並ぶ
         var clip = saved.Steps[1];
         Assert.Equal(("video.mp4", CaptureTrigger.Video), (clip.VideoFile, clip.Trigger));
@@ -355,14 +386,14 @@ public sealed class EditorSmokeTests : IDisposable
             if (format == ClipFormat.Mp4)
             {
                 var (duration, w, h) = VideoE2ETests.VideoInfo(Path.Combine(outDir, "clips", "0003.mp4"));
-                Assert.InRange(duration.TotalSeconds, 0.6, 1.0);
+                Assert.InRange(duration.TotalSeconds, 0.3, 0.6); // 0.8 秒の区間の 2 倍速
                 Assert.Equal((200, 100), (w, h));
                 Assert.True(File.Exists(Path.Combine(outDir, "clips", "0003.png")));
             }
             else
             {
                 var gif = new GifBitmapDecoder(new Uri(Path.Combine(outDir, "clips", "0003.gif")), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
-                Assert.Equal(8, gif.Frames.Count); // 10fps で 0.8 秒
+                Assert.Equal(4, gif.Frames.Count); // 10fps で 0.8 秒の 2 倍速
                 Assert.Equal(200, gif.Frames[0].PixelWidth);
             }
         }

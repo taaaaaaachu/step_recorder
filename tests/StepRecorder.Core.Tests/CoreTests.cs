@@ -294,6 +294,45 @@ public class VideoExportTests
     }
 
     [Fact]
+    public void 速さはHtmlとMarkdownに入り_等速なら何も付かない()
+    {
+        var s = Sample();
+        Assert.DoesNotContain(" data-speed=", Export.ToHtml(s, GroupMode.Sequence));
+        s.Steps[1].VideoSpeed = 0.5;
+        Assert.Contains("data-start=\"1.5\" data-end=\"4\" data-speed=\"0.5\" style=", Export.ToHtml(s, GroupMode.Sequence));
+        Assert.Contains("requestAnimationFrame(stopAtEnd)", Export.ToHtml(s, GroupMode.Sequence)); // 倍速でも区間を越えない
+        Assert.Contains("[▶ 動画を再生(0.5 倍速)](video.mp4#t=1.5,4)", Export.ToMarkdown(s, GroupMode.Sequence));
+    }
+
+    [Theory]
+    [InlineData(null, 1.0)]
+    [InlineData(2.0, 2.0)]
+    [InlineData(0.0, 0.25)] // 手で直した session.json。0 のままだと書き出しが終わらない
+    [InlineData(-3.0, 0.25)]
+    [InlineData(100.0, 8.0)]
+    public void 速さは使える範囲に収める(double? saved, double used) => Assert.Equal(used, new Step { VideoSpeed = saved }.Speed);
+
+    [Theory]
+    [InlineData(1.0, "等速")]
+    [InlineData(0.25, "0.25 倍速")]
+    [InlineData(2.0, "2 倍速")]
+    public void 速さの表示(double speed, string label) => Assert.Equal(label, PlaybackSpeed.Label(speed));
+
+    [Fact]
+    public void 速さは等速なら保存せず_元に戻せる()
+    {
+        var s = Sample();
+        string Json() => System.Text.Json.JsonSerializer.Serialize(s, SessionStore.Options);
+        Assert.DoesNotContain("speed", Json(), StringComparison.OrdinalIgnoreCase); // 計算値の Speed も書かない
+        var history = new SessionHistory();
+        history.Push(s);
+        s.Steps[1].VideoSpeed = 2;
+        Assert.Contains("\"videoSpeed\": 2", Json());
+        Assert.Equal(2, SessionStore.Clone(s).Steps[1].Speed);
+        Assert.Equal(1, history.Undo()!.Steps[1].Speed);
+    }
+
+    [Fact]
     public void Markdownでは動画へのリンクを添える()
     {
         var md = Export.ToMarkdown(Sample(), GroupMode.Sequence);
@@ -310,6 +349,7 @@ public class VideoExportTests
         try
         {
             var s = Sample();
+            s.Steps[1].VideoSpeed = 2;
             Directory.CreateDirectory(Path.Combine(src, "images"));
             foreach (var f in new[] { "images/0001.png", "images/0002.png", "video.mp4" }) File.WriteAllText(Path.Combine(src, f), f);
             SessionStore.Save(s, src);
@@ -319,6 +359,7 @@ public class VideoExportTests
             {
                 calls.Add((st.Id, Path.GetRelativePath(dst, clip), poster == null ? null : Path.GetRelativePath(dst, poster)));
                 Assert.Equal(TimeSpan.FromSeconds(1.5), st.VideoStart); // 元のステップ(区間・トリミング付き)が渡る
+                Assert.Equal(2, st.Speed);
                 Directory.CreateDirectory(Path.GetDirectoryName(clip)!);
                 File.WriteAllText(clip, "");
             });
@@ -336,6 +377,9 @@ public class VideoExportTests
                 : "<video class=\"clip\" controls preload=\"metadata\" src=\"clips/0002.mp4\" poster=\"clips/0002.png\" width=\"100\"></video>", html);
             var md = File.ReadAllText(Path.Combine(dst, Export.MarkdownFile));
             Assert.Contains(format == ClipFormat.Gif ? "![メイン](clips/0002.gif)" : "[▶ 動画を再生](clips/0002.mp4)", md);
+            Assert.DoesNotContain(" data-speed=", html); // 速さはファイルに反映済みなので、二重に掛けない
+            Assert.DoesNotContain("倍速", md);
+            Assert.Equal(2, s.Steps[1].Speed);
             Assert.Equal("video.mp4", s.VideoFile); // 元のセッションは変えない
         }
         finally

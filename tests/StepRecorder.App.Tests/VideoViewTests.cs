@@ -76,6 +76,32 @@ public sealed class VideoViewTests : IDisposable
     }
 
     [E2EFact]
+    public async Task 速さを変えて再生し_区間の終わりを越えない()
+    {
+        var path = await MakeVideo();
+        OnSta(() =>
+        {
+            var view = new VideoView();
+            var ended = 0;
+            view.Ended += () => ended++;
+
+            view.Open(path, TimeSpan.Zero, speed: 0.25);
+            Assert.True(PumpUntil(() => view.Source != null), "最初のフレームが出ない");
+            view.Play();
+            PumpUntil(() => false, 1200);
+            Assert.InRange(view.Position.TotalSeconds, 0.2, 0.4); // 1.2 秒で 0.3 秒分
+
+            var end = TimeSpan.FromSeconds(1.2);
+            view.Open(path, TimeSpan.FromSeconds(0.2), end, 8); // 0.125 秒で終わる
+            view.Play();
+            Assert.True(PumpUntil(() => ended > 0, 3000), "区間の終わりで終わらない");
+            Assert.Equal(end, view.Position);
+            Assert.True(PumpUntil(() => Math.Abs(Pixels(view).Gray - (240 - 17 * 6)) <= 3), "区間の最後のフレームで止まっていない");
+            view.Close();
+        });
+    }
+
+    [E2EFact]
     public void 開けない動画は落ちずに知らせる() => OnSta(() =>
     {
         var view = new VideoView();

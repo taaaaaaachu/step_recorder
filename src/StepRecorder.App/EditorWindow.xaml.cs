@@ -51,6 +51,7 @@ public partial class EditorWindow : Window
         Title = $"step_recorder 編集 — {dir}";
         loading = true;
         Group.SelectedIndex = (int)mode;
+        foreach (var speed in PlaybackSpeed.Choices) SpeedBox.Items.Add(PlaybackSpeed.Label(speed));
         loading = false;
         ClipFormatBox.SelectedIndex = (int)Settings.Load(Settings.DefaultPath).ClipFormat;
         if (session.VideoFile != null) OpenFullVideo();
@@ -63,13 +64,16 @@ public partial class EditorWindow : Window
     void RefreshList(int select)
     {
         var items = session.Steps.Select((s, i) =>
-            new StepView(s, Thumb(s), $"{i + 1}. {s.ScreenName}{(s.VideoFile != null ? "  ▶ 動画" : "")}", s.Description, Export.ScreenOf(s))).ToList();
+            new StepView(s, Thumb(s), $"{i + 1}. {s.ScreenName}{VideoMark(s)}", s.Description, Export.ScreenOf(s))).ToList();
         Steps.ItemsSource = items;
         var view = CollectionViewSource.GetDefaultView(items);
         if ((GroupMode)Group.SelectedIndex == GroupMode.ByScreen) view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(StepView.Screen)));
         if (items.Count > 0) Steps.SelectedItem = items[Math.Clamp(select, 0, items.Count - 1)];
         else ShowStep(null);
     }
+
+    static string VideoMark(Step s) =>
+        s.VideoFile == null ? "" : s.Speed == 1 ? "  ▶ 動画" : $"  ▶ {PlaybackSpeed.Label(s.Speed)}"; // 一覧の幅に収まる長さに
 
     /// <summary>選んでいるステップの、session.Steps での位置(一覧の表示順とは限らない)。</summary>
     int CurrentIndex => Current is { } s ? session.Steps.IndexOf(s) : -1;
@@ -103,12 +107,13 @@ public partial class EditorWindow : Window
         loading = true;
         ScreenName.Text = s?.ScreenName ?? "";
         Description.Text = s?.Description ?? "";
+        SpeedBox.SelectedIndex = Array.IndexOf(PlaybackSpeed.Choices, s?.Speed ?? 1);
         ScreenName.IsEnabled = Description.IsEnabled = s != null;
         loading = false;
         selectedHighlight = -1;
         LeaveVideoView();
         StopClip();
-        PlayButton.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
+        PlayButton.Visibility = SpeedBox.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
         ToolAdd.IsEnabled = s?.VideoFile == null; // 動画には強調枠を付けない
         if (s?.VideoFile != null && ToolAdd.IsChecked == true) ToolSelect.IsChecked = true;
         if (s?.VideoTime is { } t && session.VideoFile != null) MoveSlider(t); // タイムラインもその時刻へ
@@ -424,12 +429,24 @@ public partial class EditorWindow : Window
         if (clipPlaying) { StopClip(); return; }
         if (Current is not { VideoFile: { } video } s) return;
         if (videoView) ShowStep(s); // 全編を見ていたら、そのステップの表示に戻してから
-        Player.Open(FullPath(video), s.VideoStart ?? TimeSpan.Zero);
+        Player.Open(FullPath(video), s.VideoStart ?? TimeSpan.Zero, s.VideoEnd, s.Speed);
         Player.Visibility = Visibility.Visible;
         Player.Play();
         clipPlaying = true;
         PlayButton.Content = "■ 停止";
-        StartPlayTimer();
+    }
+
+    /// <summary>動画のステップの速さを変える。再生中なら、その速さで区間の最初から再生し直す。</summary>
+    void Speed_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || SpeedBox.SelectedIndex < 0 || Current is not { VideoFile: not null } s) return;
+        var speed = PlaybackSpeed.Choices[SpeedBox.SelectedIndex];
+        if (speed == s.Speed) return;
+        var replay = clipPlaying;
+        Checkpoint();
+        s.VideoSpeed = speed == 1 ? null : speed;
+        RefreshList(CurrentIndex); // 一覧の表示を変える(再生は止まる)
+        if (replay) Play_Click(this, new());
     }
 
     void StopClip()
@@ -464,7 +481,6 @@ public partial class EditorWindow : Window
 
     void OnPlayTick()
     {
-        if (clipPlaying && Current?.VideoEnd is { } end && Player.Position >= end) StopClip();
         if (fullPlaying) MoveSlider(Player.Position);
     }
 
@@ -483,7 +499,7 @@ public partial class EditorWindow : Window
         if (videoView) return;
         StopClip();
         videoView = true;
-        Picture.Visibility = Overlay.Visibility = PlayButton.Visibility = Visibility.Collapsed;
+        Picture.Visibility = Overlay.Visibility = PlayButton.Visibility = SpeedBox.Visibility = Visibility.Collapsed;
         SetStageSize(fullSize.Width, fullSize.Height);
         Player.Open(FullPath(session.VideoFile!), SliderTime); // 開くだけ。シークバーの位置で止まっている
         Player.Visibility = Visibility.Visible;

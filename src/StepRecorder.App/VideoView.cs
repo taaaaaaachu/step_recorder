@@ -27,10 +27,12 @@ sealed class VideoView : Image
     Playback? playback;
     WriteableBitmap? bitmap;
     TimeSpan origin;
-    TimeSpan? duration; // 最初のフレームが出るまで null
+    TimeSpan? duration; // 再生を終える時刻(区間の終わりか、動画の終わり)。最初のフレームが出るまで null
+    TimeSpan? stopAt;
+    double speed = 1;
     bool playing;
 
-    /// <summary>最後まで再生した。</summary>
+    /// <summary>最後(区間の終わりを指定していればそこ)まで再生した。</summary>
     public event Action? Ended;
 
     /// <summary>開けなかった・復号できなかった。</summary>
@@ -46,7 +48,7 @@ sealed class VideoView : Image
     {
         get
         {
-            var at = origin + clock.Elapsed;
+            var at = origin + clock.Elapsed * speed;
             return duration is { } end && at > end ? end : at;
         }
         set
@@ -58,11 +60,16 @@ sealed class VideoView : Image
         }
     }
 
-    /// <summary>at のフレームを出して止まった状態で開く。開き終える前に再生・シークしてよい。</summary>
-    public void Open(string path, TimeSpan at)
+    /// <summary>
+    /// at のフレームを出して止まった状態で開く。開き終える前に再生・シークしてよい。
+    /// end を渡すとそこで再生を終える。speed は再生の速さ。
+    /// </summary>
+    public void Open(string path, TimeSpan at, TimeSpan? end = null, double speed = 1)
     {
         Close();
         origin = at;
+        stopAt = end;
+        this.speed = speed;
         var opened = playback = new Playback(path, at);
         new Thread(() => DecodeLoop(opened)) { IsBackground = true, Name = "video-view" }.Start();
     }
@@ -96,7 +103,8 @@ sealed class VideoView : Image
         timer.Stop();
         clock.Reset();
         origin = TimeSpan.Zero;
-        duration = null;
+        duration = stopAt = null;
+        speed = 1;
         bitmap = null;
         Source = null;
     }
@@ -152,7 +160,7 @@ sealed class VideoView : Image
         if (bitmap == null) Source = bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgr32, null);
         bitmap.WritePixels(new Int32Rect(0, 0, width, height), bgra, width * 4, 0);
         if (duration != null) return;
-        duration = length;
+        duration = stopAt is { } end && end < length ? end : length;
         if (playing) clock.Start();
     }
 }
