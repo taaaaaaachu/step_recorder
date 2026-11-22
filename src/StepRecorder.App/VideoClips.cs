@@ -29,11 +29,11 @@ static class VideoClips
     }
 
     /// <summary>
-    /// start〜end(null なら最後まで)を、crop の範囲だけ、speed 倍の速さの mp4 に切り出す。
+    /// start〜end(null なら最後まで)を、crop の範囲だけの mp4 に切り出す。速さは変えない(再生する側で変える)。
     /// MediaTranscoder の区間指定(ファイルからの変換)は E_POINTER で失敗するので、
     /// フレームを1枚ずつ取り出して録画と同じ方法でエンコードし直す。
     /// </summary>
-    public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null, double speed = 1)
+    public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null)
     {
         using var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
@@ -42,11 +42,10 @@ static class VideoClips
         {
             for (var i = 0; ; i++)
             {
-                var t = TimeSpan.FromSeconds((double)i / VideoRecorder.Fps); // 書き出す動画の上の時刻
-                var at = t * speed; // 元の区間の上の時刻。速ければ間引かれ、遅ければ同じフレームが続く
-                if (start + at >= stop) yield break;
-                progress?.Invoke(at / (stop - start));
-                yield return (ToNv12(Crop(reader.Frame(start + at), crop), w, h), t);
+                var t = TimeSpan.FromSeconds((double)i / VideoRecorder.Fps);
+                if (start + t >= stop) yield break;
+                progress?.Invoke(t / (stop - start));
+                yield return (ToNv12(Crop(reader.Frame(start + t), crop), w, h), t);
             }
         }
         Task.Run(() => VideoRecorder.Encode(dst, w, h, Frames())).GetAwaiter().GetResult();
@@ -79,7 +78,7 @@ static class VideoClips
     }
 
     /// <summary>
-    /// 配布用の書き出しで、動画のステップを区間・速さ・トリミングを反映したファイル(と、mp4 ならポスター画像)にする。
+    /// 配布用の書き出しで、動画のステップを区間・トリミング(GIF なら速さも)を反映したファイル(と、mp4 ならポスター画像)にする。
     /// progress には進み具合(0〜1)を知らせる。
     /// </summary>
     public static void ExportClip(string dir, Step st, ClipFormat format, string clip, string? poster, Action<double>? progress = null)
@@ -87,7 +86,7 @@ static class VideoClips
         var src = Path.Combine(dir, st.VideoFile!);
         var start = st.VideoStart ?? TimeSpan.Zero;
         if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip, progress, st.Speed);
-        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress, st.Speed);
+        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress);
         if (poster != null) WindowCapture.SavePng(Frame(clip, TimeSpan.Zero), poster);
     }
 

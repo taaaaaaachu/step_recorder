@@ -386,7 +386,8 @@ public sealed class EditorSmokeTests : IDisposable
             if (format == ClipFormat.Mp4)
             {
                 var (duration, w, h) = VideoE2ETests.VideoInfo(Path.Combine(outDir, "clips", "0003.mp4"));
-                Assert.InRange(duration.TotalSeconds, 0.3, 0.6); // 0.8 秒の区間の 2 倍速
+                Assert.InRange(duration.TotalSeconds, 0.6, 1.0); // mp4 は等速のまま。2 倍速にするのは HTML のプレーヤー
+                Assert.Contains("<option value=\"2\" selected>", File.ReadAllText(Path.Combine(outDir, Export.HtmlFile)));
                 Assert.Equal((200, 100), (w, h));
                 Assert.True(File.Exists(Path.Combine(outDir, "clips", "0003.png")));
             }

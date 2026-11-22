@@ -89,6 +89,8 @@ public static class Export
             section { margin: 2.5em 0; }
             svg.shot { display: block; max-width: 100%; height: auto; border: 1px solid #ccc; cursor: zoom-in; }
             .clip { display: block; max-width: 100%; height: auto; border: 1px solid #ccc; background: #000; }
+            label.rate { display: block; width: fit-content; margin: .4em 0 0; color: #555; }
+            label.rate select { font: inherit; }
             svg.shot rect { fill: none; stroke: #e00; stroke-width: 3; vector-effect: non-scaling-stroke; }
             dialog { padding: 0; border: none; max-width: 98vw; max-height: 98vh; }
             dialog svg.shot { max-width: 98vw; max-height: 96vh; width: auto; cursor: zoom-out; border: none; }
@@ -164,8 +166,17 @@ public static class Export
               const rewind = () => { if (v.ended || v.currentTime >= end - 0.05) v.currentTime = start; };
               v.addEventListener('pause', rewind);
               v.addEventListener('ended', rewind);
-              // ステップの速さ。defaultPlaybackRate にも入れないと、読み込みで等速に戻る
-              if (v.dataset.speed) v.defaultPlaybackRate = v.playbackRate = +v.dataset.speed;
+              // 速さの選択。最初はステップに指定された速さ。defaultPlaybackRate にも入れないと、読み込みで等速に戻る
+              const rate = v.nextElementSibling.querySelector('select');
+              const applyRate = () => { v.defaultPlaybackRate = v.playbackRate = +rate.value; };
+              applyRate();
+              rate.addEventListener('change', applyRate);
+              // プレーヤー自体のメニューで変えられたら、選択の表示を合わせる(選択肢に無い速さなら足す)
+              v.addEventListener('ratechange', () => {
+                const now = String(v.playbackRate);
+                if (![...rate.options].some(o => o.value === now)) rate.add(new Option(`${now} 倍速`, now));
+                rate.value = now;
+              });
               // ブラウザが区間の終わりに気づくのは 0.1 秒ほど遅く、8 倍速だと区間の外が 0.7 秒分見えてしまう。描画ごとに見て止める
               const stopAtEnd = () => {
                 if (v.paused) return;
@@ -241,9 +252,21 @@ public static class Export
         var style = st.Crop == null ? "" :
             $" style=\"object-view-box: inset({c.Y}px {w - c.X - c.Width}px {h - c.Y - c.Height}px {c.X}px); aspect-ratio: {c.Width} / {c.Height}\"";
         // 区間の開始・終了は、再生し終えたら区間の最初に戻すために持たせる(スクリプトで使う)
-        var speed = st.Speed == 1 ? "" : $" data-speed=\"{st.Speed.ToString("0.##", CultureInfo.InvariantCulture)}\"";
         var range = (st.VideoStart is { } a ? $" data-start=\"{Seconds(a)}\"" : "") + (st.VideoEnd is { } b ? $" data-end=\"{Seconds(b)}\"" : "");
-        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{speed}{style}></video>\n");
+        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{style}></video>\n");
+        AppendRate(sb, st.Speed);
+    }
+
+    /// <summary>動画の速さの選択。最初に選ばれているのがステップに指定された速さ。</summary>
+    static void AppendRate(StringBuilder sb, double speed)
+    {
+        static string Value(double v) => v.ToString(CultureInfo.InvariantCulture);
+        // 手で直した session.json の、選択肢に無い速さも出す
+        var choices = PlaybackSpeed.Choices.Append(speed).Distinct().Order();
+        sb.Append("<label class=\"rate\">再生の速さ <select autocomplete=\"off\">");
+        foreach (var v in choices)
+            sb.Append($"<option value=\"{Value(v)}\"{(v == speed ? " selected" : "")}>{PlaybackSpeed.Label(v)}</option>");
+        sb.Append("</select></label>\n");
     }
 
     /// <summary>動画のステップの参照先。区間があればメディアフラグメントを付ける。</summary>
@@ -267,7 +290,7 @@ public static class Export
     /// <summary>
     /// 配布用に、outDir へ index.html・steps.md と、使っている画像・動画だけを書き出す。
     /// session.json と全編の動画は含めない(あとから編集はできない)。
-    /// 動画のステップは makeClip(ステップ, 動画の書き出し先, ポスター画像の書き出し先) で、区間・速さ・トリミングを反映した
+    /// 動画のステップは makeClip(ステップ, 動画の書き出し先, ポスター画像の書き出し先) で、区間・トリミング(GIF なら速さも)を反映した
     /// ファイルにしてもらう(ポスターは mp4 のときだけ。GIF では null)。
     /// </summary>
     public static void ExportForDistribution(Session s, string srcDir, string outDir, GroupMode mode, ClipFormat format,
@@ -285,7 +308,8 @@ public static class Export
                 var poster = $"clips/{st.Id:D4}.png";
                 makeClip(s.Steps.First(x => x.Id == st.Id), Path.Combine(outDir, clip), gif ? null : Path.Combine(outDir, poster));
                 if (st.Crop is { } c) (st.ImageWidth, st.ImageHeight) = (c.Width, c.Height); // トリミング済みのファイルになる
-                (st.VideoFile, st.ImageFile, st.VideoStart, st.VideoEnd, st.VideoSpeed, st.Crop) = (clip, poster, null, null, null, null);
+                (st.VideoFile, st.ImageFile, st.VideoStart, st.VideoEnd, st.Crop) = (clip, poster, null, null, null);
+                if (gif) st.VideoSpeed = null; // GIF はプレーヤーが無いので焼き込み済み。mp4 は等速のままで、HTML のプレーヤーが変える
                 continue;
             }
             var to = Path.Combine(outDir, st.ImageFile);

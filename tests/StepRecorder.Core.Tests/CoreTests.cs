@@ -294,12 +294,22 @@ public class VideoExportTests
     }
 
     [Fact]
-    public void 速さはHtmlとMarkdownに入り_等速なら何も付かない()
+    public void Htmlの動画に速さの選択が付き_ステップの速さが初期値になる()
     {
         var s = Sample();
-        Assert.DoesNotContain(" data-speed=", Export.ToHtml(s, GroupMode.Sequence));
+        var html = Export.ToHtml(s, GroupMode.Sequence);
+        Assert.Contains("</video>\n<label class=\"rate\">再生の速さ <select autocomplete=\"off\">", html); // スクリプトが動画の次の要素として探す
+        Assert.Contains("<option value=\"0.25\">0.25 倍速</option>", html);
+        Assert.Contains("<option value=\"1\" selected>等速</option>", html);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<label class=\"rate\">")); // 静止画には付かない
+
+        s.Steps[1].VideoSpeed = 1.25; // 手で直した、選択肢に無い速さ
+        Assert.Contains("<option value=\"1.25\" selected>1.25 倍速</option><option value=\"1.5\">", Export.ToHtml(s, GroupMode.Sequence));
+
         s.Steps[1].VideoSpeed = 0.5;
-        Assert.Contains("data-start=\"1.5\" data-end=\"4\" data-speed=\"0.5\" style=", Export.ToHtml(s, GroupMode.Sequence));
+        html = Export.ToHtml(s, GroupMode.Sequence);
+        Assert.Contains("<option value=\"0.5\" selected>0.5 倍速</option>", html);
+        Assert.DoesNotContain("<option value=\"1\" selected>", html);
         Assert.Contains("requestAnimationFrame(stopAtEnd)", Export.ToHtml(s, GroupMode.Sequence)); // 倍速でも区間を越えない
         Assert.Contains("[▶ 動画を再生(0.5 倍速)](video.mp4#t=1.5,4)", Export.ToMarkdown(s, GroupMode.Sequence));
     }
@@ -376,9 +386,18 @@ public class VideoExportTests
                 ? "<img class=\"clip\" src=\"clips/0002.gif\" width=\"100\" height=\"50\" alt=\"\">"
                 : "<video class=\"clip\" controls preload=\"metadata\" src=\"clips/0002.mp4\" poster=\"clips/0002.png\" width=\"100\"></video>", html);
             var md = File.ReadAllText(Path.Combine(dst, Export.MarkdownFile));
-            Assert.Contains(format == ClipFormat.Gif ? "![メイン](clips/0002.gif)" : "[▶ 動画を再生](clips/0002.mp4)", md);
-            Assert.DoesNotContain(" data-speed=", html); // 速さはファイルに反映済みなので、二重に掛けない
-            Assert.DoesNotContain("倍速", md);
+            Assert.Contains(format == ClipFormat.Gif ? "![メイン](clips/0002.gif)" : "[▶ 動画を再生(2 倍速)](clips/0002.mp4)", md);
+            if (format == ClipFormat.Gif)
+            {
+                // 焼き込み済みで、プレーヤーも無い
+                Assert.DoesNotContain("<label class=\"rate\">", html);
+                Assert.DoesNotContain("倍速", md);
+            }
+            else
+            {
+                Assert.Contains("<option value=\"2\" selected>2 倍速</option>", html);
+                Assert.Contains("[▶ 動画を再生(2 倍速)](clips/0002.mp4)", md);
+            }
             Assert.Equal(2, s.Steps[1].Speed);
             Assert.Equal("video.mp4", s.VideoFile); // 元のセッションは変えない
         }
