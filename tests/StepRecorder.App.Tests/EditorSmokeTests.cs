@@ -225,6 +225,26 @@ public sealed class EditorSmokeTests : IDisposable
             WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(shotDir, "editor-byscreen.png"));
     }
 
+    [E2EFact]
+    public async Task クリックの無い録画の記録を開くと動画が出て_フレームを足せる()
+    {
+        var px = new byte[320 * 240 * 4];
+        Array.Fill(px, (byte)120);
+        var nv12 = Nv12.FromBgra(px, 320, 240);
+        await VideoRecorder.Encode(Path.Combine(dir, "video.mp4"), 320, 240, Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))));
+        SessionStore.Save(new Session { ProcessName = "Demo", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" }, dir);
+
+        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Wait(1000);
+        var shot = VideoE2ETests.Bgr24(WindowCapture.Capture(editor)!.Image);
+        Assert.True(Enumerable.Range(0, shot.Length / 3).Count(i => Math.Abs(shot[i * 3] - 120) <= 3 && Math.Abs(shot[i * 3 + 2] - 120) <= 3) > 10000, "動画が表示されていない");
+        ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "このフレームをステップに追加"));
+        Wait(800);
+        PressKeys(editor, 0x11, 0x53); // Ctrl+S
+        Assert.True(Until(() => SessionStore.Load(dir).Steps.Count == 1));
+    }
+
     /// <summary>録画モードの記録を開くと、全編の動画からフレームと区間をステップに足せる。配布用にも書き出せる。</summary>
     [E2EFact]
     public void 録画モードの記録では全編からフレームと区間を足せる()

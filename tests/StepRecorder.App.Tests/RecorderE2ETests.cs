@@ -168,6 +168,20 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.InRange(VideoE2ETests.VideoInfo(Path.Combine(dir, "video.mp4")).Duration.TotalSeconds, 2.5, 4.5);
     }
 
+    [DesktopFact]
+    public void 全編を録れなければ_壊れた動画を記録に残さない()
+    {
+        target = Open(SampleExe);
+        Directory.CreateDirectory(Path.Combine(dir, "video.mp4")); // 同名のフォルダがあるので書けない
+        var engine = new RecorderEngine(target, dir, new Settings { DefaultMode = RecordMode.Video });
+        engine.Start();
+        Wait(500);
+
+        var session = engine.Stop();
+        Assert.Null(session.VideoFile);
+        Assert.True(File.Exists(Path.Combine(dir, "error.log")));
+    }
+
     /// <summary>止めてセッションを保存する。記録中の例外(error.log)があれば失敗させる。</summary>
     Session Stop(RecorderEngine engine, List<string>? stages = null)
     {

@@ -117,10 +117,11 @@ sealed class RecorderEngine
         if (root == 0) return;
         var file = rec.NextVideoFile;
         var frame = FrameBounds(root);
+        var recorder = VideoRecorder.Start(root, Path.Combine(dir, file), captureCursor);
         var step = rec.AddStep(CaptureTrigger.Video, new WindowInfo(Text(root), ClassName(root), processName), rec.NextImageFile,
             frame.Width & ~1, frame.Height & ~1, DateTimeOffset.Now);
         step.VideoFile = file;
-        clip = (VideoRecorder.Start(root, Path.Combine(dir, file), captureCursor), step);
+        clip = (recorder, step);
         lastTargetRoot = root;
         StepCountChanged?.Invoke(rec.Session.Steps.Count);
         ClipChanged?.Invoke(true);
@@ -130,12 +131,21 @@ sealed class RecorderEngine
     {
         if (clip is not var (recorder, step)) return;
         clip = null;
-        recorder.Stop();
-        // ポスター(再生前に見せる画像)は動画の最初のフレーム
-        var poster = VideoClips.Frame(Path.Combine(dir, step.VideoFile!), TimeSpan.Zero);
-        WindowCapture.SavePng(poster, Path.Combine(dir, step.ImageFile));
-        (step.ImageWidth, step.ImageHeight) = (poster.PixelWidth, poster.PixelHeight);
-        ClipChanged?.Invoke(false);
+        try
+        {
+            recorder.Stop();
+            // ポスター(再生前に見せる画像)は動画の最初のフレーム
+            var poster = VideoClips.Frame(Path.Combine(dir, step.VideoFile!), TimeSpan.Zero);
+            WindowCapture.SavePng(poster, Path.Combine(dir, step.ImageFile));
+            (step.ImageWidth, step.ImageHeight) = (poster.PixelWidth, poster.PixelHeight);
+        }
+        catch
+        {
+            rec.Session.Steps.Remove(step); // 動画もポスターも無いステップは残さない
+            StepCountChanged?.Invoke(rec.Session.Steps.Count);
+            throw;
+        }
+        finally { ClipChanged?.Invoke(false); }
     }
 
     const string FullVideoFile = "video.mp4";
@@ -143,14 +153,20 @@ sealed class RecorderEngine
     void StartFullVideo()
     {
         full = VideoRecorder.Start(lastTargetRoot, Path.Combine(dir, FullVideoFile), captureCursor);
-        rec.Session.VideoFile = FullVideoFile;
     }
 
     void StopVideos()
     {
-        StopClip();
-        full?.Stop();
+        try { StopClip(); }
+        finally { StopFullVideo(); }
+    }
+
+    void StopFullVideo()
+    {
+        if (full is not { } recorder) return;
         full = null;
+        recorder.Stop();
+        rec.Session.VideoFile = FullVideoFile; // 書き終えられたときだけ記録に載せる
     }
 
     void Enqueue(Action a)

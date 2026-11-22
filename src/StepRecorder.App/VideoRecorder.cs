@@ -107,7 +107,9 @@ sealed class VideoRecorder
                     Array.Fill(canvas, (byte)0xFF); // ウィンドウ同士の隙間は白
                     foreach (var (h, r) in windows)
                         if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - origin.Left, r.Top - origin.Top);
-                    frames.Add((Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / Fps)));
+                    var frame = (Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / Fps));
+                    while (!frames.TryAdd(frame, 100))
+                        if (encoding.IsCompleted) return; // エンコードに失敗して誰も読まない。待ち続けると Stop が返らない
                     next = index + 1;
                 }
                 var wait = TimeSpan.FromSeconds((double)next / Fps) - clock.Elapsed;

@@ -81,6 +81,9 @@ public sealed class Session
     public List<Step> Steps { get; set; } = [];
     /// <summary>録画モードで録った全編の動画(例: "video.mp4")。録画モードでなければ null。</summary>
     public string? VideoFile { get; set; }
+    /// <summary>残すものがあるか。録画モードでは、ステップが無くても全編の動画がある。</summary>
+    [JsonIgnore]
+    public bool HasContent => Steps.Count > 0 || VideoFile != null;
 }
 
 /// <summary>動画のステップの再生の速さ。</summary>

@@ -95,6 +95,20 @@ public sealed class VideoE2ETests : IDisposable
         Assert.Contains("NETSCAPE2.0", System.Text.Encoding.ASCII.GetString(File.ReadAllBytes(gif))); // 繰り返し再生
     }
 
+    [DesktopFact]
+    public void エンコードに失敗しても止められ_理由が分かる()
+    {
+        target = Open(SampleExe);
+        var path = Path.Combine(dir, "video.mp4");
+        Directory.CreateDirectory(path); // 同名のフォルダがあるので書けない
+
+        var rec = VideoRecorder.Start(target.MainWindowHandle, path, cursor: false);
+        Wait(3000); // フレームの待ち行列(2 秒分)が一杯になる
+        var stop = Task.Run(() => Record.Exception(rec.Stop));
+        Assert.True(stop.Wait(5000), "停止が終わらない");
+        Assert.NotNull(stop.Result);
+    }
+
     /// <summary>a の各画素と、b の (ox, oy) からの同じ大きさの範囲との、色の差の平均。</summary>
     static double MeanDiff(BitmapSource a, BitmapSource b, int ox, int oy)
     {

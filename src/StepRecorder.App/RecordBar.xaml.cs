@@ -126,7 +126,7 @@ public partial class RecordBar : Window
         {
             var session = engine.Stop(text => Progress.Report(text));
             Progress.Report("記録を保存しています");
-            if (session.Steps.Count > 0) SessionStore.Save(session, dir); // 編集前の状態も残しておく
+            if (session.HasContent) SessionStore.Save(session, dir); // 編集前の状態も残しておく
             return session;
         });
         Progress.Report("編集画面を開いています");

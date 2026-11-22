@@ -56,6 +56,7 @@ public partial class EditorWindow : Window
         ClipFormatBox.SelectedIndex = (int)Settings.Load(Settings.DefaultPath).ClipFormat;
         if (session.VideoFile != null) OpenFullVideo();
         RefreshList(0);
+        if (session.Steps.Count == 0 && session.VideoFile != null) ShowVideoView(); // 動画だけの記録
     }
 
     // ---- 一覧 ----

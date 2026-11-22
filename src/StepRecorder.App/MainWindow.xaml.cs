@@ -146,16 +146,22 @@ public partial class MainWindow : Window
 
         var dir = Path.Combine(settings.OutputDir, Settings.SessionFolderName(DateTimeOffset.Now, item.Process.ProcessName));
         Directory.CreateDirectory(dir);
+        var recordVideo = settings.DefaultMode == RecordMode.Video;
         var bar = new RecordBar(new RecorderEngine(item.Process, dir, settings), settings, dir);
         bar.Closed += (_, _) =>
         {
-            if (bar.Result is { Steps.Count: > 0 } session) OpenEditor(session, dir);
+            var log = Path.Combine(dir, "error.log");
+            var failed = File.Exists(log);
+            var kept = bar.Result is { HasContent: true };
+            if (kept) OpenEditor(bar.Result!, dir);
             else
             {
-                try { Directory.Delete(dir, true); } catch (IOException) { }
+                if (!failed) try { Directory.Delete(dir, true); } catch (IOException) { } // 失敗したときは理由(error.log)を残す
                 Show();
             }
             bar.Progress?.Finish();
+            if (recordVideo && bar.Result?.VideoFile == null) Fail($"録画できませんでした。理由はこのファイルに書いてあります:\n{log}");
+            else if (!kept && failed) Fail($"記録できませんでした。理由はこのファイルに書いてあります:\n{log}");
         };
         Hide();
         bar.Show();
