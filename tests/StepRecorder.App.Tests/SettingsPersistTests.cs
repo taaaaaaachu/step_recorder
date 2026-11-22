@@ -1,0 +1,50 @@
+using System.Diagnostics;
+using System.IO;
+using System.Windows.Automation;
+using StepRecorder.Core;
+using static StepRecorder.App.Tests.Desktop;
+
+namespace StepRecorder.App.Tests;
+
+/// <summary>設定の保存。利用者の settings.json に触らないよう、子プロセスの USERPROFILE を一時フォルダに逃がす。入力は送らない。</summary>
+public sealed class SettingsPersistTests : IDisposable
+{
+    readonly string profile = Path.Combine(Path.GetTempPath(), "sr-profile-" + Guid.NewGuid());
+    Process? app;
+
+    public void Dispose()
+    {
+        try { app?.Kill(); app?.WaitForExit(5000); } catch (InvalidOperationException) { }
+        if (Directory.Exists(profile)) Directory.Delete(profile, true);
+    }
+
+    [DesktopFact]
+    public void 開始画面の保存で_編集画面で選んだ動画の形式を戻さない()
+    {
+        foreach (var folder in new[] { @"AppData\Roaming", @"AppData\Local", "Documents" }) Directory.CreateDirectory(Path.Combine(profile, folder));
+        var path = Path.Combine(profile, @"AppData\Roaming\step_recorder\settings.json");
+        var output = Path.Combine(profile, "records");
+        Directory.CreateDirectory(output);
+        new Settings { OutputDir = output, ClipFormat = ClipFormat.Gif, AutoUpdate = false }.Save(path);
+
+        var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe")) { UseShellExecute = false };
+        start.Environment["USERPROFILE"] = profile;
+        app = Process.Start(start)!;
+        Assert.True(Until(() => { app.Refresh(); return app.MainWindowHandle != 0; }, 10000), "起動しない");
+        var main = app.MainWindowHandle;
+        // 逃がせていなければ、利用者の設定を書く前にやめる
+        Assert.Equal(output, ValueOf(main, "OutputDir"));
+
+        // 起動したあとで、編集画面が形式を MP4 に変えて保存した
+        var changed = Settings.Load(path);
+        changed.ClipFormat = ClipFormat.Mp4;
+        changed.Save(path);
+
+        ((TogglePattern)Find(main, "CaptureCursor").GetCurrentPattern(TogglePattern.Pattern)).Toggle(); // 保存されたことの目印
+        var open = (InvokePattern)Find(main, new PropertyCondition(AutomationElement.NameProperty, "記録を開く...")).GetCurrentPattern(InvokePattern.Pattern);
+        _ = Task.Run(open.Invoke); // 設定を保存してからファイル選択を出す(出ている間は返らないことがある)
+
+        Assert.True(Until(() => Settings.Load(path).CaptureCursor), "保存されない");
+        Assert.Equal(ClipFormat.Mp4, Settings.Load(path).ClipFormat);
+    }
+}

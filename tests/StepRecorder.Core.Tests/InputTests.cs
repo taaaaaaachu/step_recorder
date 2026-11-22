@@ -84,6 +84,22 @@ public class SettingsTests
     }
 
     [Fact]
+    public void 変更は今のファイルに対して行い_他の項目を戻さない()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "sr-settings-" + Guid.NewGuid(), "settings.json");
+        try
+        {
+            new Settings { ClipFormat = ClipFormat.Gif }.Save(path);
+            Settings.Update(path, s => s.ClipFormat = ClipFormat.Mp4);
+            var latest = Settings.Update(path, s => s.CaptureCursor = true);
+
+            Assert.Equal((ClipFormat.Mp4, true), (latest.ClipFormat, latest.CaptureCursor));
+            Assert.Equal((ClipFormat.Mp4, true), (Settings.Load(path).ClipFormat, Settings.Load(path).CaptureCursor));
+        }
+        finally { Directory.Delete(Path.GetDirectoryName(path)!, true); }
+    }
+
+    [Fact]
     public void フォルダ名() =>
         Assert.Equal("20261121-174100_a_b", Settings.SessionFolderName(new DateTimeOffset(2026, 11, 21, 17, 41, 0, TimeSpan.Zero), "a/b"));
 }

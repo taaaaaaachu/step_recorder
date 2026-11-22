@@ -17,7 +17,7 @@ public partial class MainWindow : Window
 
     MonitorBadge? badge;
     bool refreshing;
-    readonly Settings settings = Settings.Load(Settings.DefaultPath);
+    Settings settings = Settings.Load(Settings.DefaultPath);
 
     public MainWindow()
     {
@@ -53,16 +53,18 @@ public partial class MainWindow : Window
         if (new[] { HkCapture.Text, HkPause.Text, HkStop.Text, HkClip.Text }.Distinct().Count() < 4) return Fail("手動撮影・一時停止・停止・録画には別々のキーを設定してください");
         if (string.IsNullOrWhiteSpace(OutputDir.Text)) return Fail("出力先を入力してください");
 
-        settings.DefaultMode = ModeManual.IsChecked == true ? RecordMode.Manual
-            : ModeRecord.IsChecked == true ? RecordMode.Video : RecordMode.Click;
-        settings.OutputDir = OutputDir.Text.Trim();
-        settings.HotkeyCapture = HkCapture.Text.Trim();
-        settings.HotkeyPause = HkPause.Text.Trim();
-        settings.HotkeyStop = HkStop.Text.Trim();
-        settings.HotkeyClip = HkClip.Text.Trim();
-        settings.GroupMode = (GroupMode)Group.SelectedIndex;
-        settings.CaptureCursor = CaptureCursor.IsChecked == true;
-        settings.Save(Settings.DefaultPath);
+        settings = Settings.Update(Settings.DefaultPath, s =>
+        {
+            s.DefaultMode = ModeManual.IsChecked == true ? RecordMode.Manual
+                : ModeRecord.IsChecked == true ? RecordMode.Video : RecordMode.Click;
+            s.OutputDir = OutputDir.Text.Trim();
+            s.HotkeyCapture = HkCapture.Text.Trim();
+            s.HotkeyPause = HkPause.Text.Trim();
+            s.HotkeyStop = HkStop.Text.Trim();
+            s.HotkeyClip = HkClip.Text.Trim();
+            s.GroupMode = (GroupMode)Group.SelectedIndex;
+            s.CaptureCursor = CaptureCursor.IsChecked == true;
+        });
         return true;
     }
 
@@ -116,8 +118,7 @@ public partial class MainWindow : Window
     /// <summary>記録開始を待たず、切り替えたらすぐ保存する(次回の起動から効く)。</summary>
     void AutoUpdate_Click(object sender, RoutedEventArgs e)
     {
-        settings.AutoUpdate = AutoUpdate.IsChecked == true;
-        settings.Save(Settings.DefaultPath);
+        settings = Settings.Update(Settings.DefaultPath, s => s.AutoUpdate = AutoUpdate.IsChecked == true);
     }
 
     async void CheckUpdate_Click(object sender, RoutedEventArgs e)

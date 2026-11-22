@@ -52,8 +52,8 @@ public partial class EditorWindow : Window
         loading = true;
         Group.SelectedIndex = (int)mode;
         foreach (var speed in PlaybackSpeed.Choices) SpeedBox.Items.Add(PlaybackSpeed.Label(speed));
-        loading = false;
         ClipFormatBox.SelectedIndex = (int)Settings.Load(Settings.DefaultPath).ClipFormat;
+        loading = false;
         if (session.VideoFile != null) OpenFullVideo();
         RefreshList(0);
         if (session.Steps.Count == 0 && session.VideoFile != null) ShowVideoView(); // 動画だけの記録
@@ -653,14 +653,23 @@ public partial class EditorWindow : Window
         RefreshList(index);
     }
 
+    /// <summary>選んだらすぐ覚える(書き出さずに閉じても、次はその形式)。</summary>
+    void ClipFormat_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading) return;
+        try { Settings.Update(Settings.DefaultPath, s => s.ClipFormat = (ClipFormat)ClipFormatBox.SelectedIndex); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 覚えられなくても、編集中の内容は失わせない
+            MessageBox.Show(this, $"動画の形式を覚えられませんでした: {ex.Message}", "step_recorder", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     async void ExportForDistribution_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "配布用に書き出すフォルダ", InitialDirectory = System.IO.Path.GetDirectoryName(dir) };
         if (dialog.ShowDialog(this) != true) return;
         var (format, mode, outDir) = ((ClipFormat)ClipFormatBox.SelectedIndex, (GroupMode)Group.SelectedIndex, dialog.FolderName);
-        var settings = Settings.Load(Settings.DefaultPath);
-        settings.ClipFormat = format;
-        settings.Save(Settings.DefaultPath);
 
         // 動画はフレームを1枚ずつ取り出して作り直すので時間がかかる。裏で動かし、進み具合を出す
         var snapshot = SessionStore.Clone(session);

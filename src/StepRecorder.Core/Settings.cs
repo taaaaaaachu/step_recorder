@@ -29,6 +29,18 @@ public sealed class Settings
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return new(); }
     }
 
+    /// <summary>
+    /// 設定を変えるときは必ずこれを使う。今のファイルを読み直してから変える所だけを変える
+    /// (前に読んだものを丸ごと書くと、他の画面が保存した値を戻してしまう)。
+    /// </summary>
+    public static Settings Update(string path, Action<Settings> change)
+    {
+        var settings = Load(path);
+        change(settings);
+        settings.Save(path);
+        return settings;
+    }
+
     public void Save(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
