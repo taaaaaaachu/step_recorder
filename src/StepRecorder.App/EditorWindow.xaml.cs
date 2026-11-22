@@ -44,6 +44,8 @@ public partial class EditorWindow : Window
     public EditorWindow(Session session, string dir, GroupMode mode)
     {
         InitializeComponent();
+        Player.Ended += Player_Ended;
+        Player.Failed += Player_Failed;
         this.session = session;
         this.dir = dir;
         Title = $"step_recorder 編集 — {dir}";
@@ -422,7 +424,7 @@ public partial class EditorWindow : Window
         if (clipPlaying) { StopClip(); return; }
         if (Current is not { VideoFile: { } video } s) return;
         if (videoView) ShowStep(s); // 全編を見ていたら、そのステップの表示に戻してから
-        Player.Source = new Uri(FullPath(video));
+        Player.Open(FullPath(video), s.VideoStart ?? TimeSpan.Zero);
         Player.Visibility = Visibility.Visible;
         Player.Play();
         clipPlaying = true;
@@ -434,21 +436,24 @@ public partial class EditorWindow : Window
     {
         if (!clipPlaying) return;
         clipPlaying = false;
-        Player.Stop();
-        Player.Source = null;
+        Player.Close();
         Player.Visibility = Visibility.Collapsed;
         PlayButton.Content = "▶ 再生";
     }
 
-    void Player_MediaEnded(object sender, RoutedEventArgs e)
+    void Player_Ended()
+    {
+        if (!videoView) { StopClip(); return; }
+        MoveSlider(Player.Position);
+        SetFullPlaying(false);
+    }
+
+    void Player_Failed(string message)
     {
         if (videoView) SetFullPlaying(false);
         else StopClip();
+        MessageBox.Show(this, $"動画を表示できませんでした: {message}", "step_recorder", MessageBoxButton.OK, MessageBoxImage.Error);
     }
-
-    /// <summary>開き終えてから位置を合わせる(開く前に位置を変えても効かないことがある)。</summary>
-    void Player_MediaOpened(object sender, RoutedEventArgs e) =>
-        Player.Position = videoView ? SliderTime : Current?.VideoStart ?? TimeSpan.Zero;
 
     void StartPlayTimer()
     {
@@ -480,9 +485,8 @@ public partial class EditorWindow : Window
         videoView = true;
         Picture.Visibility = Overlay.Visibility = PlayButton.Visibility = Visibility.Collapsed;
         SetStageSize(fullSize.Width, fullSize.Height);
-        Player.Source = new Uri(FullPath(session.VideoFile!));
+        Player.Open(FullPath(session.VideoFile!), SliderTime); // 開くだけ。シークバーの位置で止まっている
         Player.Visibility = Visibility.Visible;
-        Player.Pause(); // 開くだけ。開き終えたらシークバーの位置へ移る
         if (fit) FitZoom();
     }
 
@@ -491,8 +495,7 @@ public partial class EditorWindow : Window
         if (!videoView) return;
         SetFullPlaying(false);
         videoView = false;
-        Player.Stop();
-        Player.Source = null;
+        Player.Close();
         Player.Visibility = Visibility.Collapsed;
         Picture.Visibility = Overlay.Visibility = Visibility.Visible;
     }
@@ -773,5 +776,12 @@ public partial class EditorWindow : Window
             if (r == MessageBoxResult.Cancel || (r == MessageBoxResult.Yes && !Save())) e.Cancel = true;
         }
         base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        playTimer.Stop();
+        Player.Close();
+        base.OnClosed(e);
     }
 }

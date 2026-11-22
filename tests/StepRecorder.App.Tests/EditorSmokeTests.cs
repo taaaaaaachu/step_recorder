@@ -328,6 +328,8 @@ public sealed class EditorSmokeTests : IDisposable
             Wait(500);
             WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(shotDir, "editor-video.png"));
         }
+        // 0.8 秒の区間を終えると、自分で止まる
+        Assert.True(Until(() => AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "▶ 再生")) != null, 4000), "区間の終わりで止まらない");
         PressKeys(editor, 0x11, 0x53); // Ctrl+S
         Wait(800);
 

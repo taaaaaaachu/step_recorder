@@ -146,7 +146,7 @@ static class VideoClips
     /// フレームを取り出す。デコーダーから NV12 のまま受け取り、RGB には自分で戻す(理由は Nv12 を参照)。
     /// 時刻の昇順に頼まれたら続きから読むので速い。ファイルを開いたままなので Dispose すること。
     /// </summary>
-    sealed class Reader : IDisposable
+    internal sealed class Reader : IDisposable
     {
         sealed record Decoded(long Time, byte[] Nv12, int Stride, int Rows);
 
@@ -158,6 +158,8 @@ static class VideoClips
         public readonly int Width, Height;
         public readonly TimeSpan Duration;
         Decoded? current, following;
+        Decoded? shown; // DecodeIfChanged が最後に渡したもの
+        byte[]? spare; // 読み飛ばしたフレームのバッファ。再生中に大きな確保を繰り返さないよう使い回す
         long asked = long.MaxValue;
 
         static Reader() => MediaFactory.MFStartup().CheckError();
@@ -199,12 +201,30 @@ static class VideoClips
 
         byte[] Decode(long time)
         {
+            MoveTo(time);
+            return Nv12.ToBgra(current!.Nv12, current.Stride, current.Rows, Width, Height);
+        }
+
+        /// <summary>time のフレームが前回渡したものと違えば bgra に書いて true。MTA のスレッドから呼ぶ(再生用)。</summary>
+        public bool DecodeIfChanged(long time, byte[] bgra)
+        {
+            MoveTo(time);
+            if (ReferenceEquals(shown, current)) return false;
+            shown = current;
+            Nv12.ToBgra(current!.Nv12, current.Stride, current.Rows, Width, Height, bgra);
+            return true;
+        }
+
+        void MoveTo(long time)
+        {
             time = Math.Clamp(time, 0, Duration.Ticks);
             if (current == null || time < asked || time > current.Time + ReadOnLimit) Seek(time);
             asked = time;
             while ((following ??= Read()) is { } next && Math.Abs(next.Time - time) + Tie < Math.Abs(current!.Time - time))
+            {
+                spare = current!.Nv12;
                 (current, following) = (next, null);
-            return Nv12.ToBgra(current!.Nv12, current.Stride, current.Rows, Width, Height);
+            }
         }
 
         void Seek(long time)
@@ -235,7 +255,8 @@ static class VideoClips
                     buffer.Lock(out var data, out _, out var length);
                     try
                     {
-                        var bytes = new byte[length];
+                        var bytes = spare?.Length == length ? spare : new byte[length];
+                        spare = null;
                         Marshal.Copy(data, bytes, 0, length);
                         return new(time, bytes, stride, (int)(size & 0xFFFFFFFF));
                     }

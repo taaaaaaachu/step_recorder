@@ -60,24 +60,31 @@ public static class Nv12
     /// <summary>
     /// 左上の width×height を、不透明な BGRA にする。stride は 1 行のバイト数、rows は明るさの面の行数
     /// (デコーダーは縦横を 16 の倍数などに切り上げて渡すので、映像の大きさと違う)。
+    /// 再生では毎フレームになるので、書き先 buffer を使い回せる。
     /// </summary>
-    public static byte[] ToBgra(byte[] nv12, int stride, int rows, int width, int height)
+    public static byte[] ToBgra(byte[] nv12, int stride, int rows, int width, int height, byte[]? buffer = null)
     {
         var m = IsBt709(width, height) ? FromBt709 : FromBt601;
-        var dst = new byte[width * height * 4];
+        var dst = buffer ?? new byte[width * height * 4];
         for (var y = 0; y < height; y++)
         {
             var luma = nv12.AsSpan(y * stride, width);
             var chroma = nv12.AsSpan(stride * rows + y / 2 * stride, (width + 1) & ~1);
             var row = dst.AsSpan(y * width * 4, width * 4);
-            for (var x = 0; x < width; x++)
+            // ponytail: 色差は 2×2 に同じ値を使う(補間しない)。画面の録画では、切り出しで作り直しても滲みが増えないこの方が良い
+            for (var x = 0; x < width; x += 2)
             {
-                // ponytail: 色差は 2×2 に同じ値を使う(補間しない)。画面の録画では、切り出しで作り直しても滲みが増えないこの方が良い
-                int c = (luma[x] - 16) * LumaScale + (1 << 15), u = chroma[x & ~1] - 128, v = chroma[(x & ~1) + 1] - 128;
-                row[x * 4] = Clamp((c + m.Bu * u) >> 16);
-                row[x * 4 + 1] = Clamp((c - m.Gu * u - m.Gv * v) >> 16);
-                row[x * 4 + 2] = Clamp((c + m.Rv * v) >> 16);
-                row[x * 4 + 3] = 255;
+                int u = chroma[x] - 128, v = chroma[x + 1] - 128;
+                int blue = m.Bu * u, green = -m.Gu * u - m.Gv * v, red = m.Rv * v;
+                for (var i = x; i < Math.Min(x + 2, width); i++)
+                {
+                    var c = (luma[i] - 16) * LumaScale + (1 << 15);
+                    var px = row.Slice(i * 4, 4);
+                    px[3] = 255;
+                    px[2] = Clamp((c + red) >> 16);
+                    px[1] = Clamp((c + green) >> 16);
+                    px[0] = Clamp((c + blue) >> 16);
+                }
             }
         }
         return dst;
