@@ -156,7 +156,9 @@ public sealed class RecorderE2ETests : IDisposable
         engine.ToggleClip(); // 録画モードでは使えない
         Wait(300);
 
-        var session = Stop(engine);
+        var stages = new List<string>();
+        var session = Stop(engine, stages);
+        Assert.Equal(["撮った画像を保存しています(残り 0 件)", "動画を書き終えています"], stages); // 停止中に出す進み具合
         Assert.Equal("video.mp4", session.VideoFile);
         Assert.All(session.Steps, s => Assert.Null(s.VideoFile));
         var times = session.Steps.Select(s => s.VideoTime!.Value.TotalSeconds).ToList();
@@ -167,9 +169,9 @@ public sealed class RecorderE2ETests : IDisposable
     }
 
     /// <summary>止めてセッションを保存する。記録中の例外(error.log)があれば失敗させる。</summary>
-    Session Stop(RecorderEngine engine)
+    Session Stop(RecorderEngine engine, List<string>? stages = null)
     {
-        var session = engine.Stop();
+        var session = engine.Stop(text => { lock (dir) stages?.Add(text); });
         var log = Path.Combine(dir, "error.log");
         Assert.False(File.Exists(log), File.Exists(log) ? File.ReadAllText(log) : "");
         SessionStore.Save(session, dir);

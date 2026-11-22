@@ -21,6 +21,9 @@ public partial class RecordBar : Window
     /// <summary>停止後のセッション。</summary>
     public Session? Result { get; private set; }
 
+    /// <summary>停止の進み具合。編集画面を開き終えたら呼び出し側が Finish する。</summary>
+    internal ProgressWindow? Progress { get; private set; }
+
     internal RecordBar(RecorderEngine engine, Settings settings, string dir)
     {
         InitializeComponent();
@@ -108,21 +111,38 @@ public partial class RecordBar : Window
         State.Text = engine.Paused ? "‖ 一時停止" : "● 記録中";
     }
 
-    void Stop_Click(object sender, RoutedEventArgs e)
+    async void Stop_Click(object sender, RoutedEventArgs e)
     {
         if (stopped) return;
         stopped = true;
         var hwnd = new WindowInteropHelper(this).Handle;
         foreach (var id in new[] { HkCapture, HkPause, HkStop, HkClip }) UnregisterHotKey(hwnd, id);
         clipTimer.Stop();
-        Result = engine.Stop();
-        if (Result.Steps.Count > 0) SessionStore.Save(Result, dir); // 編集前の状態も残しておく
+        // 溜まった撮影や動画の書き終えに時間がかかることがあるので、裏で止めて進み具合を出す
+        Hide();
+        Progress = new ProgressWindow("記録を終えています", "記録を止めています...", null);
+        Progress.Show();
+        var result = await Task.Run(() =>
+        {
+            var session = engine.Stop(text => Progress.Report(text));
+            Progress.Report("記録を保存しています");
+            if (session.Steps.Count > 0) SessionStore.Save(session, dir); // 編集前の状態も残しておく
+            return session;
+        });
+        Progress.Report("編集画面を開いています");
+        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ContextIdle); // 編集画面を作る間は描けないので、先に文言を描かせる
+        Result = result;
         Close();
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        if (!stopped) Stop_Click(this, new()); // Alt+F4 などで閉じられても記録は止めて残す
+        // Alt+F4 などで閉じられても記録は止めて残す。止め終えてから閉じる
+        if (Result == null)
+        {
+            e.Cancel = true;
+            Stop_Click(this, new());
+        }
         base.OnClosing(e);
     }
 }

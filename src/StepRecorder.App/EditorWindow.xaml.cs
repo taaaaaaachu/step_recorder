@@ -592,23 +592,9 @@ public partial class EditorWindow : Window
         // 動画はフレームを1枚ずつ取り出して作り直すので時間がかかる。裏で動かし、進み具合を出す
         var snapshot = SessionStore.Clone(session);
         var total = Export.Sections(snapshot, mode).SelectMany(sec => sec.Steps).Count(st => st.VideoFile != null);
-        var label = new TextBlock { Text = "書き出しています...", Margin = new Thickness(0, 0, 0, 8) };
-        var bar = new ProgressBar { Maximum = 1, Width = 380, Height = 18, IsIndeterminate = total == 0 };
-        var busy = true;
-        var progress = new Window
-        {
-            Title = "配布用に書き出し中", Owner = this, ShowInTaskbar = false, ResizeMode = ResizeMode.NoResize,
-            SizeToContent = SizeToContent.WidthAndHeight, WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            FontFamily = FontFamily, FontSize = FontSize,
-            Content = new StackPanel { Margin = new Thickness(18), Children = { label, bar } },
-        };
-        progress.Closing += (_, ev) => ev.Cancel = busy; // 途中では閉じさせない
+        var progress = new ProgressWindow("配布用に書き出し中", "書き出しています...", this);
         var done = 0;
-        void Report(double clip) => Dispatcher.BeginInvoke(() =>
-        {
-            bar.Value = (done + clip) / total;
-            label.Text = $"動画を作っています({done + 1} / {total} 本目)";
-        });
+        void Report(double clip) => progress.Report($"動画を作っています({done + 1} / {total} 本目)", (done + clip) / total);
         IsEnabled = false;
         progress.Show();
         try
@@ -626,8 +612,7 @@ public partial class EditorWindow : Window
         }
         finally
         {
-            busy = false;
-            progress.Close();
+            progress.Finish();
             IsEnabled = true;
             Activate();
         }

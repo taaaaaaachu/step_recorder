@@ -85,13 +85,19 @@ sealed class RecorderEngine
         if (Capture(root) is { } shot) AddShot(CaptureTrigger.Manual, root, shot, null);
     });
 
-    /// <summary>記録を止め、溜まった処理を終えてからセッションを返す。</summary>
-    public Session Stop()
+    /// <summary>記録を止め、溜まった処理を終えてからセッションを返す。stage にはいま何をしているかを知らせる(ワーカースレッドからも呼ぶ)。</summary>
+    public Session Stop(Action<string>? stage = null)
     {
         PostThreadMessage(hookThreadId, WM_QUIT, 0, 0);
         hookThread.Join();
         flushTimer.Dispose();
-        Enqueue(() => { Flush(); StopVideos(); });
+        stage?.Invoke($"撮った画像を保存しています(残り {queue.Count} 件)");
+        Enqueue(() =>
+        {
+            Flush();
+            if (clip != null || full != null) stage?.Invoke("動画を書き終えています");
+            StopVideos();
+        });
         queue.CompleteAdding();
         worker.Join();
         return rec.Session;

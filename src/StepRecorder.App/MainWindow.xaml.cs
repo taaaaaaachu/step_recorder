@@ -155,6 +155,7 @@ public partial class MainWindow : Window
                 try { Directory.Delete(dir, true); } catch (IOException) { }
                 Show();
             }
+            bar.Progress?.Finish();
         };
         Hide();
         bar.Show();
