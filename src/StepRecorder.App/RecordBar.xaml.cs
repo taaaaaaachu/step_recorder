@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using StepRecorder.Core;
 using static StepRecorder.App.Native;
 
@@ -11,7 +12,7 @@ namespace StepRecorder.App;
 
 /// <summary>
 /// 記録中に最前面へ出す小さなバー。クリックしても前面を奪わない(対象アプリのフォーカスを保つ)。
-/// 使っていない間は小さなタブに引っ込み、マウスを乗せると出る。
+/// 使っていない間は小さなタブに引っ込み、マウスを乗せると滑り出る。
 /// </summary>
 public partial class RecordBar : Window
 {
@@ -29,8 +30,13 @@ public partial class RecordBar : Window
     readonly AutoHide autoHide = new();
     readonly Stopwatch shownClock = new();
     readonly System.Windows.Threading.DispatcherTimer hideTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
-    nint handle;
-    double anchorX; // タブの中心。文言で幅が変わっても動かさず、ドラッグしたときだけ動かす
+    static readonly TimeSpan OpenTime = TimeSpan.FromMilliseconds(220), CloseTime = TimeSpan.FromMilliseconds(180), TabTime = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>出ているか(滑っている間は、行き先の状態)。</summary>
+    internal bool IsBarOpen { get; private set; } = true;
+
+    /// <summary>滑らせるか。Windows の「アニメーション効果」を切っていれば、すぐに入れ替える。</summary>
+    internal bool Animated { get; set; } = SystemParameters.ClientAreaAnimation;
 
     /// <summary>マウスが上にあるか。入力を送らないテストでは、利用者のカーソルに左右されないよう差し替える。</summary>
     internal Func<bool> IsPointerOver { get; set; }
@@ -59,13 +65,9 @@ public partial class RecordBar : Window
         }
         recordingLabel = State.Text;
         var area = SystemParameters.WorkArea;
-        Left = area.Left + area.Width / 2 - 220;
+        Left = area.Left + (area.Width - Width) / 2;
         Top = area.Top; // タブが画面の端にくっつくように
-        Loaded += (_, _) =>
-        {
-            anchorX = area.Left + area.Width / 2;
-            Left = anchorX - ActualWidth / 2;
-        };
+        Loaded += (_, _) => CenterPanel();
         ContentRendered += (_, _) =>
         {
             shownClock.Start();
@@ -78,7 +80,7 @@ public partial class RecordBar : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        var hwnd = handle = new WindowInteropHelper(this).Handle;
+        var hwnd = new WindowInteropHelper(this).Handle;
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)((long)GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW));
         HwndSource.FromHwnd(hwnd).AddHook(WndProc);
         if (engine.CapturesScreen)
@@ -118,7 +120,7 @@ public partial class RecordBar : Window
     // ---- 自動で引っ込める ----
 
     /// <summary>
-    /// MouseEnter/MouseLeave は使わない。前面にならないウィンドウで、しかも乗った所で大きさが変わるので取りこぼす。
+    /// MouseEnter/MouseLeave は使わない。前面にならないウィンドウで、しかも乗った所で中身が動くので取りこぼす。
     /// カーソルの位置を見る。
     /// </summary>
     void UpdateAutoHide()
@@ -130,7 +132,12 @@ public partial class RecordBar : Window
     bool IsCursorOver()
     {
         var cursor = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
-        return GetCursorInfo(ref cursor) && GetWindowRect(handle, out var r) && r.Contains(cursor.ptScreenPos);
+        if (!IsVisible || !GetCursorInfo(ref cursor)) return false;
+        // 滑っている途中の位置ではなく、行き先の範囲で見る(動く端にカーソルがあっても行ったり来たりしない)
+        var area = IsBarOpen
+            ? new Rect(Panel.Margin.Left, 0, Panel.ActualWidth, Panel.ActualHeight)
+            : new Rect((ActualWidth - BarTab.ActualWidth) / 2, 0, BarTab.ActualWidth, BarTab.ActualHeight);
+        return area.Contains(PointFromScreen(new Point(cursor.ptScreenPos.X, cursor.ptScreenPos.Y)));
     }
 
     void BarTab_Click(object sender, RoutedEventArgs e)
@@ -139,14 +146,49 @@ public partial class RecordBar : Window
         ShowOpen(true);
     }
 
-    /// <summary>バーとタブを入れ替える。横の中心は動かさない(ドラッグで移した所でそのまま引っ込む)。</summary>
+    /// <summary>引っ込むときはバーが上へ消えてからタブが下りる。出るときはタブが上がりながらバーが下りる。途中で逆にもなれる。</summary>
     void ShowOpen(bool open)
     {
-        if (open == Panel.IsVisible) return;
-        Panel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        BarTab.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        if (open == IsBarOpen) return;
+        IsBarOpen = open;
+        Panel.IsHitTestVisible = open; // 消えていく途中のボタンは押せない
+        if (open)
+        {
+            if (!Panel.IsVisible) CenterPanel(); // 見えている間は横に動かさない
+            Panel.Visibility = Visibility.Visible;
+            Slide(PanelSlide, 0, OpenTime, EasingMode.EaseOut);
+            Slide(TabSlide, -BarTab.ActualHeight, TabTime, EasingMode.EaseIn, done: () => { if (IsBarOpen) BarTab.Visibility = Visibility.Hidden; });
+        }
+        else
+        {
+            BarTab.Visibility = Visibility.Visible;
+            Slide(PanelSlide, -Panel.ActualHeight, CloseTime, EasingMode.EaseIn, done: () => { if (!IsBarOpen) Panel.Visibility = Visibility.Hidden; });
+            Slide(TabSlide, 0, TabTime, EasingMode.EaseOut, delay: CloseTime);
+        }
+    }
+
+    /// <summary>
+    /// バーを中央に置く。開く直前にだけ呼ぶ(出ている間に文言で幅が変わっても、押しているボタンが動かないように左端は据え置く)。
+    /// </summary>
+    void CenterPanel()
+    {
         UpdateLayout();
-        Left = anchorX - ActualWidth / 2;
+        Panel.Margin = new Thickness(Math.Max(0, Math.Round((ActualWidth - Panel.ActualWidth) / 2)), 0, 0, 0);
+    }
+
+    /// <summary>今の位置から to へ滑らせる。</summary>
+    void Slide(TranslateTransform slide, double to, TimeSpan time, EasingMode easing, TimeSpan delay = default, Action? done = null)
+    {
+        if (!Animated)
+        {
+            slide.BeginAnimation(TranslateTransform.YProperty, null);
+            slide.Y = to;
+            done?.Invoke();
+            return;
+        }
+        var animation = new DoubleAnimation(to, time) { BeginTime = delay, EasingFunction = new CubicEase { EasingMode = easing } };
+        if (done != null) animation.Completed += (_, _) => done();
+        slide.BeginAnimation(TranslateTransform.YProperty, animation);
     }
 
     /// <summary>引っ込んでいても状態が分かるように、タブの色と印を変える。</summary>
@@ -156,12 +198,7 @@ public partial class RecordBar : Window
         BarTab.Content = engine.Paused ? "❚❚" : clipTimer.IsEnabled ? "■" : "●";
     }
 
-    void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        var from = Left;
-        DragMove(); // 離すまで戻らない
-        anchorX += Left - from;
-    }
+    void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
 
     void Mode_Checked(object sender, RoutedEventArgs e) =>
         engine.Mode = sender == ModeManual ? RecordMode.Manual : RecordMode.Click;

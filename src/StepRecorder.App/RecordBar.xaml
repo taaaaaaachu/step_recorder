@@ -1,9 +1,9 @@
 ﻿<Window x:Class="StepRecorder.App.RecordBar"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="step_recorder 記録中" SizeToContent="WidthAndHeight" WindowStyle="None" ResizeMode="NoResize"
+        Title="step_recorder 記録中" Width="760" SizeToContent="Height" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True"
         Topmost="True" ShowActivated="False" ShowInTaskbar="False" FontFamily="Yu Gothic UI" FontSize="12"
-        ThemeMode="Dark" Background="#FF2B2B2B" Foreground="White"
+        ThemeMode="Dark" Background="Transparent" Foreground="White"
         MouseLeftButtonDown="Bar_MouseLeftButtonDown">
     <Window.Resources>
         <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
@@ -14,9 +14,14 @@
             <Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Focusable" Value="False"/><Setter Property="MinWidth" Value="0"/>
         </Style>
     </Window.Resources>
+    <!--
+        ウィンドウは透明で大きさも位置も変えない(伸縮させながら動かすとちらつく)。開閉は中身を上端の外へ滑らせる。
+        透明な所のクリックは下のウィンドウへ通る。幅はいちばん長い文言(録画停止 + 時刻)でも収まる大きさ
+    -->
     <Grid>
     <!-- 記録中だと分かる赤い枠。Fluent のウインドウは自分の枠線を描かないので Border で描く -->
-    <Border x:Name="Panel" BorderBrush="#FFE04040" BorderThickness="2">
+    <Border x:Name="Panel" BorderBrush="#FFE04040" BorderThickness="2" Background="#FF2B2B2B" HorizontalAlignment="Left" VerticalAlignment="Top">
+    <Border.RenderTransform><TranslateTransform x:Name="PanelSlide"/></Border.RenderTransform>
     <StackPanel Orientation="Horizontal" Margin="8,5">
         <TextBlock x:Name="State" Text="● 記録中" Foreground="#FFFF6060" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
         <RadioButton x:Name="ModeClick" Content="クリック" Checked="Mode_Checked"/>
@@ -29,8 +34,9 @@
     </StackPanel>
     </Border>
     <!-- 引っ込んでいる間に出すタブ。マウスを乗せるか押すとバーが出る。赤 ● 記録中、赤 ■ 動画のステップを録画中、灰 ❚❚ 一時停止 -->
-    <Button x:Name="BarTab" Visibility="Collapsed" Click="BarTab_Click" Background="#FFE04040" Content="●"
+    <Button x:Name="BarTab" Visibility="Hidden" HorizontalAlignment="Center" VerticalAlignment="Top" Click="BarTab_Click" Background="#FFE04040" Content="●"
             AutomationProperties.AutomationId="BarTab" AutomationProperties.Name="記録バーを開く">
+        <Button.RenderTransform><TranslateTransform x:Name="TabSlide" Y="-14"/></Button.RenderTransform>
         <Button.Style>
             <!-- Fluent のボタンは最小の高さと余白が大きく、タブにならない -->
             <Style TargetType="Button">
