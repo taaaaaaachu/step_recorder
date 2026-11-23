@@ -53,13 +53,17 @@
 
         <DockPanel Grid.Column="2">
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                <StackPanel.Resources>
+                    <!-- ボタンをドロップダウンと同じ高さに伸ばす(Fluent のボタンは文字の高さで止まり、ドロップダウンより低い) -->
+                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="VerticalAlignment" Value="Stretch"/></Style>
+                </StackPanel.Resources>
                 <Label Content="出力の並べ方" VerticalAlignment="Center"/>
                 <ComboBox x:Name="Group" Width="230" Margin="0,0,10,0" VerticalContentAlignment="Center" SelectionChanged="Group_SelectionChanged">
                     <ComboBoxItem Content="手順モード(撮った順)"/>
                     <ComboBoxItem Content="画面一覧モード(画面ごと)"/>
                 </ComboBox>
                 <Button x:Name="UndoButton" Content="元に戻す" Click="Undo_Click" ToolTip="Ctrl+Z" IsEnabled="False"/>
-                <Button Content="保存" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" Padding="10,3" Margin="0,0,6,0" ToolTip="Ctrl+S"/>
+                <Button x:Name="SaveButton" Content="保存" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Stretch" Padding="10,3" Margin="0,0,6,0" ToolTip="Ctrl+S"/>
                 <Button Content="HTMLを開く" Click="OpenHtml_Click"/>
                 <Button Content="フォルダを開く" Click="OpenFolder_Click"/>
                 <!-- 本体はフォルダに書き出す。右の矢印で、HTML 1 ファイルなどの書き出し方を選ぶ -->

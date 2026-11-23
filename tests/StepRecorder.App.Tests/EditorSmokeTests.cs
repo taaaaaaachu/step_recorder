@@ -154,6 +154,25 @@ public sealed class EditorSmokeTests : IDisposable
 
 
 
+    /// <summary>上の段のボタンとドロップダウン(出力の並べ方・動画の形式)は高さが揃う。</summary>
+    [DesktopFact]
+    public void 上の段の部品は高さが揃う()
+    {
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
+        WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, rec.NextImageFile));
+        rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), rec.NextImageFile, 400, 300, DateTimeOffset.Now);
+        SessionStore.Save(rec.Session, dir);
+        app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Wait(800);
+
+        var heights = new[] { "Group", "UndoButton", "SaveButton", "ExportButton", "ExportMenuButton", "ClipFormatBox" }
+            .ToDictionary(id => id, id => Math.Round(Find(editor, id).Current.BoundingRectangle.Height));
+        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } o)
+            WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(o, "editor-toolbar.png"));
+        Assert.True(heights.Values.Distinct().Count() == 1, string.Join(", ", heights.Select(h => $"{h.Key}={h.Value}")));
+    }
+
     /// <summary>配布用に書き出すボタンの本体はそのままフォルダを選ぶ画面を出し、横の矢印は書き出し方のメニューを出す。</summary>
     [E2EFact]
     public void 配布用に書き出すの本体はフォルダに書き出し_矢印でHTML1ファイルを選べる()
