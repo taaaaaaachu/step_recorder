@@ -163,6 +163,17 @@ static class Desktop
     /// <summary>(x, y) で Ctrl を押しながらホイールを回す。notches が正なら奥へ。</summary>
     public static void CtrlWheel(nint hwnd, int x, int y, int notches) => Wheel(hwnd, x, y, notches, ctrl: true);
 
+    /// <summary>(x, y) でマウスの横のボタンを押す。back なら戻る(XBUTTON1)、でなければ進む(XBUTTON2)。</summary>
+    public static void SideButton(nint hwnd, int x, int y, bool back)
+    {
+        var pt = new Native.POINT { X = x, Y = y };
+        if (Native.ProcessId(Native.WindowFromPoint(pt)) != Native.ProcessId(hwnd))
+            throw new InvalidOperationException("押す位置に別のウィンドウが重なっているので中止した");
+        SetCursor(x, y);
+        INPUT X(uint flags) => new() { type = 0, u = new() { mi = new() { dwFlags = flags, mouseData = back ? 1u : 2u } } };
+        Send(X(0x0080), X(0x0100)); // XDOWN, XUP
+    }
+
     /// <summary>(x, y) でホイールを回す。notches が正なら奥へ。</summary>
     public static void Wheel(nint hwnd, int x, int y, int notches, bool ctrl = false)
     {

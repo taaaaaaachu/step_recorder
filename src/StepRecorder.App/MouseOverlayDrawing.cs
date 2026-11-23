@@ -7,12 +7,14 @@ namespace StepRecorder.App;
 
 /// <summary>
 /// マウスの表示の描き方。焼き込み(MouseBurner)と編集画面(MouseOverlayView)で同じものを使う(HTML は同じ形をスクリプトで描く)。
-/// クリックはボタンの色(左が赤・右が青・中が緑)の輪が広がりながら消え、その右下に押したボタンを塗ったマウスの絵を出す。
+/// クリックはボタンの色(左が赤・右が青・中が緑・戻る/進むが紫)の輪が広がりながら消え、その右下に押したボタンを塗ったマウスの絵を出す
+/// (戻る・進むは横のボタンで絵では塗れないので、胴に向きの矢印を描く)。
 /// ホイールは暗い丸に回した向きの白い三角。
 /// </summary>
 static class MouseOverlayDrawing
 {
-    static readonly Color[] Colors = [Color.FromRgb(244, 67, 54), Color.FromRgb(33, 150, 243), Color.FromRgb(76, 175, 80)];
+    // 左・右・中・戻る・進む。HTML のスクリプトも同じ色
+    static readonly Color[] Colors = [Color.FromRgb(244, 67, 54), Color.FromRgb(33, 150, 243), Color.FromRgb(76, 175, 80), Color.FromRgb(156, 39, 176), Color.FromRgb(156, 39, 176)];
     static readonly Brush Back = Freeze(new SolidColorBrush(Color.FromArgb(0xD9, 0x20, 0x20, 0x20)));
     static readonly Brush Outline = Freeze(new SolidColorBrush(Color.FromRgb(0x30, 0x30, 0x30)));
 
@@ -22,7 +24,7 @@ static class MouseOverlayDrawing
     /// </summary>
     public static void Draw(DrawingContext dc, Point center, double r, MouseAction action, int phase, (bool Left, bool Up) side = default)
     {
-        if (action < MouseAction.WheelUp)
+        if (!MouseOverlay.IsWheel(action))
         {
             var p = (phase + 0.5) / MouseOverlay.Phases;
             var fade = 1 - p * 0.8;
@@ -60,11 +62,21 @@ static class MouseOverlayDrawing
         dc.DrawGeometry(Brushes.White, null, body);
         if (action == MouseAction.Middle)
             dc.DrawRoundedRectangle(color, null, new Rect(x + w * 0.36, y + h * 0.08, w * 0.28, h * 0.28), w * 0.14, w * 0.14);
-        else
+        else if (action is MouseAction.Left or MouseAction.Right)
         {
             dc.PushClip(body);
             dc.DrawRectangle(color, null, new Rect(action == MouseAction.Left ? x : x + w / 2, y, w / 2, split - y));
             dc.Pop();
+        }
+        else
+        {
+            // 胴に、戻るなら ←、進むなら →
+            var (cy, half, dir) = (split + (y + h - split) / 2, w * 0.3, action == MouseAction.Back ? -1 : 1);
+            var arrow = new Pen(color, Math.Max(1.5, r * 0.13)) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
+            var (cx, tip) = (x + w / 2, x + w / 2 + dir * half);
+            dc.DrawLine(arrow, new Point(cx - dir * half, cy), new Point(tip, cy));
+            dc.DrawLine(arrow, new Point(tip - dir * half * 0.6, cy - half * 0.6), new Point(tip, cy));
+            dc.DrawLine(arrow, new Point(tip - dir * half * 0.6, cy + half * 0.6), new Point(tip, cy));
         }
         var pen = new Pen(Outline, Math.Max(1, r * 0.07));
         dc.DrawGeometry(null, pen, body);

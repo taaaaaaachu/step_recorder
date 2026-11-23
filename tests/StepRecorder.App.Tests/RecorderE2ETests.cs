@@ -250,15 +250,18 @@ public sealed class RecorderE2ETests : IDisposable
         Click(main, x, y);
         Wait(300);
         Wheel(main, x, y, -2);
+        Wait(300);
+        SideButton(main, x, y, back: true);
         Wait(500);
 
         var session = Stop(engine);
         var mouse = session.Mouse!;
-        Assert.Equal([MouseAction.Left, MouseAction.WheelDown], mouse.Select(m => m.Action));
+        Assert.Equal([MouseAction.Left, MouseAction.WheelDown, MouseAction.Back], mouse.Select(m => m.Action));
+        Assert.Contains("マウスの戻るボタン を押す", session.Steps[^1].Description); // 説明文にも残す
         Assert.All(mouse, m => Assert.Equal((x - frame.Left, y - frame.Top), (m.X, m.Y))); // 動画上の位置(ウィンドウの左上から)
         Assert.InRange(mouse[0].Time.TotalSeconds, 0.5, 1.8);
         Assert.True(mouse[1].Time > mouse[0].Time);
-        Assert.Equal(2, MouseOverlay.Marks(MouseOverlay.StrokesFor(session, new Step { VideoFile = "video.mp4" })).Count);
+        Assert.Equal(3, MouseOverlay.Marks(MouseOverlay.StrokesFor(session, new Step { VideoFile = "video.mp4" })).Count);
     }
 
     [E2EFact]

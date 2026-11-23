@@ -209,7 +209,7 @@ sealed class RecorderEngine
 
     nint MouseProc(int n, nint w, nint l)
     {
-        if (n >= 0 && !Paused && (int)w is WM_LBUTTONDOWN or WM_RBUTTONDOWN or WM_MBUTTONDOWN or WM_MOUSEWHEEL or WM_MOUSEHWHEEL)
+        if (n >= 0 && !Paused && (int)w is WM_LBUTTONDOWN or WM_RBUTTONDOWN or WM_MBUTTONDOWN or WM_MOUSEWHEEL or WM_MOUSEHWHEEL or WM_XBUTTONDOWN)
         {
             var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(l);
             var root = GetAncestor(WindowFromPoint(info.pt), GA_ROOT);
@@ -221,6 +221,17 @@ sealed class RecorderEngine
                 {
                     case WM_MOUSEWHEEL: Enqueue(() => RecordMouse(info.pt, up ? MouseAction.WheelUp : MouseAction.WheelDown, pressed)); break;
                     case WM_MOUSEHWHEEL: Enqueue(() => RecordMouse(info.pt, up ? MouseAction.WheelRight : MouseAction.WheelLeft, pressed)); break;
+                    case WM_XBUTTONDOWN:
+                        // マウスの横の戻る・進むボタン。画面は撮らず、Alt+← などのキー操作と同じく操作として足す
+                        var (side, name) = (info.mouseData >> 16) == 1 ? (MouseAction.Back, "マウスの戻るボタン") : (MouseAction.Forward, "マウスの進むボタン");
+                        var at = DateTimeOffset.Now;
+                        Enqueue(() =>
+                        {
+                            Flush();
+                            RecordMouse(info.pt, side, pressed);
+                            rec.AddOperation(new Operation { Kind = OperationKind.KeyPress, Keys = name, Time = at });
+                        });
+                        break;
                     default:
                         var (button, action) = (int)w switch
                         {

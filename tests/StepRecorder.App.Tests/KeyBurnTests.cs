@@ -132,6 +132,35 @@ public sealed class KeyBurnTests : IDisposable
     }
 
     [DesktopFact]
+    public void 戻る進むボタンは_マウスの絵の胴に向きの矢印を描く()
+    {
+        var clip = Path.Combine(dir, "side.mp4");
+        VideoClips.ExportClip(dir, new Step { VideoFile = "white.mp4" }, ClipFormat.Mp4, clip, null, [],
+            [new(TimeSpan.FromSeconds(1), 150, 150, MouseAction.Back), new(TimeSpan.FromSeconds(1), 400, 150, MouseAction.Forward)]);
+        var frame = VideoClips.Frame(clip, TimeSpan.FromSeconds(1.5));
+        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } outDir) WindowCapture.SavePng(frame, Path.Combine(outDir, "mouse-side.png"));
+        var r = MouseOverlay.Radius(H);
+        var (pw, ph, off) = (r * MouseOverlay.PicWidth, r * MouseOverlay.PicHeight, r * MouseOverlay.PicOffset);
+        var px = VideoE2ETests.Bgr24(frame);
+        // 絵の胴(ボタンより下)の紫の画素の、絵の中での横の重心。戻るは矢印の先が左なので、先の太い部分が左に寄る
+        (int Count, double Center) Purple(double x)
+        {
+            var (x0, y0) = (x + off, 150 + off + ph * 0.42);
+            var xs = new List<int>();
+            for (var y = (int)y0; y < 150 + off + ph; y++)
+                for (var i = (int)x0; i < x0 + pw; i++)
+                {
+                    var k = (y * frame.PixelWidth + i) * 3;
+                    if (px[k + 2] - px[k + 1] > 50 && px[k] - px[k + 1] > 50) xs.Add(i);
+                }
+            return (xs.Count, xs.Count == 0 ? 0 : (xs.Average() - x0) / pw);
+        }
+        var (back, forward) = (Purple(150), Purple(400));
+        Assert.True(back.Count > 5 && forward.Count > 5, $"矢印が無い: {back} {forward}");
+        Assert.True(back.Center < forward.Center, $"向きが見分けられない: 戻る {back.Center:0.00} 進む {forward.Center:0.00}");
+    }
+
+    [DesktopFact]
     public void クリックとホイールは_その位置にトリミングした分ずらして焼き込まれる()
     {
         var clip = Path.Combine(dir, "mouse.mp4");

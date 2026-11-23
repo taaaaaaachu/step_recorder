@@ -1,6 +1,7 @@
 namespace StepRecorder.Core;
 
-public enum MouseAction { Left, Right, Middle, WheelUp, WheelDown, WheelLeft, WheelRight }
+/// <summary>マウスの操作。Back・Forward はマウスの横の戻る・進むボタン(XBUTTON1・2)。WheelUp 以降がホイール。</summary>
+public enum MouseAction { Left, Right, Middle, Back, Forward, WheelUp, WheelDown, WheelLeft, WheelRight }
 
 /// <summary>マウスの操作 1 つ。Time は動画上の時刻、(X, Y) は動画上の画素の位置(トリミング前)。</summary>
 public sealed record MouseStroke(TimeSpan Time, int X, int Y, MouseAction Action);
@@ -8,11 +9,11 @@ public sealed record MouseStroke(TimeSpan Time, int X, int Y, MouseAction Action
 /// <summary>画面に出すマウスの表示 1 つ。Start から End まで (X, Y) に出す。</summary>
 public sealed record MouseMark(TimeSpan Start, TimeSpan End, int X, int Y, MouseAction Action)
 {
-    public bool IsWheel => Action >= MouseAction.WheelUp;
+    public bool IsWheel => MouseOverlay.IsWheel(Action);
 }
 
 /// <summary>
-/// 動画に重ねるマウスの表示の時間割。クリックは広がって消える輪と、押したボタンを塗ったマウスの絵(ボタンで色も違う)。ホイールは向きの矢印。
+/// 動画に重ねるマウスの表示の時間割。クリックは広がって消える輪と、押したボタンを塗ったマウスの絵(ボタンで色も違う。戻る・進むは胴に矢印)。ホイールは向きの矢印。
 /// 焼き込み・編集画面・HTML はどれもこれを描くだけにして、見た目を揃える。
 /// </summary>
 public static class MouseOverlay
@@ -25,6 +26,8 @@ public static class MouseOverlay
     public static readonly TimeSpan WheelGap = TimeSpan.FromSeconds(0.4);
     /// <summary>輪の広がり方の段階の数(焼き込みは段階ごとに 1 度だけ描く)。</summary>
     public const int Phases = 6;
+
+    public static bool IsWheel(MouseAction action) => action >= MouseAction.WheelUp;
 
     /// <summary>高さ height(画素)の動画に出す輪の半径(画素)。キーの文字の大きさに合わせる。</summary>
     public static double Radius(double height) => KeyOverlay.FontSize(height) * 0.8;
@@ -51,12 +54,12 @@ public static class MouseOverlay
         var marks = new List<(MouseStroke First, TimeSpan Last)>();
         foreach (var m in strokes.OrderBy(m => m.Time))
         {
-            var wheel = m.Action >= MouseAction.WheelUp;
+            var wheel = IsWheel(m.Action);
             var at = marks.FindLastIndex(x => x.First.Action == m.Action);
             if (wheel && at >= 0 && m.Time - marks[at].Last <= WheelGap) marks[at] = marks[at] with { Last = m.Time };
             else marks.Add((m, m.Time));
         }
-        return marks.Select(x => new MouseMark(x.First.Time, x.Last + (x.First.Action >= MouseAction.WheelUp ? WheelLinger : Ripple),
+        return marks.Select(x => new MouseMark(x.First.Time, x.Last + (IsWheel(x.First.Action) ? WheelLinger : Ripple),
             x.First.X, x.First.Y, x.First.Action)).ToList();
     }
 
