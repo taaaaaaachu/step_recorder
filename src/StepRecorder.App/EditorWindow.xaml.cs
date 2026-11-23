@@ -44,6 +44,7 @@ public partial class EditorWindow : Window
     public EditorWindow(Session session, string dir, GroupMode mode)
     {
         InitializeComponent();
+        (KeysBox.Tag, MouseBox.Tag) = (KeysBox.ToolTip, MouseBox.ToolTip); // 記録が無いときの説明から戻すため
         Player.Ended += Player_Ended;
         Player.Failed += Player_Failed;
         this.session = session;
@@ -446,23 +447,34 @@ public partial class EditorWindow : Window
         SetBox(KeysBox, KeyOverlay.Recorded(session, s).Count > 0, s.HideKeys, "この動画の間に押したキーの記録がありません");
         SetBox(MouseBox, MouseOverlay.Recorded(session, s).Count > 0, s.HideMouse, "この動画の間のクリック・ホイールの記録がありません");
         loading = false;
+    }
 
-        static void SetBox(CheckBox box, bool recorded, bool hidden, string none)
-        {
-            box.IsChecked = recorded && !hidden;
-            box.IsEnabled = recorded;
-            ToolTipService.SetShowOnDisabled(box, true);
-            if (!recorded) box.ToolTip = none;
-        }
+    /// <summary>表示のチェック。記録が無ければ押せず、理由をツールチップに出す。</summary>
+    static void SetBox(CheckBox box, bool recorded, bool hidden, string none)
+    {
+        box.IsChecked = recorded && !hidden;
+        box.IsEnabled = recorded;
+        ToolTipService.SetShowOnDisabled(box, true);
+        box.ToolTip = recorded ? box.Tag : none;
     }
 
     void Keys_Click(object sender, RoutedEventArgs e) => SetOverlay(s => s.HideKeys = KeysBox.IsChecked != true);
 
     void Mouse_Click(object sender, RoutedEventArgs e) => SetOverlay(s => s.HideMouse = MouseBox.IsChecked != true);
 
+    // 全編の表示での、キー表示・マウス表示のチェック。見え方だけを変え(保存しない)、そこから切り出した区間のステップの初期値になる
+    bool fullHideKeys, fullHideMouse;
+
     void SetOverlay(Action<Step> change)
     {
-        if (loading || Current is not { VideoFile: not null } s) return;
+        if (loading) return;
+        if (videoView)
+        {
+            (fullHideKeys, fullHideMouse) = (KeysBox.IsChecked != true, MouseBox.IsChecked != true);
+            ShowFullOverlays();
+            return;
+        }
+        if (Current is not { VideoFile: not null } s) return;
         Checkpoint();
         change(s);
         if (clipPlaying) ShowOverlays(KeyOverlay.StrokesFor(session, s), MouseOverlay.StrokesFor(session, s), s.Crop);
@@ -479,6 +491,7 @@ public partial class EditorWindow : Window
         KeysLayer.Visibility = Visibility.Visible;
         MouseView.Marks = MouseOverlay.Marks(mouse);
         MouseView.Radius = MouseOverlay.Radius(area.Height);
+        MouseView.Area = new Rect(area.X, area.Y, area.Width, area.Height);
         MouseView.Visibility = Visibility.Visible;
         StartPlayTimer();
     }
@@ -560,8 +573,20 @@ public partial class EditorWindow : Window
         SetStageSize(fullSize.Width, fullSize.Height);
         Player.Open(FullPath(session.VideoFile!), SliderTime); // 開くだけ。シークバーの位置で止まっている
         Player.Visibility = Visibility.Visible;
-        ShowOverlays(session.Keys ?? [], session.Mouse ?? [], null); // 全編では、記録したものをすべて重ねる(区間を選ぶ目安)
+        KeysBox.Visibility = MouseBox.Visibility = Visibility.Visible;
+        loading = true;
+        SetBox(KeysBox, session.Keys is { Count: > 0 }, fullHideKeys, "録画中に押したキーの記録がありません");
+        SetBox(MouseBox, session.Mouse is { Count: > 0 }, fullHideMouse, "録画中のクリック・ホイールの記録がありません");
+        loading = false;
+        ShowFullOverlays();
         if (fit) FitZoom();
+    }
+
+    /// <summary>全編では、記録したものをすべて重ねる(区間を選ぶ目安)。チェックを外したものは出さない。</summary>
+    void ShowFullOverlays()
+    {
+        ShowOverlays(fullHideKeys ? [] : session.Keys ?? [], fullHideMouse ? [] : session.Mouse ?? [], null);
+        KeysView.Time = MouseView.Time = SliderTime;
     }
 
     void LeaveVideoView()
@@ -686,7 +711,7 @@ public partial class EditorWindow : Window
             return;
         }
         InsertFromVideo(CaptureTrigger.Video, VideoClips.Frame(FullPath(session.VideoFile!), start), start,
-            st => (st.VideoFile, st.VideoStart, st.VideoEnd) = (session.VideoFile, start, end));
+            st => (st.VideoFile, st.VideoStart, st.VideoEnd, st.HideKeys, st.HideMouse) = (session.VideoFile, start, end, fullHideKeys, fullHideMouse));
         (rangeStart, rangeEnd) = (null, null);
         RangeLabel.Text = "";
     }

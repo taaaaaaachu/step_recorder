@@ -92,10 +92,10 @@
                 <Button x:Name="PlayButton" Content="▶ 再生" Click="Play_Click" Visibility="Collapsed"/>
                 <ComboBox x:Name="SpeedBox" MinWidth="110" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" SelectionChanged="Speed_SelectionChanged"
                           AutomationProperties.Name="再生の速さ" ToolTip="この動画のステップの最初の速さ。HTML では見る人が変えられます。mp4 自体は等速のままです(GIF は焼き込み)"/>
-                <CheckBox x:Name="KeysBox" Content="キー表示" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed" Click="Keys_Click"
+                <CheckBox x:Name="KeysBox" Content="キー表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Click="Keys_Click"
                           ToolTip="録画中に押したキーを動画に重ねます。配布用に書き出す動画(MP4・GIF)には焼き込み、HTML では再生に合わせて重ねます"/>
-                <CheckBox x:Name="MouseBox" Content="マウス表示" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed" Click="Mouse_Click"
-                          ToolTip="録画中のクリック(左は赤・右は青・中は緑の輪)とホイール(向きの矢印)を動画に重ねます。書き出しでの扱いはキー表示と同じです"/>
+                <CheckBox x:Name="MouseBox" Content="マウス表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Click="Mouse_Click"
+                          ToolTip="録画中のクリック(押したボタンを塗ったマウスの絵と輪)とホイール(向きの矢印)を動画に重ねます。書き出しでの扱いはキー表示と同じです"/>
                 <Separator Margin="6,2,12,2"/>
                 <Button Content="−" Click="ZoomOut_Click" ToolTip="縮小 (Ctrl+ホイール / Ctrl+-)" MinWidth="30"/>
                 <TextBlock x:Name="ZoomLabel" AutomationProperties.AutomationId="ZoomLabel" Text="100%" MinWidth="44" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,6,0"/>

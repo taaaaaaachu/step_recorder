@@ -208,6 +208,23 @@ public static class Export
                     ctx.lineWidth = r * 0.14;
                     ctx.fill();
                     ctx.stroke();
+                    // 押したボタンを塗ったマウスの絵。右下に置くとはみ出すなら左・上に置く(MouseOverlay.PicSide)
+                    const pw = r * PIC_W, ph = r * PIC_H, off = r * PIC_OFF;
+                    const px = cx + off + pw > w ? cx - off - pw : cx + off, py = cy + off + ph > h ? cy - off - ph : cy + off, split = py + ph * 0.42;
+                    const body = new Path2D();
+                    body.roundRect(px, py, pw, ph, pw * 0.45);
+                    ctx.fillStyle = '#fff';
+                    ctx.fill(body);
+                    ctx.fillStyle = `rgb(${colors[a]})`;
+                    if (a === 2) { ctx.beginPath(); ctx.roundRect(px + pw * 0.36, py + ph * 0.08, pw * 0.28, ph * 0.28, pw * 0.14); ctx.fill(); }
+                    else { ctx.save(); ctx.clip(body); ctx.fillRect(a === 0 ? px : px + pw / 2, py, pw / 2, split - py); ctx.restore(); }
+                    ctx.strokeStyle = '#303030';
+                    ctx.lineWidth = Math.max(1, r * 0.07);
+                    ctx.stroke(body);
+                    ctx.beginPath();
+                    ctx.moveTo(px, split); ctx.lineTo(px + pw, split);
+                    if (a !== 2) { ctx.moveTo(px + pw / 2, py); ctx.lineTo(px + pw / 2, split); }
+                    ctx.stroke();
                   } else {
                     ctx.arc(cx, cy, r * 0.75, 0, Math.PI * 2);
                     ctx.fillStyle = 'rgba(32,32,32,.85)';
@@ -253,7 +270,8 @@ public static class Export
             </html>
 
             """.Replace("MAX_KEYS", KeyOverlay.MaxVisible.ToString(CultureInfo.InvariantCulture))
-               .Replace("PHASES", MouseOverlay.Phases.ToString(CultureInfo.InvariantCulture)));
+               .Replace("PHASES", MouseOverlay.Phases.ToString(CultureInfo.InvariantCulture))
+               .Replace("PIC_W", Number(MouseOverlay.PicWidth)).Replace("PIC_H", Number(MouseOverlay.PicHeight)).Replace("PIC_OFF", Number(MouseOverlay.PicOffset)));
         return sb.ToString();
     }
 

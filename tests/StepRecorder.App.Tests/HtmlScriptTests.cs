@@ -84,6 +84,28 @@ public sealed class HtmlScriptTests : IDisposable
     }
 
     [DesktopFact]
+    public void 右クリックはマウスの絵の右ボタンを塗る()
+    {
+        var s = new Session { TargetName = "Demo", VideoFile = "video.mp4", Mouse = [new(TimeSpan.FromSeconds(1), 200, 100, MouseAction.Right)] };
+        // トリミングしていないと、動画ファイルの無いこのテストでは高さが決まらない(実際は読み込んだ動画の大きさ)ので、全体をトリミングにする
+        s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", Crop = new(0, 0, 640, 360) });
+        var r = MouseOverlay.Radius(360);
+        var (top, left, right) = (100 + r * (MouseOverlay.PicOffset + MouseOverlay.PicHeight * 0.25),
+            200 + r * (MouseOverlay.PicOffset + MouseOverlay.PicWidth * 0.25), 200 + r * (MouseOverlay.PicOffset + MouseOverlay.PicWidth * 0.75));
+        string N(double v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        var title = Run(Export.ToHtml(s, GroupMode.Sequence), $$"""
+            const v = document.querySelector('video'), c = v.parentElement.querySelector('canvas.mouse');
+            v.currentTime = 1.3; v.dispatchEvent(new Event('timeupdate'));
+            const k = v.clientHeight / 360 * devicePixelRatio, rgb = (x, y) => [...c.getContext('2d').getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data].slice(0, 3);
+            const kind = ([r, g, b]) => b - r > 60 ? 'blue' : r > 200 && g > 200 && b > 200 ? 'white' : `${r},${g},${b}`;
+            document.title = `${kind(rgb({{N(left)}}, {{N(top)}}))} ${kind(rgb({{N(right)}}, {{N(top)}}))}`;
+            """);
+
+        Assert.Equal("white blue", title);
+    }
+
+    [DesktopFact]
     public void キーの無い動画と静止画だけでもスクリプトは止まらない()
     {
         var s = new Session { TargetName = "Demo", VideoFile = "video.mp4" };

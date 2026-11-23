@@ -103,6 +103,35 @@ public sealed class KeyBurnTests : IDisposable
     static readonly IReadOnlyList<MouseStroke> Clicks = [new(TimeSpan.FromSeconds(1), 300, 200, MouseAction.Left), new(TimeSpan.FromSeconds(1), 500, 100, MouseAction.WheelDown)];
 
     [DesktopFact]
+    public void 左右のクリックは_マウスの絵の塗ったボタンで見分けられる()
+    {
+        var clip = Path.Combine(dir, "buttons.mp4");
+        VideoClips.ExportClip(dir, new Step { VideoFile = "white.mp4" }, ClipFormat.Mp4, clip, null, [],
+            [new(TimeSpan.FromSeconds(1), 150, 150, MouseAction.Left), new(TimeSpan.FromSeconds(1), 400, 150, MouseAction.Right), new(TimeSpan.FromSeconds(1), 630, 150, MouseAction.Right)]);
+        var frame = VideoClips.Frame(clip, TimeSpan.FromSeconds(1.5)); // 輪はほぼ消え、絵は残っている
+        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } outDir) WindowCapture.SavePng(frame, Path.Combine(outDir, "mouse-buttons.png"));
+        var r = MouseOverlay.Radius(H);
+        // 絵の左上のボタンと右上のボタンの中ほどの色(左クリックは左が赤、右クリックは右が青)
+        (int R, int G, int B) At(double x, double y)
+        {
+            var px = VideoE2ETests.Bgr24(frame);
+            var i = ((int)y * frame.PixelWidth + (int)x) * 3;
+            return (px[i + 2], px[i + 1], px[i]);
+        }
+        bool Red((int R, int G, int B) c) => c.R - c.G > 60 && c.R - c.B > 60;
+        bool Blue((int R, int G, int B) c) => c.B - c.R > 60;
+        bool White((int R, int G, int B) c) => c.R > 200 && c.G > 200 && c.B > 200;
+        double PicX(double x, bool left, double quarter) => (left ? x - r * (MouseOverlay.PicOffset + MouseOverlay.PicWidth) : x + r * MouseOverlay.PicOffset) + r * MouseOverlay.PicWidth * quarter;
+        var buttonY = 150 + r * MouseOverlay.PicOffset + r * MouseOverlay.PicHeight * 0.25;
+
+        Assert.True(Red(At(PicX(150, false, 0.25), buttonY)), $"左クリックの左ボタン: {At(PicX(150, false, 0.25), buttonY)}");
+        Assert.True(White(At(PicX(150, false, 0.75), buttonY)), $"左クリックの右ボタン: {At(PicX(150, false, 0.75), buttonY)}");
+        Assert.True(White(At(PicX(400, false, 0.25), buttonY)), $"右クリックの左ボタン: {At(PicX(400, false, 0.25), buttonY)}");
+        Assert.True(Blue(At(PicX(400, false, 0.75), buttonY)), $"右クリックの右ボタン: {At(PicX(400, false, 0.75), buttonY)}");
+        Assert.True(Blue(At(PicX(630, true, 0.75), buttonY)), $"右端のクリックの絵が左に無い: {At(PicX(630, true, 0.75), buttonY)}");
+    }
+
+    [DesktopFact]
     public void クリックとホイールは_その位置にトリミングした分ずらして焼き込まれる()
     {
         var clip = Path.Combine(dir, "mouse.mp4");
@@ -126,7 +155,9 @@ public sealed class KeyBurnTests : IDisposable
         var frame = new GifBitmapDecoder(new Uri(gif), BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[12]; // 1.2 秒(10fps)
         Assert.Equal(960, frame.PixelWidth);
         var r = (int)MouseOverlay.Radius(540);
-        var blue = Bgr(frame).Where(p => p.B - p.R > 60).ToList();
+        // 輪だけを見る(右下のマウスの絵の青は除く)
+        var pic = r * MouseOverlay.PicOffset;
+        var blue = Bgr(frame).Where(p => p.B - p.R > 60 && Math.Abs(p.X - 750) <= r + 3 && Math.Abs(p.Y - 450) <= r + 3 && !(p.X > 750 + pic && p.Y > 450 + pic)).ToList();
         Assert.NotEmpty(blue);
         Assert.InRange(blue.Average(p => p.X), 750 - 3, 750 + 3); // 1500 / 2
         Assert.InRange(blue.Average(p => p.Y), 450 - 3, 450 + 3);

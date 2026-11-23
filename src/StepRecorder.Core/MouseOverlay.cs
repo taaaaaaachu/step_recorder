@@ -12,7 +12,7 @@ public sealed record MouseMark(TimeSpan Start, TimeSpan End, int X, int Y, Mouse
 }
 
 /// <summary>
-/// 動画に重ねるマウスの表示の時間割。クリックは広がって消える輪(ボタンで色が違う)、ホイールは向きの矢印。
+/// 動画に重ねるマウスの表示の時間割。クリックは広がって消える輪と、押したボタンを塗ったマウスの絵(ボタンで色も違う)。ホイールは向きの矢印。
 /// 焼き込み・編集画面・HTML はどれもこれを描くだけにして、見た目を揃える。
 /// </summary>
 public static class MouseOverlay
@@ -28,6 +28,16 @@ public static class MouseOverlay
 
     /// <summary>高さ height(画素)の動画に出す輪の半径(画素)。キーの文字の大きさに合わせる。</summary>
     public static double Radius(double height) => KeyOverlay.FontSize(height) * 0.8;
+
+    // クリックに添えるマウスの絵。半径に対する比率で、押した所から右下へ PicOffset 離して置く(焼き込み・編集画面・HTML で同じ値を使う)
+    public const double PicOffset = 0.55, PicWidth = 0.95, PicHeight = 1.35;
+
+    /// <summary>
+    /// (x, y) のクリックに添えるマウスの絵を、右下に置くと見えている範囲(w×h)からはみ出すなら、左・上に置く。
+    /// 閉じるボタンなど、画面の端のクリックでも絵が切れないように。
+    /// </summary>
+    public static (bool Left, bool Up) PicSide(double x, double y, double r, double w, double h) =>
+        (x + r * (PicOffset + PicWidth) > w, y + r * (PicOffset + PicHeight) > h);
 
     /// <summary>出さない設定かどうかに関わらず、そのステップで記録したマウスの操作(Recorded)。</summary>
     public static IReadOnlyList<MouseStroke> StrokesFor(Session session, Step step) => step.HideMouse ? [] : Recorded(session, step);

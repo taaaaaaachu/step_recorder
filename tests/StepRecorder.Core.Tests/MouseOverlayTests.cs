@@ -25,6 +25,16 @@ public class MouseOverlayTests
         ], marks);
     }
 
+    [Theory]
+    [InlineData(100, 100, false, false)] // ふつうは右下
+    [InlineData(630, 100, true, false)] // 右端(閉じるボタンなど)は左に
+    [InlineData(100, 355, false, true)] // 下端は上に
+    [InlineData(630, 355, true, true)]
+    public void マウスの絵は見えている範囲からはみ出さない側に置く(double x, double y, bool left, bool up)
+    {
+        Assert.Equal((left, up), MouseOverlay.PicSide(x, y, 16, 640, 360));
+    }
+
     [Fact]
     public void クリックの輪は時間とともに広がり_ホイールは段階を持たない()
     {
