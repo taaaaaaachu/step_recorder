@@ -14,7 +14,7 @@ public sealed class Settings
     /// <summary>配布用に書き出すときの動画の形式(前回の選択)。</summary>
     public ClipFormat ClipFormat { get; set; }
     public GroupMode GroupMode { get; set; } = GroupMode.Sequence;
-    /// <summary>起動時に GitHub Releases の新しい版を確認するか。</summary>
+    /// <summary>起動時に GitHub Releases の新しいバージョンを確認するか。</summary>
     public bool AutoUpdate { get; set; } = true;
     /// <summary>スクリーンショットにマウスカーソルを写すか。</summary>
     public bool CaptureCursor { get; set; }

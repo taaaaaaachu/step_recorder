@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
       - run: dotnet publish src/StepRecorder.App -c Release -r win-x64 --self-contained -o publish -p:Version=${{ env.VERSION }}
-      - run: dotnet tool install -g vpk --version 1.2.161 # Velopack パッケージと同じ版にする
+      - run: dotnet tool install -g vpk --version 1.2.161 # Velopack パッケージと同じバージョンにする
       - name: 前回のリリースを取得(差分更新用。初回は無くてよい)
         continue-on-error: true
         run: vpk download github --repoUrl ${{ env.REPO_URL }} --token ${{ secrets.GITHUB_TOKEN }}

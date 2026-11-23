@@ -16,7 +16,7 @@ public static class SharedHost
     {
         var name = Path.GetFileName(exePath);
         if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
-        // python3.exe・python3.12.exe のような版付きの名前も
+        // python3.exe・python3.12.exe のようなバージョン付きの名前も
         return Names.Contains(name) || name.StartsWith("python3", StringComparison.OrdinalIgnoreCase);
     }
 }
