@@ -6,12 +6,63 @@
         ThemeMode="Dark" Background="Transparent" Foreground="White"
         MouseLeftButtonDown="Bar_MouseLeftButtonDown">
     <Window.Resources>
-        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Margin" Value="3,0"/><Setter Property="Padding" Value="8,2"/><Setter Property="Focusable" Value="False"/>
+        <!--
+            平らなボタン。Tag にアイコン(Segoe Fluent Icons / Segoe MDL2 Assets の字)、Content に文言。
+            アイコンの色は BorderBrush で変える(録画は赤)。乗せると明るく、押すとさらに明るくなる
+        -->
+        <Style x:Key="BarButton" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Foreground" Value="#FFF0F0F0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="#FFF0F0F0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Face" CornerRadius="6" Background="{TemplateBinding Background}" Padding="9,5">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="13"
+                                           Foreground="{TemplateBinding BorderBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ContentPresenter VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#FF3D3D3D"/></Trigger>
+                <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="#FF4D4D4D"/></Trigger>
+            </Style.Triggers>
         </Style>
-        <Style TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
-            <Setter Property="Foreground" Value="White"/><Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Focusable" Value="False"/><Setter Property="MinWidth" Value="0"/>
+        <!-- 停止は記録を終える操作なので、赤く塗って目立たせる(乗せたときも赤のまま明るく) -->
+        <Style x:Key="StopButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
+            <Setter Property="Background" Value="#FFC42B1C"/>
+            <Setter Property="Margin" Value="4,0,2,0"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#FFD83B2B"/></Trigger>
+                <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="#FFA82315"/></Trigger>
+            </Style.Triggers>
+        </Style>
+        <!-- 撮影モードの切り替え。2 つを 1 つの枠に並べ、選んでいる方を明るくする(セグメント) -->
+        <Style TargetType="RadioButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Foreground" Value="#FFB8B8B8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Face" CornerRadius="4" Background="Transparent" Padding="10,3">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="White"/></Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Face" Property="Background" Value="#FF4A4A4A"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
     <!--
@@ -20,17 +71,24 @@
     -->
     <Grid>
     <!-- 記録中だと分かる赤い枠。Fluent のウインドウは自分の枠線を描かないので Border で描く -->
-    <Border x:Name="Panel" BorderBrush="#FFE04040" BorderThickness="2" Background="#FF2B2B2B" HorizontalAlignment="Left" VerticalAlignment="Top">
+    <Border x:Name="Panel" BorderBrush="#FFE04040" BorderThickness="1.5" CornerRadius="0,0,10,10" Background="#FF202020" HorizontalAlignment="Left" VerticalAlignment="Top">
     <Border.RenderTransform><TranslateTransform x:Name="PanelSlide"/></Border.RenderTransform>
-    <StackPanel Orientation="Horizontal" Margin="8,5">
-        <TextBlock x:Name="State" Text="● 記録中" Foreground="#FFFF6060" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
-        <RadioButton x:Name="ModeClick" Content="クリック" Checked="Mode_Checked"/>
-        <RadioButton x:Name="ModeManual" Content="手動" Checked="Mode_Checked"/>
-        <Button x:Name="CaptureButton" Content="撮影" Click="Capture_Click"/>
-        <Button x:Name="ClipButton" Content="● 録画" Click="Clip_Click" ToolTip="押してから操作し、もう一度押すと動画のステップになります"/>
-        <Button x:Name="PauseButton" Content="一時停止" Click="Pause_Click"/>
-        <Button Content="停止" Click="Stop_Click"/>
-        <TextBlock x:Name="Count" Text="0 枚" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="40"/>
+    <StackPanel Orientation="Horizontal" Margin="10,6">
+        <TextBlock x:Name="State" Text="● 記録中" Foreground="#FFFF6060" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,10,0"/>
+        <Border x:Name="ModeGroup" Background="#FF141414" CornerRadius="6" Padding="2" Margin="0,0,6,0" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="ModeClick" Content="クリック" Checked="Mode_Checked"/>
+                <RadioButton x:Name="ModeManual" Content="手動" Checked="Mode_Checked"/>
+            </StackPanel>
+        </Border>
+        <Button x:Name="CaptureButton" Style="{StaticResource BarButton}" Tag="&#xE722;" Content="撮影" Click="Capture_Click"/>
+        <Button x:Name="ClipButton" Style="{StaticResource BarButton}" Tag="&#xE7C8;" BorderBrush="#FFFF5050" Content="録画" Click="Clip_Click"
+                ToolTip="押してから操作し、もう一度押すと動画のステップになります"/>
+        <Button x:Name="PauseButton" Style="{StaticResource BarButton}" Tag="&#xE769;" Content="一時停止" Click="Pause_Click"/>
+        <Button Style="{StaticResource StopButton}" Tag="&#xE71A;" Content="停止" Click="Stop_Click"/>
+        <Border Background="#FF333333" CornerRadius="9" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center">
+            <TextBlock x:Name="Count" Text="0 枚" Foreground="#FFD0D0D0" MinWidth="32" TextAlignment="Center"/>
+        </Border>
         <!-- ピン。アイコンは Windows 同梱のフォントの線画(11 は Segoe Fluent Icons、10 は Segoe MDL2 Assets)。外すと E718、留めると針が真下を向いたピン。E840 はどちらのフォントでも針が左下 45 度なので、-45 度回す(E718 は 10 では横向きなので回しても揃わない) -->
         <ToggleButton x:Name="PinButton" Margin="4,0,0,0" Checked="Pin_Changed" Unchecked="Pin_Changed" ToolTip="バーを引っ込めない"
                       AutomationProperties.AutomationId="PinButton" AutomationProperties.Name="バーを引っ込めない">
@@ -40,7 +98,7 @@
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="ToggleButton">
-                                <Border x:Name="Face" Width="24" Height="22" CornerRadius="3" Background="Transparent">
+                                <Border x:Name="Face" Width="28" Height="26" CornerRadius="6" Background="Transparent">
                                     <TextBlock x:Name="Icon" Text="&#xE718;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
                                                Foreground="#FFB8B8B8" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"/>
                                 </Border>
@@ -78,7 +136,7 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <Border Width="56" Height="14" Background="{TemplateBinding Background}">
+                            <Border Width="56" Height="14" CornerRadius="0,0,6,6" Background="{TemplateBinding Background}">
                                 <TextBlock Text="{TemplateBinding Content}" Foreground="White" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                         </ControlTemplate>

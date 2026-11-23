@@ -60,7 +60,7 @@ public partial class RecordBar : Window
         if (settings.DefaultMode == RecordMode.Video)
         {
             // クリックごとに撮りつつ全編を録っている。区間は編集画面で切り出すので録画ボタンは使わない
-            ModeClick.Visibility = ModeManual.Visibility = ClipButton.Visibility = Visibility.Collapsed;
+            ModeGroup.Visibility = ClipButton.Visibility = Visibility.Collapsed;
             State.Text = "● 記録中(録画)";
         }
         recordingLabel = State.Text;
@@ -211,7 +211,7 @@ public partial class RecordBar : Window
         if (!recording)
         {
             clipTimer.Stop();
-            ClipButton.Content = "● 録画";
+            (ClipButton.Content, ClipButton.Tag) = ("録画", RecordIcon);
             ShowTabState();
             return;
         }
@@ -222,14 +222,17 @@ public partial class RecordBar : Window
         ShowTabState();
     }
 
-    void ShowClipTime() => ClipButton.Content = $"■ 録画停止 {TimeText.Seconds(clipClock.Elapsed)}";
+    // ボタンのアイコン(Segoe Fluent Icons の字)
+    const string RecordIcon = "\uE7C8", StopIcon = "\uE71A", PauseIcon = "\uE769", PlayIcon = "\uE768";
+
+    void ShowClipTime() => (ClipButton.Content, ClipButton.Tag) = ($"録画停止 {TimeText.Seconds(clipClock.Elapsed)}", StopIcon);
 
     void Pause_Click(object sender, RoutedEventArgs e)
     {
         engine.Paused = !engine.Paused;
         if (engine.Paused) clipClock.Stop();
         else if (clipTimer.IsEnabled) clipClock.Start();
-        PauseButton.Content = engine.Paused ? "再開" : "一時停止";
+        (PauseButton.Content, PauseButton.Tag) = engine.Paused ? ("再開", PlayIcon) : ("一時停止", PauseIcon);
         State.Text = engine.Paused ? "‖ 一時停止" : recordingLabel;
         ShowTabState();
     }

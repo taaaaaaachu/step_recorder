@@ -279,7 +279,7 @@ public sealed class RecordBarTests : IDisposable
         var (panel, window) = On(b =>
         {
             b.State.Text = "● 記録中";
-            b.ClipButton.Content = "■ 録画停止 100:00:05";
+            (b.ClipButton.Content, b.ClipButton.Tag) = ("録画停止 100:00:05", "\uE71A");
             b.Count.Text = "99999 枚"; // ピンの分も含めて測る
             b.UpdateLayout();
             b.Panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
