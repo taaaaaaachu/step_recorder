@@ -52,8 +52,12 @@ public static class Export
         return rows.Where(r => r.Item2 != "").ToList();
     }
 
-    public static string ToHtml(Session s, GroupMode mode)
+    /// <summary>
+    /// 操作記録の HTML。embed を渡すと、画像・動画の参照(記録フォルダからの相対パス)をその戻り値(data: URI など)に差し替える。
+    /// </summary>
+    public static string ToHtml(Session s, GroupMode mode, Func<string, string>? embed = null)
     {
+        string Src(string file) => H(embed?.Invoke(file) ?? file);
         var sb = new StringBuilder();
         sb.Append($$"""
             <!DOCTYPE html>
@@ -106,8 +110,8 @@ public static class Export
             foreach (var (st, k) in sec.Steps.Select((x, k) => (x, k)))
             {
                 if (paged) sb.Append($"<div class=\"page\" data-page=\"{k}\"{(k > 0 ? " hidden" : "")}>\n");
-                if (st.VideoFile != null) AppendClip(sb, s, st);
-                else AppendShot(sb, st);
+                if (st.VideoFile != null) AppendClip(sb, s, st, Src);
+                else AppendShot(sb, st, Src);
                 if (paged) sb.Append("</div>\n");
             }
             if (sec.Lines.Count > 0)
@@ -184,11 +188,11 @@ public static class Export
               new ResizeObserver(() => { shown = null; draw(); }).observe(v);
             });
             // クリックとホイールを、再生に合わせて重ねる(焼き込みと同じ見た目。クリックは広がりながら消える輪、ホイールは向きの三角)。
-            // data-mouse は [出し始め, 消す, x, y, 操作] で、操作は 0〜2 がボタン(左・右・中)、3〜6 がホイール(上・下・左・右)
+            // data-mouse は [出し始め, 消す, x, y, 操作] で、操作は 0〜4 がボタン(左・右・中・戻る・進む)、5〜8 がホイール(上・下・左・右)
             document.querySelectorAll('video[data-mouse]').forEach(v => {
               const marks = JSON.parse(v.dataset.mouse), [ax, ay, , ah] = v.dataset.mouseArea.split(' ').map(Number), radius = +v.dataset.mouseRadius;
               const canvas = v.parentElement.querySelector('canvas.mouse'), ctx = canvas.getContext('2d');
-              const colors = ['244,67,54', '33,150,243', '76,175,80'];
+              const colors = ['244,67,54', '33,150,243', '76,175,80', '156,39,176', '156,39,176'];
               const draw = () => {
                 const dpr = devicePixelRatio, [w, h] = [v.clientWidth, v.clientHeight], k = h / ah, r = radius * k;
                 Object.assign(canvas.style, { left: `${v.clientLeft}px`, top: `${v.clientTop}px`, width: `${w}px`, height: `${h}px` });
@@ -200,7 +204,7 @@ public static class Export
                   if (t < s || t >= e) continue;
                   const cx = (x - ax) * k, cy = (y - ay) * k;
                   ctx.beginPath();
-                  if (a < 3) {
+                  if (a < 5) {
                     const p = (Math.min(PHASES - 1, Math.floor((t - s) / (e - s) * PHASES)) + 0.5) / PHASES, fade = 1 - p * 0.8;
                     ctx.arc(cx, cy, r * (0.35 + 0.65 * p), 0, Math.PI * 2);
                     ctx.fillStyle = `rgba(${colors[a]},${0.35 * fade})`;
@@ -217,7 +221,17 @@ public static class Export
                     ctx.fill(body);
                     ctx.fillStyle = `rgb(${colors[a]})`;
                     if (a === 2) { ctx.beginPath(); ctx.roundRect(px + pw * 0.36, py + ph * 0.08, pw * 0.28, ph * 0.28, pw * 0.14); ctx.fill(); }
-                    else { ctx.save(); ctx.clip(body); ctx.fillRect(a === 0 ? px : px + pw / 2, py, pw / 2, split - py); ctx.restore(); }
+                    else if (a < 2) { ctx.save(); ctx.clip(body); ctx.fillRect(a === 0 ? px : px + pw / 2, py, pw / 2, split - py); ctx.restore(); }
+                    else { // 戻る・進む: 胴に向きの矢印
+                      const ay2 = split + (py + ph - split) / 2, half = pw * 0.3, dir = a === 3 ? -1 : 1, mx = px + pw / 2, tip = mx + dir * half;
+                      ctx.save();
+                      ctx.strokeStyle = `rgb(${colors[a]})`; ctx.lineWidth = Math.max(1.5, r * 0.13); ctx.lineCap = ctx.lineJoin = 'round';
+                      ctx.beginPath();
+                      ctx.moveTo(mx - dir * half, ay2); ctx.lineTo(tip, ay2);
+                      ctx.moveTo(tip - dir * half * 0.6, ay2 - half * 0.6); ctx.lineTo(tip, ay2); ctx.lineTo(tip - dir * half * 0.6, ay2 + half * 0.6);
+                      ctx.stroke();
+                      ctx.restore();
+                    }
                     ctx.strokeStyle = '#303030';
                     ctx.lineWidth = Math.max(1, r * 0.07);
                     ctx.stroke(body);
@@ -229,7 +243,7 @@ public static class Export
                     ctx.arc(cx, cy, r * 0.75, 0, Math.PI * 2);
                     ctx.fillStyle = 'rgba(32,32,32,.85)';
                     ctx.fill();
-                    const [dx, dy] = [[0, -1], [0, 1], [-1, 0], [1, 0]][a - 3], q = r * 0.4;
+                    const [dx, dy] = [[0, -1], [0, 1], [-1, 0], [1, 0]][a - 5], q = r * 0.4;
                     ctx.beginPath();
                     ctx.moveTo(cx + dx * q, cy + dy * q);
                     ctx.lineTo(cx - dx * q * 0.6 - dy * q, cy - dy * q * 0.6 + dx * q);
@@ -279,7 +293,7 @@ public static class Export
     static string H(string? t) => WebUtility.HtmlEncode(t ?? "");
 
     /// <summary>静止画。viewBox でトリミングし、強調枠を重ねる。元画像は加工しない。</summary>
-    static void AppendShot(StringBuilder sb, Step st)
+    static void AppendShot(StringBuilder sb, Step st, Func<string, string> src)
     {
         var (w, h) = (st.ImageWidth, st.ImageHeight);
         var c = st.Crop ?? new PixelRect(0, 0, w, h);
@@ -289,7 +303,7 @@ public static class Export
         sb.Append($"<svg class=\"shot\" viewBox=\"{c.X} {c.Y} {c.Width} {c.Height}\" width=\"{c.Width}\" height=\"{c.Height}\"");
         if (st.Crop != null) sb.Append($" data-crop=\"{c.X} {c.Y} {c.Width} {c.Height}\" data-full=\"0 0 {w} {h}\"");
         sb.Append('>');
-        sb.Append($"<image href=\"{H(st.ImageFile)}\" width=\"{w}\" height=\"{h}\"/>");
+        sb.Append($"<image href=\"{src(st.ImageFile)}\" width=\"{w}\" height=\"{h}\"/>");
         // トリミングを解除したときだけ見える、トリミング範囲の外を暗くする覆い
         if (st.Crop != null)
             sb.Append($"<path class=\"shade\" fill-rule=\"evenodd\" d=\"M0 0H{w}V{h}H0Z M{c.X} {c.Y}h{c.Width}v{c.Height}h{-c.Width}Z\"/>");
@@ -303,13 +317,13 @@ public static class Export
     /// ponytail: mp4 のトリミングは CSS の object-view-box(Edge・Chrome のみ。Firefox では全体が映る)。
     /// 配布用の書き出しではトリミング済みのファイルを作るので関係ない。
     /// </summary>
-    static void AppendClip(StringBuilder sb, Session s, Step st)
+    static void AppendClip(StringBuilder sb, Session s, Step st, Func<string, string> src)
     {
         var (w, h) = (st.ImageWidth, st.ImageHeight);
         var c = st.Crop ?? new PixelRect(0, 0, w, h);
         if (st.VideoFile!.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
         {
-            sb.Append($"<img class=\"clip\" src=\"{H(st.VideoFile)}\" width=\"{w}\" height=\"{h}\" alt=\"\">\n");
+            sb.Append($"<img class=\"clip\" src=\"{src(st.VideoFile)}\" width=\"{w}\" height=\"{h}\" alt=\"\">\n");
             return;
         }
         var style = st.Crop == null ? "" :
@@ -325,7 +339,7 @@ public static class Export
             $" data-mouse=\"{H(Json(marks.Select(m => new object[] { Sec(m.Start), Sec(m.End), m.X, m.Y, (int)m.Action })))}\" data-mouse-area=\"{c.X} {c.Y} {c.Width} {c.Height}\" data-mouse-radius=\"{Number(MouseOverlay.Radius(c.Height))}\"";
         var wrap = chips.Count > 0 || marks.Count > 0;
         if (wrap) sb.Append("<div class=\"clip-wrap\">");
-        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{keys}{mouse}{style}></video>");
+        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{src(ClipSource(st))}\" poster=\"{src(st.ImageFile)}\" width=\"{c.Width}\"{range}{keys}{mouse}{style}></video>");
         if (marks.Count > 0) sb.Append("<canvas class=\"mouse\"></canvas>");
         if (chips.Count > 0) sb.Append("<div class=\"keys\"></div>");
         sb.Append(wrap ? "</div>\n" : "\n");
@@ -377,7 +391,36 @@ public static class Export
     /// ファイルにしてもらう(ポスターは mp4 のときだけ。GIF では null)。
     /// </summary>
     public static void ExportForDistribution(Session s, string srcDir, string outDir, GroupMode mode, ClipFormat format,
+        Action<Step, string, string?> makeClip) =>
+        File.WriteAllText(Path.Combine(outDir, HtmlFile), ToHtml(Distribute(s, srcDir, outDir, mode, format, makeClip), mode));
+
+    /// <summary>
+    /// 配布用に、画像と動画を data: URI で埋め込んだ HTML 1 ファイル(htmlPath)だけを書き出す。中身は ExportForDistribution と同じ。
+    /// ponytail: 埋め込むと base64 で 4/3 倍の大きさになり、ブラウザーはまとめて読み込む。長い動画が多いと重いので、そのときはフォルダに書き出す
+    /// </summary>
+    public static void ExportSingleHtml(Session s, string srcDir, string htmlPath, GroupMode mode, ClipFormat format,
         Action<Step, string, string?> makeClip)
+    {
+        var work = Path.Combine(Path.GetTempPath(), "sr-single-" + Guid.NewGuid());
+        try
+        {
+            var copy = Distribute(s, srcDir, work, mode, format, makeClip);
+            File.WriteAllText(htmlPath, ToHtml(copy, mode, file => DataUri(Path.Combine(work, file))));
+        }
+        finally
+        {
+            if (Directory.Exists(work)) Directory.Delete(work, true);
+        }
+    }
+
+    static string DataUri(string path)
+    {
+        var type = Path.GetExtension(path).ToLowerInvariant() switch { ".gif" => "image/gif", ".mp4" => "video/mp4", _ => "image/png" };
+        return $"data:{type};base64,{Convert.ToBase64String(File.ReadAllBytes(path))}";
+    }
+
+    /// <summary>使っている画像と、作り直した動画を outDir に置き、それを指すように差し替えた写しを返す。</summary>
+    static Session Distribute(Session s, string srcDir, string outDir, GroupMode mode, ClipFormat format, Action<Step, string, string?> makeClip)
     {
         // 書き出し用に、動画のステップを書き出したファイルに差し替えた写しで出力する
         var copy = SessionStore.Clone(s);
@@ -400,6 +443,6 @@ public static class Export
             Directory.CreateDirectory(Path.GetDirectoryName(to)!);
             File.Copy(Path.Combine(srcDir, st.ImageFile), to, overwrite: true);
         }
-        File.WriteAllText(Path.Combine(outDir, HtmlFile), ToHtml(copy, mode));
+        return copy;
     }
 }

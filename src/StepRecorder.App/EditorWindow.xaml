@@ -62,8 +62,21 @@
                 <Button Content="保存" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" Padding="10,3" Margin="0,0,6,0" ToolTip="Ctrl+S"/>
                 <Button Content="HTMLを開く" Click="OpenHtml_Click"/>
                 <Button Content="フォルダを開く" Click="OpenFolder_Click"/>
-                <Button Content="配布用に書き出す..." Click="ExportForDistribution_Click"
-                        ToolTip="使っている画像と動画だけを別のフォルダに書き出します(あとから編集はできません)"/>
+                <!-- 押すと書き出し方を選ぶメニューを出す -->
+                <Button x:Name="ExportButton" Click="ExportButton_Click" AutomationProperties.AutomationId="ExportButton"
+                        ToolTip="配布用に書き出します(あとから編集はできません)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="配布用に書き出す"/>
+                        <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="フォルダに書き出す..." Click="ExportFolder_Click" ToolTip="HTML と、使っている画像・動画を選んだフォルダに書き出します"/>
+                            <MenuItem Header="HTML 1 ファイルに書き出す..." Click="ExportSingle_Click"
+                                      ToolTip="画像と動画を HTML の中に埋め込みます。1 ファイルで渡せますが、大きくなります(動画が長いと開くのも重くなります)"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                 <ComboBox x:Name="ClipFormatBox" MinWidth="90" VerticalContentAlignment="Center" ToolTip="配布用に書き出すときの動画の形式"
                           SelectionChanged="ClipFormat_SelectionChanged">
                     <ComboBoxItem Content="MP4"/>

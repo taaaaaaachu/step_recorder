@@ -84,6 +84,36 @@ public sealed class HtmlScriptTests : IDisposable
     }
 
     [DesktopFact]
+    public void HTML1ファイルに埋め込んだ動画は再生でき_途中へ移れる()
+    {
+        // 2 秒の白い動画を、HTML 1 ファイルに埋め込んで開く
+        var work = Path.Combine(dir, "rec");
+        Directory.CreateDirectory(work);
+        var px = new byte[320 * 180 * 4];
+        Array.Fill(px, (byte)255);
+        var nv12 = Nv12.FromBgra(px, 320, 180);
+        Task.Run(() => VideoRecorder.Encode(Path.Combine(work, "video.mp4"), 320, 180, Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))))).Wait();
+        var s = new Session { TargetName = "Demo", VideoFile = "video.mp4" };
+        s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 320, ImageHeight = 180, VideoFile = "video.mp4" });
+        var html = Path.Combine(dir, "single.html");
+        Export.ExportSingleHtml(s, work, html, GroupMode.Sequence, ClipFormat.Mp4, (st, clip, poster) => VideoClips.ExportClip(work, st, ClipFormat.Mp4, clip, poster, [], []));
+
+        const string probe = """
+            const v = document.querySelector('video');
+            v.addEventListener('error', () => document.title = 'video error ' + v.error.code);
+            const done = () => { v.currentTime = 1.5; v.addEventListener('seeked', () => document.title = `${v.duration.toFixed(1)} ${v.currentTime.toFixed(1)}`, { once: true }); };
+            if (v.readyState >= 1) done(); else v.addEventListener('loadedmetadata', done, { once: true });
+            """;
+        // ponytail: 動画の読み込みはヘッドレスの仮想時間では待ってもらえず、ほかのテストと並ぶと間に合わないことがある。
+        // 読み込む前に終わった(表題がそのまま)ときだけ、3 回まで開き直す
+        var page = File.ReadAllText(html);
+        var title = "";
+        for (var i = 0; i < 3 && (title == "" || title.StartsWith("Demo")); i++) title = Run(page, probe);
+
+        Assert.Equal("2.0 1.5", title);
+    }
+
+    [DesktopFact]
     public void 右クリックはマウスの絵の右ボタンを塗る()
     {
         var s = new Session { TargetName = "Demo", VideoFile = "video.mp4", Mouse = [new(TimeSpan.FromSeconds(1), 200, 100, MouseAction.Right)] };

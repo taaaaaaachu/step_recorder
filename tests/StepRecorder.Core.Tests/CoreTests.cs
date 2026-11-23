@@ -315,6 +315,42 @@ public class VideoExportTests
     [Theory]
     [InlineData(ClipFormat.Mp4)]
     [InlineData(ClipFormat.Gif)]
+    public void HTML1ファイルの書き出しは_画像と動画を埋め込んでHTMLだけを書く(ClipFormat format)
+    {
+        var src = Path.Combine(Path.GetTempPath(), "sr-src-" + Guid.NewGuid());
+        var dst = Path.Combine(Path.GetTempPath(), "sr-dst-" + Guid.NewGuid());
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(src, "images"));
+            Directory.CreateDirectory(dst);
+            File.WriteAllBytes(Path.Combine(src, "images", "0001.png"), [1, 2, 3]);
+            var html = Path.Combine(dst, "記録.html");
+            Export.ExportSingleHtml(Sample(), src, html, GroupMode.Sequence, format, (_, clip, poster) =>
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(clip)!);
+                File.WriteAllBytes(clip, [4, 5]);
+                if (poster != null) File.WriteAllBytes(poster, [6]);
+            });
+
+            Assert.Equal([html], Directory.GetFileSystemEntries(dst)); // HTML だけ
+            var text = File.ReadAllText(html);
+            Assert.Contains("<image href=\"data:image/png;base64,AQID\"", text);
+            Assert.Contains(format == ClipFormat.Gif
+                ? "<img class=\"clip\" src=\"data:image/gif;base64,BAU=\""
+                : "src=\"data:video/mp4;base64,BAU=\" poster=\"data:image/png;base64,Bg==\"", text);
+            Assert.DoesNotContain("clips/", text);
+            Assert.DoesNotContain("images/", text);
+        }
+        finally
+        {
+            if (Directory.Exists(src)) Directory.Delete(src, true);
+            if (Directory.Exists(dst)) Directory.Delete(dst, true);
+        }
+    }
+
+    [Theory]
+    [InlineData(ClipFormat.Mp4)]
+    [InlineData(ClipFormat.Gif)]
     public void 配布用には使っている画像と切り出した動画だけを書き出す(ClipFormat format)
     {
         var src = Path.Combine(Path.GetTempPath(), "sr-src-" + Guid.NewGuid());

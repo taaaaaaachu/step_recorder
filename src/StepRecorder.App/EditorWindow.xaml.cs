@@ -749,11 +749,39 @@ public partial class EditorWindow : Window
         }
     }
 
-    async void ExportForDistribution_Click(object sender, RoutedEventArgs e)
+    void ExportButton_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = ExportButton.ContextMenu!;
+        menu.PlacementTarget = ExportButton;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    void ExportFolder_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "配布用に書き出すフォルダ", InitialDirectory = System.IO.Path.GetDirectoryName(dir) };
         if (dialog.ShowDialog(this) != true) return;
-        var (format, mode, outDir) = ((ClipFormat)ClipFormatBox.SelectedIndex, (GroupMode)Group.SelectedIndex, dialog.FolderName);
+        var outDir = dialog.FolderName;
+        ExportForDistribution(System.IO.Path.Combine(outDir, Export.HtmlFile),
+            (snapshot, mode, format, makeClip) => Export.ExportForDistribution(snapshot, dir, outDir, mode, format, makeClip));
+    }
+
+    void ExportSingle_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "HTML 1 ファイルに書き出す", Filter = "HTML ファイル (*.html)|*.html",
+            FileName = $"{System.IO.Path.GetFileName(dir)}.html", InitialDirectory = System.IO.Path.GetDirectoryName(dir),
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        var html = dialog.FileName;
+        ExportForDistribution(html, (snapshot, mode, format, makeClip) => Export.ExportSingleHtml(snapshot, dir, html, mode, format, makeClip));
+    }
+
+    /// <summary>配布用の書き出し。write で書き出し、終わったら html を開く。</summary>
+    async void ExportForDistribution(string html, Action<Session, GroupMode, ClipFormat, Action<Step, string, string?>> write)
+    {
+        var (format, mode) = ((ClipFormat)ClipFormatBox.SelectedIndex, (GroupMode)Group.SelectedIndex);
 
         // 動画はフレームを1枚ずつ取り出して作り直すので時間がかかる。裏で動かし、進み具合を出す
         var snapshot = SessionStore.Clone(session);
@@ -765,7 +793,7 @@ public partial class EditorWindow : Window
         progress.Show();
         try
         {
-            await Task.Run(() => Export.ExportForDistribution(snapshot, dir, outDir, mode, format, (st, clip, poster) =>
+            await Task.Run(() => write(snapshot, mode, format, (st, clip, poster) =>
             {
                 VideoClips.ExportClip(dir, st, format, clip, poster, KeyOverlay.StrokesFor(snapshot, st), MouseOverlay.StrokesFor(snapshot, st), Report);
                 done++;
@@ -782,7 +810,7 @@ public partial class EditorWindow : Window
             IsEnabled = true;
             Activate();
         }
-        Process.Start(new ProcessStartInfo(System.IO.Path.Combine(outDir, Export.HtmlFile)) { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo(html) { UseShellExecute = true });
     }
 
     // ---- 表示欄を別ウインドウに出す ----
