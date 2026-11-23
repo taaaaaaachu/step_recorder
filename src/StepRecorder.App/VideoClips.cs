@@ -30,13 +30,15 @@ static class VideoClips
 
     /// <summary>
     /// start〜end(null なら最後まで)を、crop の範囲だけの mp4 に切り出す。速さは変えない(再生する側で変える)。
-    /// keys があれば焼き込む(時刻は元の動画の時刻)。
+    /// keys・mouse があれば焼き込む(時刻・位置は元の動画のもの)。
     /// MediaTranscoder の区間指定(ファイルからの変換)は E_POINTER で失敗するので、
     /// フレームを1枚ずつ取り出して録画と同じ方法でエンコードし直す。
     /// </summary>
-    public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null, IReadOnlyList<KeyChip>? keys = null)
+    public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null,
+        IReadOnlyList<KeyChip>? keys = null, IReadOnlyList<MouseMark>? mouse = null)
     {
         var burner = new KeyBurner(keys ?? []);
+        var clicks = new MouseBurner(mouse ?? []);
         using var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
         var (w, h) = ((crop?.Width ?? reader.Width) & ~1, (crop?.Height ?? reader.Height) & ~1); // H.264 は縦横とも偶数
@@ -48,6 +50,7 @@ static class VideoClips
                 if (start + t >= stop) yield break;
                 progress?.Invoke(t / (stop - start));
                 var bgra = Bgra(Crop(reader.Frame(start + t), crop), w, h);
+                clicks.Apply(bgra, w, h, start + t, crop);
                 burner.Apply(bgra, w, h, start + t);
                 yield return (Nv12.FromBgra(bgra, w, h), t);
             }
@@ -57,11 +60,13 @@ static class VideoClips
 
     /// <summary>
     /// start〜end(null なら最後まで)の crop の範囲を、speed 倍の速さで繰り返し再生する GIF アニメーションにする。
-    /// keys があれば、縮めたあとの大きさで焼き込む(小さくした文字が潰れないように)。
+    /// keys・mouse があれば、縮めたあとの大きさで焼き込む(小さくした文字が潰れないように)。
     /// </summary>
-    public static void ToGif(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null, double speed = 1, IReadOnlyList<KeyChip>? keys = null)
+    public static void ToGif(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null, double speed = 1,
+        IReadOnlyList<KeyChip>? keys = null, IReadOnlyList<MouseMark>? mouse = null)
     {
         var burner = new KeyBurner(keys ?? []);
+        var clicks = new MouseBurner(mouse ?? []);
         using var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
         var enc = new GifBitmapEncoder();
@@ -72,15 +77,17 @@ static class VideoClips
         {
             progress?.Invoke(at / (stop - start));
             BitmapSource f = Crop(reader.Frame(start + at), crop);
+            var scale = 1.0;
             if (f.PixelWidth > GifMaxWidth)
             {
-                var scale = (double)GifMaxWidth / f.PixelWidth;
+                scale = (double)GifMaxWidth / f.PixelWidth;
                 f = new TransformedBitmap(f, new ScaleTransform(scale, scale));
             }
-            if (!burner.IsEmpty)
+            if (!burner.IsEmpty || !clicks.IsEmpty)
             {
                 var (w, h) = (f.PixelWidth, f.PixelHeight);
                 var bgra = Bgra(f, w, h);
+                clicks.Apply(bgra, w, h, start + at, crop, scale);
                 burner.Apply(bgra, w, h, start + at);
                 f = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgr32, null, bgra, w * 4);
             }
@@ -93,16 +100,17 @@ static class VideoClips
     }
 
     /// <summary>
-    /// 配布用の書き出しで、動画のステップを区間・トリミング(GIF なら速さも)・キーの表示を反映したファイル(と、mp4 ならポスター画像)にする。
-    /// keys はそのステップに重ねるキー(KeyOverlay.StrokesFor)。progress には進み具合(0〜1)を知らせる。
+    /// 配布用の書き出しで、動画のステップを区間・トリミング(GIF なら速さも)・キーとマウスの表示を反映したファイル(と、mp4 ならポスター画像)にする。
+    /// keys・mouse はそのステップに重ねるもの(KeyOverlay.StrokesFor・MouseOverlay.StrokesFor)。progress には進み具合(0〜1)を知らせる。
     /// </summary>
-    public static void ExportClip(string dir, Step st, ClipFormat format, string clip, string? poster, IReadOnlyList<KeyStroke> keys, Action<double>? progress = null)
+    public static void ExportClip(string dir, Step st, ClipFormat format, string clip, string? poster, IReadOnlyList<KeyStroke> keys, IReadOnlyList<MouseStroke> mouse,
+        Action<double>? progress = null)
     {
         var src = Path.Combine(dir, st.VideoFile!);
         var start = st.VideoStart ?? TimeSpan.Zero;
-        var chips = KeyOverlay.Chips(keys);
-        if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip, progress, st.Speed, chips);
-        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress, chips);
+        var (chips, marks) = (KeyOverlay.Chips(keys), MouseOverlay.Marks(mouse));
+        if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip, progress, st.Speed, chips, marks);
+        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress, chips, marks);
         if (poster != null) WindowCapture.SavePng(Frame(clip, TimeSpan.Zero), poster);
     }
 

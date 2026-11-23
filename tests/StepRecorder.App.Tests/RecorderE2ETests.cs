@@ -237,6 +237,31 @@ public sealed class RecorderE2ETests : IDisposable
     }
 
     [E2EFact]
+    public void 録画中のクリックとホイールを動画上の時刻と位置と一緒に残す()
+    {
+        target = Launch(SampleExe);
+        var main = target.MainWindowHandle;
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Video });
+        engine.Start();
+        Wait(800);
+        var frame = Native.FrameBounds(main);
+        var box = Find(main, "nameBox").Current.BoundingRectangle;
+        var (x, y) = ((int)(box.X + box.Width / 2), (int)(box.Y + box.Height / 2));
+        Click(main, x, y);
+        Wait(300);
+        Wheel(main, x, y, -2);
+        Wait(500);
+
+        var session = Stop(engine);
+        var mouse = session.Mouse!;
+        Assert.Equal([MouseAction.Left, MouseAction.WheelDown], mouse.Select(m => m.Action));
+        Assert.All(mouse, m => Assert.Equal((x - frame.Left, y - frame.Top), (m.X, m.Y))); // 動画上の位置(ウィンドウの左上から)
+        Assert.InRange(mouse[0].Time.TotalSeconds, 0.5, 1.8);
+        Assert.True(mouse[1].Time > mouse[0].Time);
+        Assert.Equal(2, MouseOverlay.Marks(MouseOverlay.StrokesFor(session, new Step { VideoFile = "video.mp4" })).Count);
+    }
+
+    [E2EFact]
     public void 録画ボタンの動画で押したキーはそのステップに残す()
     {
         target = Launch(SampleExe);
@@ -257,6 +282,7 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.Null(session.Steps[0].Keys);
         var key = Assert.Single(session.Steps[1].Keys!);
         Assert.Equal("Enter", key.Text);
+        Assert.Null(session.Mouse); // 動画を録っていない間のクリックは残さない
         Assert.InRange(key.Time.TotalSeconds, 0.5, 1.6); // 録画ボタンの動画の時刻
     }
 

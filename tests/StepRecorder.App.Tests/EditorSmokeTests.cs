@@ -418,7 +418,7 @@ public sealed class EditorSmokeTests : IDisposable
         {
             var outDir = Path.Combine(dir, "dist-" + format);
             var reported = new List<double>();
-            Export.ExportForDistribution(saved, dir, outDir, GroupMode.Sequence, format, (st, c, p) => VideoClips.ExportClip(dir, st, format, c, p, KeyOverlay.StrokesFor(saved, st), reported.Add));
+            Export.ExportForDistribution(saved, dir, outDir, GroupMode.Sequence, format, (st, c, p) => VideoClips.ExportClip(dir, st, format, c, p, KeyOverlay.StrokesFor(saved, st), MouseOverlay.StrokesFor(saved, st), reported.Add));
             Assert.NotEmpty(reported); // 進み具合(0〜1)が増えながら届く
             Assert.All(reported, v => Assert.InRange(v, 0, 1));
             Assert.Equal(reported.Order(), reported);

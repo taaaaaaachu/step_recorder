@@ -209,16 +209,35 @@ sealed class RecorderEngine
 
     nint MouseProc(int n, nint w, nint l)
     {
-        if (n >= 0 && !Paused && (int)w is WM_LBUTTONDOWN or WM_RBUTTONDOWN or WM_MBUTTONDOWN)
+        if (n >= 0 && !Paused && (int)w is WM_LBUTTONDOWN or WM_RBUTTONDOWN or WM_MBUTTONDOWN or WM_MOUSEWHEEL or WM_MOUSEHWHEEL)
         {
             var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(l);
             var root = GetAncestor(WindowFromPoint(info.pt), GA_ROOT);
             if (target.OwnsClick(root, info.pt))
             {
-                var button = (int)w switch { WM_RBUTTONDOWN => MouseButton.Right, WM_MBUTTONDOWN => MouseButton.Middle, _ => MouseButton.Left };
-                var ev = new ClickEvent(DateTimeOffset.Now, new(info.pt.X, info.pt.Y), button);
-                var mode = Mode;
-                Enqueue(() => { Flush(); if (mode != RecordMode.Manual) OnClick(root, ev); });
+                var pressed = Stopwatch.GetTimestamp();
+                var up = (short)(info.mouseData >> 16) > 0; // ホイールの回した向き(横のホイールは正が右)
+                switch ((int)w)
+                {
+                    case WM_MOUSEWHEEL: Enqueue(() => RecordMouse(info.pt, up ? MouseAction.WheelUp : MouseAction.WheelDown, pressed)); break;
+                    case WM_MOUSEHWHEEL: Enqueue(() => RecordMouse(info.pt, up ? MouseAction.WheelRight : MouseAction.WheelLeft, pressed)); break;
+                    default:
+                        var (button, action) = (int)w switch
+                        {
+                            WM_RBUTTONDOWN => (MouseButton.Right, MouseAction.Right),
+                            WM_MBUTTONDOWN => (MouseButton.Middle, MouseAction.Middle),
+                            _ => (MouseButton.Left, MouseAction.Left),
+                        };
+                        var ev = new ClickEvent(DateTimeOffset.Now, new(info.pt.X, info.pt.Y), button);
+                        var mode = Mode;
+                        Enqueue(() =>
+                        {
+                            Flush();
+                            RecordMouse(info.pt, action, pressed);
+                            if (mode != RecordMode.Manual) OnClick(root, ev);
+                        });
+                        break;
+                }
             }
         }
         return CallNextHookEx(0, n, w, l);
@@ -317,6 +336,16 @@ sealed class RecorderEngine
         var at = recorder.CurrentTime - Stopwatch.GetElapsedTime(pressed);
         var keys = clip is var (_, step) ? step.Keys ??= [] : rec.Session.Keys ??= [];
         keys.Add(new KeyStroke(at < TimeSpan.Zero ? TimeSpan.Zero : at, text, label.IsChar));
+    }
+
+    /// <summary>録画している間のクリック・ホイールを、動画に重ねるために動画上の時刻と位置と一緒に残す(残し先はキーと同じ)。動画の外は残さない。</summary>
+    void RecordMouse(POINT point, MouseAction action, long pressed)
+    {
+        var recorder = clip?.Recorder ?? full;
+        if (recorder?.ToVideo(point) is not { } p) return;
+        var at = recorder.CurrentTime - Stopwatch.GetElapsedTime(pressed);
+        var list = clip is var (_, step) ? step.Mouse ??= [] : rec.Session.Mouse ??= [];
+        list.Add(new MouseStroke(at < TimeSpan.Zero ? TimeSpan.Zero : at, p.X, p.Y, action));
     }
 
     /// <summary>入力中の欄の値を読み、入力操作として記録する。同じ欄への続きの入力は Recording が1つにまとめる。</summary>

@@ -92,7 +92,7 @@ public sealed class MonitorRecorderE2ETests : IDisposable
         {
             var outDir = Path.Combine(dir, $"out-{format}");
             Directory.CreateDirectory(outDir);
-            Export.ExportForDistribution(session, dir, outDir, GroupMode.Sequence, format, (st, path, poster) => VideoClips.ExportClip(dir, st, format, path, poster, KeyOverlay.StrokesFor(session, st)));
+            Export.ExportForDistribution(session, dir, outDir, GroupMode.Sequence, format, (st, path, poster) => VideoClips.ExportClip(dir, st, format, path, poster, KeyOverlay.StrokesFor(session, st), MouseOverlay.StrokesFor(session, st)));
             Assert.True(File.Exists(Path.Combine(outDir, Export.HtmlFile)));
             Assert.True(new FileInfo(Path.Combine(outDir, "clips", $"{clip.Id:D4}.{(format == ClipFormat.Gif ? "gif" : "mp4")}")).Length > 1000);
         }

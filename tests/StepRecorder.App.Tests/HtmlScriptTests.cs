@@ -64,6 +64,26 @@ public sealed class HtmlScriptTests : IDisposable
     }
 
     [DesktopFact]
+    public void クリックは再生の時刻に合わせて_トリミングした範囲の位置に描かれる()
+    {
+        var s = new Session { TargetName = "Demo", VideoFile = "video.mp4", Mouse = [new(TimeSpan.FromSeconds(1), 300, 200, MouseAction.Left)] };
+        s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", Crop = new(100, 50, 400, 300) });
+
+        // 描いた所(輪の中心)と、離れた所の不透明さ
+        var title = Run(Export.ToHtml(s, GroupMode.Sequence), """
+            const v = document.querySelector('video'), c = v.parentElement.querySelector('canvas.mouse');
+            const at = t => {
+              v.currentTime = t; v.dispatchEvent(new Event('timeupdate'));
+              const k = v.clientHeight / 300 * devicePixelRatio, px = (x, y) => c.getContext('2d').getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data[3];
+              return `${px(200, 150) > 0 ? 'on' : 'off'},${px(20, 20) > 0 ? 'on' : 'off'}`;
+            };
+            document.title = [at(0.5), at(1.3), at(2)].join(' / ') + ' ' + (c.style.width === `${v.clientWidth}px`);
+            """);
+
+        Assert.Equal("off,off / on,off / off,off true", title);
+    }
+
+    [DesktopFact]
     public void キーの無い動画と静止画だけでもスクリプトは止まらない()
     {
         var s = new Session { TargetName = "Demo", VideoFile = "video.mp4" };

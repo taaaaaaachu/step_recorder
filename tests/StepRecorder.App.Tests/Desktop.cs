@@ -161,14 +161,18 @@ static class Desktop
     }
 
     /// <summary>(x, y) で Ctrl を押しながらホイールを回す。notches が正なら奥へ。</summary>
-    public static void CtrlWheel(nint hwnd, int x, int y, int notches)
+    public static void CtrlWheel(nint hwnd, int x, int y, int notches) => Wheel(hwnd, x, y, notches, ctrl: true);
+
+    /// <summary>(x, y) でホイールを回す。notches が正なら奥へ。</summary>
+    public static void Wheel(nint hwnd, int x, int y, int notches, bool ctrl = false)
     {
         var pt = new Native.POINT { X = x, Y = y };
         if (Native.ProcessId(Native.WindowFromPoint(pt)) != Native.ProcessId(hwnd))
             throw new InvalidOperationException("ホイール位置に別のウィンドウが重なっているので中止した");
         EnsureForeground(hwnd);
         SetCursor(x, y);
-        Send(Key(0x11), new INPUT { type = 0, u = new() { mi = new() { dwFlags = 0x0800, mouseData = unchecked((uint)(notches * 120)) } } }, Key(0x11, KEYUP));
+        var wheel = new INPUT { type = 0, u = new() { mi = new() { dwFlags = 0x0800, mouseData = unchecked((uint)(notches * 120)) } } };
+        Send(ctrl ? [Key(0x11), wheel, Key(0x11, KEYUP)] : [wheel]);
     }
 
     /// <summary>キーを順に押してから逆順に離す(Ctrl+Tab なら 0x11, 0x09)。</summary>

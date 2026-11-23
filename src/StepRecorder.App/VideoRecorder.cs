@@ -50,6 +50,7 @@ sealed class VideoRecorder
     readonly Thread loop;
     readonly Task encoding;
     volatile bool stopping;
+    volatile object origin; // 動画に当たるスクリーン上の範囲(RECT)。録画のスレッドが更新し、ToVideo が読む
     Exception? error;
 
     /// <summary>録画開始からの、一時停止を除いた経過時間(動画上の時刻と同じ)。</summary>
@@ -61,6 +62,7 @@ sealed class VideoRecorder
         this.cursor = cursor;
         this.paused = paused;
         var frame = input.Origin();
+        origin = frame;
         (width, height) = (frame.Width & ~1, frame.Height & ~1); // H.264 は縦横とも偶数
         if (width <= 0 || height <= 0) throw new InvalidOperationException("録画するものの大きさが取れない");
         encoding = Task.Run(() => Encode(path, width, height, frames.GetConsumingEnumerable()));
@@ -94,6 +96,14 @@ sealed class VideoRecorder
     /// <summary>モニターに見えているものを丸ごと path に録画し始める。paused は Start と同じ。</summary>
     public static VideoRecorder StartMonitor(nint monitor, RECT bounds, string path, bool cursor, Func<bool>? paused = null) =>
         new(new(() => bounds, () => [(monitor, bounds)], CreateMonitorItem), path, cursor, paused ?? (() => false));
+
+    /// <summary>スクリーン上の点の、動画上の位置。動画の外なら null。</summary>
+    public PixelPoint? ToVideo(POINT p)
+    {
+        var o = (RECT)origin;
+        var (x, y) = (p.X - o.Left, p.Y - o.Top);
+        return x >= 0 && y >= 0 && x < width && y < height ? new(x, y) : null;
+    }
 
     /// <summary>録画を止め、mp4 を書き終えるまで待つ。</summary>
     public void Stop()
@@ -151,10 +161,11 @@ sealed class VideoRecorder
                 if (arriving) Thread.Sleep(10);
                 else if (index >= next)
                 {
-                    var origin = input.Origin();
+                    var at = input.Origin();
+                    origin = at;
                     Array.Fill(canvas, (byte)0xFF); // ウィンドウ同士の隙間は白
                     foreach (var (h, r) in items)
-                        if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - origin.Left, r.Top - origin.Top);
+                        if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - at.Left, r.Top - at.Top);
                     if (Resting()) continue; // 合成している間に止められたら、その絵は使わない
                     var frame = (Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / Fps));
                     while (!frames.TryAdd(frame, 100))

@@ -92,6 +92,7 @@ public static class Export
             .clip-wrap { position: relative; width: fit-content; max-width: 100%; }
             .keys { position: absolute; left: 0; right: 0; bottom: max({{Number(KeyOverlay.Bottom)}}em, 56px); /* 一時停止中などに出るプレーヤーの操作バーと重ねない(焼き込みには操作バーが無いので比率どおり) */ display: flex; flex-direction: column; align-items: center; gap: {{Number(KeyOverlay.Gap)}}em; pointer-events: none; font-weight: bold; }
             .keys span { background: rgba(32,32,32,.85); color: #fff; border-radius: {{Number(KeyOverlay.Radius)}}em; padding: {{Number(KeyOverlay.PadY)}}em {{Number(KeyOverlay.PadX)}}em; white-space: pre; max-width: calc(100% - 2em); overflow: hidden; text-overflow: ellipsis; }
+            .clip-wrap canvas.mouse { position: absolute; pointer-events: none; }
             label.rate { display: block; width: fit-content; margin: .4em 0 0; color: #555; }
             label.rate select { font: inherit; }
             svg.shot rect { fill: none; stroke: #e00; stroke-width: 3; vector-effect: non-scaling-stroke; }
@@ -205,6 +206,51 @@ public static class Export
               ['seeked', 'timeupdate', 'loadedmetadata', 'pause'].forEach(e => v.addEventListener(e, draw));
               new ResizeObserver(() => { shown = null; draw(); }).observe(v);
             });
+            // クリックとホイールを、再生に合わせて重ねる(焼き込みと同じ見た目。クリックは広がりながら消える輪、ホイールは向きの三角)。
+            // data-mouse は [出し始め, 消す, x, y, 操作] で、操作は 0〜2 がボタン(左・右・中)、3〜6 がホイール(上・下・左・右)
+            document.querySelectorAll('video[data-mouse]').forEach(v => {
+              const marks = JSON.parse(v.dataset.mouse), [ax, ay, , ah] = v.dataset.mouseArea.split(' ').map(Number), radius = +v.dataset.mouseRadius;
+              const canvas = v.parentElement.querySelector('canvas.mouse'), ctx = canvas.getContext('2d');
+              const colors = ['244,67,54', '33,150,243', '76,175,80'];
+              const draw = () => {
+                const dpr = devicePixelRatio, [w, h] = [v.clientWidth, v.clientHeight], k = h / ah, r = radius * k;
+                Object.assign(canvas.style, { left: `${v.clientLeft}px`, top: `${v.clientTop}px`, width: `${w}px`, height: `${h}px` });
+                if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) [canvas.width, canvas.height] = [Math.round(w * dpr), Math.round(h * dpr)];
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, w, h);
+                const t = v.currentTime;
+                for (const [s, e, x, y, a] of marks) {
+                  if (t < s || t >= e) continue;
+                  const cx = (x - ax) * k, cy = (y - ay) * k;
+                  ctx.beginPath();
+                  if (a < 3) {
+                    const p = (Math.min(PHASES - 1, Math.floor((t - s) / (e - s) * PHASES)) + 0.5) / PHASES, fade = 1 - p * 0.8;
+                    ctx.arc(cx, cy, r * (0.35 + 0.65 * p), 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(${colors[a]},${0.35 * fade})`;
+                    ctx.strokeStyle = `rgba(${colors[a]},${fade})`;
+                    ctx.lineWidth = r * 0.14;
+                    ctx.fill();
+                    ctx.stroke();
+                  } else {
+                    ctx.arc(cx, cy, r * 0.75, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(32,32,32,.85)';
+                    ctx.fill();
+                    const [dx, dy] = [[0, -1], [0, 1], [-1, 0], [1, 0]][a - 3], q = r * 0.4;
+                    ctx.beginPath();
+                    ctx.moveTo(cx + dx * q, cy + dy * q);
+                    ctx.lineTo(cx - dx * q * 0.6 - dy * q, cy - dy * q * 0.6 + dx * q);
+                    ctx.lineTo(cx - dx * q * 0.6 + dy * q, cy - dy * q * 0.6 - dx * q);
+                    ctx.closePath();
+                    ctx.fillStyle = '#fff';
+                    ctx.fill();
+                  }
+                }
+              };
+              const loop = () => { draw(); if (!v.paused) requestAnimationFrame(loop); };
+              v.addEventListener('play', () => requestAnimationFrame(loop));
+              ['seeked', 'timeupdate', 'loadedmetadata', 'pause'].forEach(e => v.addEventListener(e, draw));
+              new ResizeObserver(draw).observe(v);
+            });
             // 画面一覧モードで、同じ画面のステップを前後に切り替える(説明の行をクリックしてもそのステップへ)
             document.querySelectorAll('section').forEach(sec => {
               const pages = sec.querySelectorAll('.page');
@@ -229,7 +275,8 @@ public static class Export
             </body>
             </html>
 
-            """.Replace("MAX_KEYS", KeyOverlay.MaxVisible.ToString(CultureInfo.InvariantCulture)));
+            """.Replace("MAX_KEYS", KeyOverlay.MaxVisible.ToString(CultureInfo.InvariantCulture))
+               .Replace("PHASES", MouseOverlay.Phases.ToString(CultureInfo.InvariantCulture)));
         return sb.ToString();
     }
 
@@ -276,10 +323,17 @@ public static class Export
         var range = (st.VideoStart is { } a ? $" data-start=\"{Seconds(a)}\"" : "") + (st.VideoEnd is { } b ? $" data-end=\"{Seconds(b)}\"" : "");
         var chips = KeyOverlay.Chips(KeyOverlay.StrokesFor(s, st));
         var keys = chips.Count == 0 ? "" :
-            $" data-keys=\"{H(KeysJson(chips))}\" data-key-size=\"{Number(KeyOverlay.FontSize(c.Height))}\" data-key-rows=\"{c.Height}\"";
-        if (chips.Count > 0) sb.Append("<div class=\"clip-wrap\">");
-        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{keys}{style}></video>");
-        sb.Append(chips.Count > 0 ? "<div class=\"keys\"></div></div>\n" : "\n");
+            $" data-keys=\"{H(Json(chips.Select(k => new object[] { Sec(k.Start), Sec(k.End), k.Text })))}\" data-key-size=\"{Number(KeyOverlay.FontSize(c.Height))}\" data-key-rows=\"{c.Height}\"";
+        // マウスは [出し始め, 消す, x, y, 操作] の秒と、トリミング前の動画上の位置。data-mouse-area はトリミングの範囲(見えている所)
+        var marks = MouseOverlay.Marks(MouseOverlay.StrokesFor(s, st));
+        var mouse = marks.Count == 0 ? "" :
+            $" data-mouse=\"{H(Json(marks.Select(m => new object[] { Sec(m.Start), Sec(m.End), m.X, m.Y, (int)m.Action })))}\" data-mouse-area=\"{c.X} {c.Y} {c.Width} {c.Height}\" data-mouse-radius=\"{Number(MouseOverlay.Radius(c.Height))}\"";
+        var wrap = chips.Count > 0 || marks.Count > 0;
+        if (wrap) sb.Append("<div class=\"clip-wrap\">");
+        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{H(ClipSource(st))}\" poster=\"{H(st.ImageFile)}\" width=\"{c.Width}\"{range}{keys}{mouse}{style}></video>");
+        if (marks.Count > 0) sb.Append("<canvas class=\"mouse\"></canvas>");
+        if (chips.Count > 0) sb.Append("<div class=\"keys\"></div>");
+        sb.Append(wrap ? "</div>\n" : "\n");
         AppendRate(sb, st.Speed);
     }
 
@@ -307,9 +361,11 @@ public static class Export
 
     static string Number(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
 
-    /// <summary>HTML のスクリプトに渡すキーの表示([出し始め, 消す, 表示] の秒)。</summary>
-    static string KeysJson(IReadOnlyList<KeyChip> chips) =>
-        System.Text.Json.JsonSerializer.Serialize(chips.Select(c => new object[] { Math.Round(c.Start.TotalSeconds, 3), Math.Round(c.End.TotalSeconds, 3), c.Text }),
+    static double Sec(TimeSpan t) => Math.Round(t.TotalSeconds, 3);
+
+    /// <summary>HTML のスクリプトに渡すキー・マウスの表示。</summary>
+    static string Json(IEnumerable<object[]> rows) =>
+        System.Text.Json.JsonSerializer.Serialize(rows,
             new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }); // 属性に入れるときに H() で HTML エスケープする
 
     /// <summary>session.json・steps.md・index.html をまとめて書き出す。</summary>
@@ -342,7 +398,7 @@ public static class Export
                 makeClip(s.Steps.First(x => x.Id == st.Id), Path.Combine(outDir, clip), gif ? null : Path.Combine(outDir, poster));
                 if (st.Crop is { } c) (st.ImageWidth, st.ImageHeight) = (c.Width, c.Height); // トリミング済みのファイルになる
                 (st.VideoFile, st.ImageFile, st.VideoStart, st.VideoEnd, st.Crop) = (clip, poster, null, null, null);
-                st.Keys = null; // キーは動画に焼き込み済み。HTML では重ねない
+                (st.Keys, st.Mouse) = (null, null); // キーとマウスは動画に焼き込み済み。HTML では重ねない
                 if (gif) st.VideoSpeed = null; // GIF はプレーヤーが無いので焼き込み済み。mp4 は等速のままで、HTML のプレーヤーが変える
                 continue;
             }

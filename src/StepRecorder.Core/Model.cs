@@ -75,6 +75,11 @@ public sealed class Step
     /// <summary>動画にキーを重ねない。既定(false)は重ねる(false は書かない)。</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool HideKeys { get; set; }
+    /// <summary>録画ボタンで録った動画のステップでのクリック・ホイール(この動画の時刻と位置)。Keys と同じく、全編から切り出した区間は Session.Mouse を使う。</summary>
+    public List<MouseStroke>? Mouse { get; set; }
+    /// <summary>動画にマウスの操作を重ねない(キーとは別に選ぶ)。</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool HideMouse { get; set; }
 }
 
 public sealed class Session
@@ -89,6 +94,8 @@ public sealed class Session
     public string? VideoFile { get; set; }
     /// <summary>録画モードで、全編の動画の間に押したキー(全編の動画の時刻)。無ければ null。</summary>
     public List<KeyStroke>? Keys { get; set; }
+    /// <summary>録画モードで、全編の動画の間のクリック・ホイール(全編の動画の時刻と位置)。無ければ null。</summary>
+    public List<MouseStroke>? Mouse { get; set; }
     /// <summary>残すものがあるか。録画モードでは、ステップが無くても全編の動画がある。</summary>
     [JsonIgnore]
     public bool HasContent => Steps.Count > 0 || VideoFile != null;

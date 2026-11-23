@@ -114,8 +114,8 @@ public partial class EditorWindow : Window
         selectedHighlight = -1;
         LeaveVideoView();
         StopClip();
-        PlayButton.Visibility = SpeedBox.Visibility = KeysBox.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
-        if (s?.VideoFile != null) ShowKeysBox(s);
+        PlayButton.Visibility = SpeedBox.Visibility = KeysBox.Visibility = MouseBox.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
+        if (s?.VideoFile != null) ShowOverlayBoxes(s);
         ToolAdd.IsEnabled = s?.VideoFile == null; // 動画には強調枠を付けない
         if (s?.VideoFile != null && ToolAdd.IsChecked == true) ToolSelect.IsChecked = true;
         if (s?.VideoTime is { } t && session.VideoFile != null) MoveSlider(t); // タイムラインもその時刻へ
@@ -435,46 +435,60 @@ public partial class EditorWindow : Window
         Player.Visibility = Visibility.Visible;
         Player.Play();
         clipPlaying = true;
-        ShowKeys(KeyOverlay.StrokesFor(session, s), s.Crop);
+        ShowOverlays(KeyOverlay.StrokesFor(session, s), MouseOverlay.StrokesFor(session, s), s.Crop);
         PlayButton.Content = "■ 停止";
     }
 
-    /// <summary>キー表示のチェック。記録したキーが無ければ押せない。</summary>
-    void ShowKeysBox(Step s)
+    /// <summary>キー表示・マウス表示のチェック。記録が無ければ押せない。</summary>
+    void ShowOverlayBoxes(Step s)
     {
-        var recorded = KeyOverlay.Recorded(session, s).Count > 0;
         loading = true;
-        KeysBox.IsChecked = recorded && !s.HideKeys;
+        SetBox(KeysBox, KeyOverlay.Recorded(session, s).Count > 0, s.HideKeys, "この動画の間に押したキーの記録がありません");
+        SetBox(MouseBox, MouseOverlay.Recorded(session, s).Count > 0, s.HideMouse, "この動画の間のクリック・ホイールの記録がありません");
         loading = false;
-        KeysBox.IsEnabled = recorded;
-        ToolTipService.SetShowOnDisabled(KeysBox, true);
-        if (!recorded) KeysBox.ToolTip = "この動画の間に押したキーの記録がありません";
+
+        static void SetBox(CheckBox box, bool recorded, bool hidden, string none)
+        {
+            box.IsChecked = recorded && !hidden;
+            box.IsEnabled = recorded;
+            ToolTipService.SetShowOnDisabled(box, true);
+            if (!recorded) box.ToolTip = none;
+        }
     }
 
-    void Keys_Click(object sender, RoutedEventArgs e)
+    void Keys_Click(object sender, RoutedEventArgs e) => SetOverlay(s => s.HideKeys = KeysBox.IsChecked != true);
+
+    void Mouse_Click(object sender, RoutedEventArgs e) => SetOverlay(s => s.HideMouse = MouseBox.IsChecked != true);
+
+    void SetOverlay(Action<Step> change)
     {
         if (loading || Current is not { VideoFile: not null } s) return;
         Checkpoint();
-        s.HideKeys = KeysBox.IsChecked != true;
-        if (clipPlaying) ShowKeys(KeyOverlay.StrokesFor(session, s), s.Crop);
+        change(s);
+        if (clipPlaying) ShowOverlays(KeyOverlay.StrokesFor(session, s), MouseOverlay.StrokesFor(session, s), s.Crop);
     }
 
-    /// <summary>再生中の動画にキーを重ねる。crop はトリミングの範囲(その下の中央に出す)。</summary>
-    void ShowKeys(IReadOnlyList<KeyStroke> strokes, PixelRect? crop)
+    /// <summary>再生中の動画にキーとマウスを重ねる。crop はトリミングの範囲(キーはその下の中央に出す。大きさもその高さで決まる)。</summary>
+    void ShowOverlays(IReadOnlyList<KeyStroke> keys, IReadOnlyList<MouseStroke> mouse, PixelRect? crop)
     {
-        KeysView.Chips = KeyOverlay.Chips(strokes);
+        KeysView.Chips = KeyOverlay.Chips(keys);
         var area = crop ?? new PixelRect(0, 0, (int)Stage.Width, (int)Stage.Height);
         Canvas.SetLeft(KeysView, area.X);
         Canvas.SetTop(KeysView, area.Y);
         (KeysView.Width, KeysView.Height) = (area.Width, area.Height);
         KeysLayer.Visibility = Visibility.Visible;
+        MouseView.Marks = MouseOverlay.Marks(mouse);
+        MouseView.Radius = MouseOverlay.Radius(area.Height);
+        MouseView.Visibility = Visibility.Visible;
         StartPlayTimer();
     }
 
-    void HideKeys()
+    void HideOverlays()
     {
         KeysView.Chips = [];
         KeysLayer.Visibility = Visibility.Collapsed;
+        MouseView.Marks = [];
+        MouseView.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>動画のステップの速さを変える。再生中なら、その速さで区間の最初から再生し直す。</summary>
@@ -497,7 +511,7 @@ public partial class EditorWindow : Window
         Player.Close();
         Player.Visibility = Visibility.Collapsed;
         PlayButton.Content = "▶ 再生";
-        HideKeys();
+        HideOverlays();
     }
 
     void Player_Ended()
@@ -524,7 +538,7 @@ public partial class EditorWindow : Window
     void OnPlayTick()
     {
         if (fullPlaying) MoveSlider(Player.Position);
-        if (KeysLayer.IsVisible) KeysView.Time = Player.Position;
+        if (KeysLayer.IsVisible) KeysView.Time = MouseView.Time = Player.Position;
     }
 
     void OpenFullVideo()
@@ -546,7 +560,7 @@ public partial class EditorWindow : Window
         SetStageSize(fullSize.Width, fullSize.Height);
         Player.Open(FullPath(session.VideoFile!), SliderTime); // 開くだけ。シークバーの位置で止まっている
         Player.Visibility = Visibility.Visible;
-        ShowKeys(session.Keys ?? [], null); // 全編では、記録したキーをすべて重ねる(区間を選ぶ目安)
+        ShowOverlays(session.Keys ?? [], session.Mouse ?? [], null); // 全編では、記録したものをすべて重ねる(区間を選ぶ目安)
         if (fit) FitZoom();
     }
 
@@ -557,7 +571,7 @@ public partial class EditorWindow : Window
         videoView = false;
         Player.Close();
         Player.Visibility = Visibility.Collapsed;
-        HideKeys();
+        HideOverlays();
         Picture.Visibility = Overlay.Visibility = Visibility.Visible;
     }
 
@@ -586,7 +600,7 @@ public partial class EditorWindow : Window
     void TimeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         TimeLabel.Text = TimeText.Position(SliderTime);
-        if (videoView) KeysView.Time = SliderTime; // 止まっていても、シークした時刻のキーを出す
+        if (videoView) KeysView.Time = MouseView.Time = SliderTime; // 止まっていても、シークした時刻のものを出す
         if (!TimeSlider.IsMouseCaptureWithin) ShowPlayhead(); // ドラッグ中に動かすと、つまみがマウスから逃げる
         if (sliderQuiet) return;
         ShowVideoView();
@@ -728,7 +742,7 @@ public partial class EditorWindow : Window
         {
             await Task.Run(() => Export.ExportForDistribution(snapshot, dir, outDir, mode, format, (st, clip, poster) =>
             {
-                VideoClips.ExportClip(dir, st, format, clip, poster, KeyOverlay.StrokesFor(snapshot, st), Report);
+                VideoClips.ExportClip(dir, st, format, clip, poster, KeyOverlay.StrokesFor(snapshot, st), MouseOverlay.StrokesFor(snapshot, st), Report);
                 done++;
             }));
         }
