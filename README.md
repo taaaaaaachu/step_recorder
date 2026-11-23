@@ -1,6 +1,6 @@
 # step_recorder
 
-GUI アプリの操作を記録して、企画チームに渡す「操作記録」(プレビュー用 HTML と後加工用の Markdown)を作る Windows ツール。Windows 標準の「ステップ記録ツール」を拡張したもの。
+GUI アプリの操作を記録して、企画チームに渡す「操作記録」(HTML)を作る Windows ツール。Windows 標準の「ステップ記録ツール」を拡張したもの。
 
 仕様は [docs/spec.md](docs/spec.md) を参照。
 
@@ -29,7 +29,6 @@ GUI アプリの操作を記録して、企画チームに渡す「操作記録�
 ```
 20261121-174100_App/
   session.json   正となるデータ(「記録を開く」でこれを開くと再編集できる)
-  steps.md       後加工用の Markdown
   index.html     プレビュー用 HTML
   images/        元画像(加工しない。強調枠とトリミングは HTML 上で重ねて表示)
   videos/        録画ボタンで録った動画

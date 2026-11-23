@@ -94,11 +94,11 @@ public class ExportTests
     }
 
     [Fact]
-    public void 画面一覧モードは同じ画面をまとめ先頭の画像を使う()
+    public void 画面一覧モードは同じ画面をまとめる()
     {
         var secs = Export.Sections(Sample(), GroupMode.ByScreen);
         Assert.Equal(["メイン", "設定"], secs.Select(s => s.Title));
-        Assert.Equal(1, secs[0].Image.Id);
+        Assert.Equal([1, 3], secs[0].Steps.Select(s => s.Id));
         Assert.Equal(["最初の画面", "戻る", "終了 <b>"], secs[0].Lines);
     }
 
@@ -119,34 +119,6 @@ public class ExportTests
         Assert.Contains("<li>設定を開く</li>", html);
         // 手順モードでは付けない
         Assert.DoesNotContain("class=\"pager\"", Export.ToHtml(Sample(), GroupMode.Sequence));
-    }
-
-    [Fact]
-    public void Markdown()
-    {
-        var md = Export.ToMarkdown(Sample(), GroupMode.ByScreen);
-        Assert.Equal("""
-            # App 操作記録 (2026-11-21)
-
-            | 項目 | 内容 |
-            |---|---|
-            | 記録日時 | 2026-11-21 00:00 |
-
-            ## 1. メイン
-
-            ![メイン](images/0001.png)
-
-            1. 最初の画面
-            2. 戻る
-            3. 終了 <b>
-
-            ## 2. 設定
-
-            ![設定](images/0002.png)
-
-            1. 設定を開く
-
-            """.ReplaceLineEndings("\n"), md);
     }
 
     [Fact]
@@ -190,7 +162,7 @@ public class ExportTests
             Assert.Equal(new PixelRect(10, 10, 50, 50), back.Steps[0].Crop);
             Assert.Equal(MouseButton.Right, back.Steps[0].Operations[0].Button);
             Assert.Equal("戻る\n終了 <b>", back.Steps[2].Description);
-            Assert.True(File.Exists(Path.Combine(dir, Export.MarkdownFile)));
+            Assert.False(File.Exists(Path.Combine(dir, "steps.md")));
             Assert.True(File.Exists(Path.Combine(dir, Export.HtmlFile)));
         }
         finally { Directory.Delete(dir, true); }
@@ -244,7 +216,6 @@ public class EvidenceTests
             [("対象アプリ", "App.exe"), ("バージョン", "1.2.3"), ("記録日時", "2026-11-21 09:05"), ("画面", "1920×1080(拡大率 125%)"), ("記録ツール", "step_recorder 0.5.0")],
             Export.EvidenceRows(s));
         Assert.Contains("<tr><th>バージョン</th><td>1.2.3</td></tr>", Export.ToHtml(s, GroupMode.Sequence));
-        Assert.Contains("| バージョン | 1.2.3 |", Export.ToMarkdown(s, GroupMode.Sequence));
     }
 }
 
@@ -311,7 +282,6 @@ public class VideoExportTests
         Assert.Contains("<option value=\"0.5\" selected>0.5 倍速</option>", html);
         Assert.DoesNotContain("<option value=\"1\" selected>", html);
         Assert.Contains("requestAnimationFrame(stopAtEnd)", Export.ToHtml(s, GroupMode.Sequence)); // 倍速でも区間を越えない
-        Assert.Contains("[▶ 動画を再生(0.5 倍速)](video.mp4#t=1.5,4)", Export.ToMarkdown(s, GroupMode.Sequence));
     }
 
     [Theory]
@@ -340,13 +310,6 @@ public class VideoExportTests
         Assert.Contains("\"videoSpeed\": 2", Json());
         Assert.Equal(2, SessionStore.Clone(s).Steps[1].Speed);
         Assert.Equal(1, history.Undo()!.Steps[1].Speed);
-    }
-
-    [Fact]
-    public void Markdownでは動画へのリンクを添える()
-    {
-        var md = Export.ToMarkdown(Sample(), GroupMode.Sequence);
-        Assert.Contains("![メイン](images/0002.png)\n\n[▶ 動画を再生](video.mp4#t=1.5,4)\n", md);
     }
 
     [Theory]
@@ -385,18 +348,15 @@ public class VideoExportTests
             Assert.Contains(format == ClipFormat.Gif
                 ? "<img class=\"clip\" src=\"clips/0002.gif\" width=\"100\" height=\"50\" alt=\"\">"
                 : "<video class=\"clip\" controls preload=\"metadata\" src=\"clips/0002.mp4\" poster=\"clips/0002.png\" width=\"100\"></video>", html);
-            var md = File.ReadAllText(Path.Combine(dst, Export.MarkdownFile));
-            Assert.Contains(format == ClipFormat.Gif ? "![メイン](clips/0002.gif)" : "[▶ 動画を再生(2 倍速)](clips/0002.mp4)", md);
+            Assert.False(File.Exists(Path.Combine(dst, "steps.md")));
             if (format == ClipFormat.Gif)
             {
                 // 焼き込み済みで、プレーヤーも無い
                 Assert.DoesNotContain("<label class=\"rate\">", html);
-                Assert.DoesNotContain("倍速", md);
             }
             else
             {
                 Assert.Contains("<option value=\"2\" selected>2 倍速</option>", html);
-                Assert.Contains("[▶ 動画を再生(2 倍速)](clips/0002.mp4)", md);
             }
             Assert.Equal(2, s.Steps[1].Speed);
             Assert.Equal("video.mp4", s.VideoFile); // 元のセッションは変えない

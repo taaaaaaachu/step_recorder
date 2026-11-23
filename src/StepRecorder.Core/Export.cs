@@ -7,9 +7,6 @@ namespace StepRecorder.Core;
 /// <summary>出力の1セクション。Sequence ではステップ1つ、ByScreen では同じ画面のステップ群。</summary>
 public sealed record Section(string Title, IReadOnlyList<Step> Steps)
 {
-    /// <summary>代表の画像(最初のステップ)。Markdown はこれだけを載せる。</summary>
-    public Step Image => Steps[0];
-
     /// <summary>全ステップの説明文の行。</summary>
     public IReadOnlyList<string> Lines => Steps.SelectMany(Export.LinesOf).ToList();
 }
@@ -19,7 +16,6 @@ public sealed record Screen(string ProcessName, string ClassName, string Name);
 
 public static class Export
 {
-    public const string MarkdownFile = "steps.md";
     public const string HtmlFile = "index.html";
 
     public static IReadOnlyList<Section> Sections(Session s, GroupMode mode)
@@ -54,25 +50,6 @@ public static class Export
             ("記録ツール", e.RecorderVersion == "" ? "" : $"step_recorder {e.RecorderVersion}"),
         ];
         return rows.Where(r => r.Item2 != "").ToList();
-    }
-
-    public static string ToMarkdown(Session s, GroupMode mode)
-    {
-        var sb = new StringBuilder($"# {Title(s)}\n\n| 項目 | 内容 |\n|---|---|\n");
-        foreach (var (label, value) in EvidenceRows(s)) sb.Append($"| {label} | {value.Replace("|", "\\|")} |\n");
-        foreach (var (sec, i) in Sections(s, mode).Select((x, i) => (x, i + 1)))
-        {
-            var st = sec.Image;
-            sb.Append($"\n## {i}. {sec.Title}\n\n");
-            // GIF は画像としてそのまま、mp4 はポスター画像に動画へのリンクを添える
-            if (st.VideoFile?.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) == true) sb.Append($"![{sec.Title}]({st.VideoFile})\n");
-            else sb.Append($"![{sec.Title}]({st.ImageFile})\n");
-            if (st.VideoFile?.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) == false) sb.Append($"\n[▶ 動画を再生{(st.Speed == 1 ? "" : $"({PlaybackSpeed.Label(st.Speed)})")}]({ClipSource(st)})\n");
-            if (sec.Lines.Count > 0) sb.Append('\n');
-            foreach (var (line, n) in sec.Lines.Select((x, n) => (x, n + 1)))
-                sb.Append($"{n}. {line}\n");
-        }
-        return sb.ToString();
     }
 
     public static string ToHtml(Session s, GroupMode mode)
@@ -368,16 +345,15 @@ public static class Export
         System.Text.Json.JsonSerializer.Serialize(rows,
             new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }); // 属性に入れるときに H() で HTML エスケープする
 
-    /// <summary>session.json・steps.md・index.html をまとめて書き出す。</summary>
+    /// <summary>session.json と index.html を書き出す。</summary>
     public static void SaveAll(Session s, string dir, GroupMode mode)
     {
         SessionStore.Save(s, dir);
-        File.WriteAllText(Path.Combine(dir, MarkdownFile), ToMarkdown(s, mode));
         File.WriteAllText(Path.Combine(dir, HtmlFile), ToHtml(s, mode));
     }
 
     /// <summary>
-    /// 配布用に、outDir へ index.html・steps.md と、使っている画像・動画だけを書き出す。
+    /// 配布用に、outDir へ index.html と、使っている画像・動画だけを書き出す。
     /// session.json と全編の動画は含めない(あとから編集はできない)。
     /// 動画のステップは makeClip(ステップ, 動画の書き出し先, ポスター画像の書き出し先) で、区間・トリミング・キーの表示(GIF なら速さも)を反映した
     /// ファイルにしてもらう(ポスターは mp4 のときだけ。GIF では null)。
@@ -406,7 +382,6 @@ public static class Export
             Directory.CreateDirectory(Path.GetDirectoryName(to)!);
             File.Copy(Path.Combine(srcDir, st.ImageFile), to, overwrite: true);
         }
-        File.WriteAllText(Path.Combine(outDir, MarkdownFile), ToMarkdown(copy, mode));
         File.WriteAllText(Path.Combine(outDir, HtmlFile), ToHtml(copy, mode));
     }
 }
