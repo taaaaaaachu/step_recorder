@@ -371,6 +371,14 @@ public sealed class EditorSmokeTests : IDisposable
         Wait(500);
         var pointed = slider.Current.Value;
         Assert.InRange(pointed, 1.5, 2.6);
+        // クリックでシークバーにフォーカスが移るので、←→ でコマ送りできる
+        var frame = Math.Floor(pointed * 15 + 1e-6);
+        PressKeys(editor, 0x27); // →
+        Wait(300);
+        Assert.Equal((frame + 1) / 15, slider.Current.Value, 6);
+        PressKeys(editor, 0x25); PressKeys(editor, 0x25); // ←←
+        Wait(300);
+        Assert.Equal((frame - 1) / 15, slider.Current.Value, 6);
         CtrlWheel(editor, x, y, 1);
         Wait(300);
         CtrlWheel(editor, x, y, 1);
@@ -385,9 +393,9 @@ public sealed class EditorSmokeTests : IDisposable
         At(0.05);
         Assert.InRange(Scrolled(), 0, 5); // 現在位置が見える所へ動く
         Shot("timeline-zoom");
-        Press("▶");
+        Press("再生");
         Assert.True(Until(() => Scrolled() > 10, 8000), "再生中に現在位置を追わない");
-        if (AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "‖")) != null) Press("‖");
+        if (AutomationElement.FromHandle(editor).FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, "一時停止")) != null) Press("一時停止");
         At(slider.Current.Maximum - 0.05);
         Assert.InRange(Scrolled(), 95, 100);
         Shot("timeline-end");

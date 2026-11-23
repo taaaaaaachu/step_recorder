@@ -47,6 +47,8 @@ public partial class EditorWindow : Window
         (KeysBox.Tag, MouseBox.Tag) = (KeysBox.ToolTip, MouseBox.ToolTip); // 記録が無いときの説明から戻すため
         Player.Ended += Player_Ended;
         Player.Failed += Player_Failed;
+        // Slider はクリックを自分で処理済みにしてフォーカスを取らないので、処理済みでも受け取ってフォーカスを移す(押したらそのまま ←→ でコマ送り)
+        TimeSlider.AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((_, _) => TimeSlider.Focus()), handledEventsToo: true);
         this.session = session;
         this.dir = dir;
         Title = $"step_recorder 編集 — {dir}";
@@ -605,7 +607,10 @@ public partial class EditorWindow : Window
         fullPlaying = playing;
         if (playing) { Player.Play(); StartPlayTimer(); }
         else if (videoView) Player.Pause();
-        FullPlayButton.Content = playing ? "‖" : "▶";
+        var name = playing ? "一時停止" : "再生";
+        FullPlayButton.Content = playing ? "" : "";
+        System.Windows.Automation.AutomationProperties.SetName(FullPlayButton, name);
+        FullPlayButton.ToolTip = name;
     }
 
     /// <summary>タイムラインの目盛り(ステップを撮った時刻)を付け直す。</summary>
@@ -630,6 +635,15 @@ public partial class EditorWindow : Window
         if (sliderQuiet) return;
         ShowVideoView();
         Player.Position = SliderTime;
+    }
+
+    /// <summary>シークバーの ←→ は 1 コマずつ動かす(Slider の既定は SmallChange 秒)。再生中なら止める。</summary>
+    void TimeSlider_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Left or Key.Right) || Keyboard.Modifiers != ModifierKeys.None) return;
+        e.Handled = true;
+        SetFullPlaying(false);
+        TimeSlider.Value = Geometry.StepFrame(TimeSlider.Value, e.Key == Key.Right ? 1 : -1, VideoRecorder.Fps, TimeSlider.Maximum);
     }
 
     // ---- タイムラインのズーム ----

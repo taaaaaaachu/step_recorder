@@ -31,6 +31,16 @@ public class GeometryTests
     }
 
     [Fact]
+    public void コマ送りは隣のコマの頭へ動き両端で止まる()
+    {
+        Assert.Equal(16 / 15.0, Geometry.StepFrame(1.03, 1, 15, 3), 9); // コマの途中から次のコマへ
+        Assert.Equal(14 / 15.0, Geometry.StepFrame(1.03, -1, 15, 3), 9); // 映っているコマ(15)の 1 つ前へ
+        Assert.Equal(17 / 15.0, Geometry.StepFrame(16 / 15.0, 1, 15, 3), 9); // 割り切れない時刻でも 1 コマずつ
+        Assert.Equal(0, Geometry.StepFrame(0.02, -1, 15, 3));
+        Assert.Equal(3, Geometry.StepFrame(2.99, 1, 15, 3));
+    }
+
+    [Fact]
     public void 始点終点の向きに関係なく正規化し画像内に収める()
     {
         Assert.Equal(new PixelRect(10, 20, 30, 40), Geometry.FromPoints(40, 60, 10, 20, 100, 100));

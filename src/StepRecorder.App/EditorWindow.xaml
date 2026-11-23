@@ -131,8 +131,8 @@
                     <ScrollViewer x:Name="TimeScroller" HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Disabled" Focusable="False"
                                   SizeChanged="TimeScroller_SizeChanged" PreviewMouseWheel="TimeScroller_PreviewMouseWheel">
                         <Slider x:Name="TimeSlider" AutomationProperties.AutomationId="TimeSlider" IsMoveToPointEnabled="True" TickPlacement="BottomRight" TickFrequency="1E9"
-                                Margin="0,0,0,12" SmallChange="0.1" LargeChange="1" ValueChanged="TimeSlider_ValueChanged" Thumb.DragCompleted="TimeSlider_DragCompleted"
-                                ToolTip="目盛りはステップを撮った時刻。Ctrl+ホイールで拡大、ホイールで横に移動"/>
+                                Margin="0,0,0,12" SmallChange="0.1" LargeChange="1" ValueChanged="TimeSlider_ValueChanged" Thumb.DragCompleted="TimeSlider_DragCompleted" PreviewKeyDown="TimeSlider_PreviewKeyDown"
+                                ToolTip="目盛りはステップを撮った時刻。←→ でコマ送り、Ctrl+ホイールで拡大、ホイールで横に移動"/>
                     </ScrollViewer>
                     <DockPanel Margin="0,6,0,0">
                         <!-- 読み上げ名は画像のズームのボタンと区別するため -->
@@ -144,7 +144,8 @@
                         </StackPanel>
                         <!-- 幅が足りないときは折り返す -->
                         <WrapPanel>
-                            <Button x:Name="FullPlayButton" Content="▶" MinWidth="36" Click="FullPlay_Click"/>
+                            <Button x:Name="FullPlayButton" Content="&#xE768;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" MinWidth="36" VerticalAlignment="Stretch" Click="FullPlay_Click"
+                                    AutomationProperties.Name="再生" ToolTip="再生"/>
                             <Button Content="このフレームをステップに追加" Click="AddFrame_Click"/>
                             <Button Content="区間の開始" Margin="14,0,6,0" Click="RangeStart_Click"/>
                             <Button Content="区間の終了" Click="RangeEnd_Click"/>

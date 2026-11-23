@@ -65,5 +65,9 @@ public static class Geometry
     public static double ScrollToShow(double offset, double viewport, double x) =>
         x >= offset && x <= offset + viewport ? offset : Math.Max(0, x - viewport / 4);
 
+    /// <summary>1 秒 fps コマの動画で、seconds に映っているコマから dir コマ動いたコマの頭の時刻(0〜max に収める)。</summary>
+    public static double StepFrame(double seconds, int dir, int fps, double max) =>
+        Math.Clamp((Math.Floor(seconds * fps + 1e-6) + dir) / fps, 0, max);
+
     static int Clamp(double v, int max) => (int)Math.Clamp(Math.Round(v), 0, max);
 }
