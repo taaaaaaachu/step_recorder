@@ -101,6 +101,8 @@ public class KeyOverlayTests
     [InlineData(0x25, false, false, false, false, null, "←", false)]
     [InlineData(0x20, false, false, false, false, ' ', " ", true)]
     [InlineData(0x74, false, false, false, false, null, "F5", false)]
+    [InlineData(0xA6, false, false, false, false, null, "ブラウザーの戻る", false)]
+    [InlineData(0xAE, false, false, false, false, null, "音量 −", false)]
     public void キーの表記(int vk, bool ctrl, bool alt, bool shift, bool win, char? typed, string text, bool isChar)
     {
         Assert.Equal((text, isChar), KeyLabel.Of(vk, ctrl, alt, shift, win, typed));

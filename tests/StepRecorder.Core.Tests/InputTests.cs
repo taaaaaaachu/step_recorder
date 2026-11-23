@@ -22,6 +22,10 @@ public class KeyClassifierTests
     [InlineData(0x11, true, false, false, false, false, KeyKind.Ignore, "")] // Ctrl 単体
     [InlineData(0xA2, true, false, false, false, false, KeyKind.Ignore, "")] // 左 Ctrl
     [InlineData(0xBA, true, false, false, false, false, KeyKind.Ignore, "")] // 名前の無いキー + Ctrl
+    [InlineData(0xA6, false, false, false, false, false, KeyKind.Shortcut, "ブラウザーの戻る")] // 専用のキー(多ボタンマウスの割り当てでも届く)。文字入力として欄を読まない
+    [InlineData(0xAF, false, false, false, false, false, KeyKind.Shortcut, "音量 +")]
+    [InlineData(0xB3, false, false, false, false, true, KeyKind.Shortcut, "再生/一時停止")]
+    [InlineData(0xAD, true, false, false, false, false, KeyKind.Shortcut, "Ctrl+ミュート")]
     public void 分類(int vk, bool ctrl, bool alt, bool shift, bool win, bool ime, KeyKind kind, string name) =>
         Assert.Equal((kind, name), KeyClassifier.Classify(vk, ctrl, alt, shift, win, ime));
 }

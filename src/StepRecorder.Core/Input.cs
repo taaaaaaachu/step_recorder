@@ -25,7 +25,7 @@ public static class KeyClassifier
         // ponytail: IME が開いていると Enter/Esc は変換の確定・取消とみなす。IME を開いたまま送信した Enter は記録されない
         if (vk is VK_RETURN or VK_ESCAPE)
             return imeOpen ? (KeyKind.Typing, "") : (KeyKind.Shortcut, Combine(name!, false, false, shift, false));
-        if (vk == VK_TAB)
+        if (vk == VK_TAB || IsSpecial(vk))
             return (KeyKind.Shortcut, Combine(name!, false, false, shift, false));
 
         // カーソル移動だけのキーは値を変えないので入力として扱わない
@@ -33,6 +33,12 @@ public static class KeyClassifier
 
         return (KeyKind.Typing, "");
     }
+
+    /// <summary>
+    /// ブラウザー・音量・メディアなどの専用のキー(VK_BROWSER_BACK〜VK_LAUNCH_APP2)。キーボードの専用キーのほか、
+    /// 多ボタンマウスの 6 個目以降のボタンも、付属のソフトがこれらのキーに置き換えて送ることが多い。文字は打たないのでキー操作として扱う。
+    /// </summary>
+    static bool IsSpecial(int vk) => vk is >= 0xA6 and <= 0xB7;
 
     internal static string Combine(string name, bool ctrl, bool alt, bool shift, bool win) =>
         string.Concat(ctrl ? "Ctrl+" : "", alt ? "Alt+" : "", shift ? "Shift+" : "", win ? "Win+" : "", name);
@@ -60,6 +66,24 @@ public static class KeyClassifier
         0x2C => "PrintScreen",
         0x13 => "Pause",
         0x5D => "Apps",
+        0xA6 => "ブラウザーの戻る",
+        0xA7 => "ブラウザーの進む",
+        0xA8 => "ブラウザーの更新",
+        0xA9 => "ブラウザーの中止",
+        0xAA => "検索",
+        0xAB => "お気に入り",
+        0xAC => "ブラウザーのホーム",
+        0xAD => "ミュート",
+        0xAE => "音量 −",
+        0xAF => "音量 +",
+        0xB0 => "次の曲",
+        0xB1 => "前の曲",
+        0xB2 => "メディアの停止",
+        0xB3 => "再生/一時停止",
+        0xB4 => "メール",
+        0xB5 => "メディアの選択",
+        0xB6 => "アプリ 1",
+        0xB7 => "アプリ 2",
         _ => null,
     };
 }
