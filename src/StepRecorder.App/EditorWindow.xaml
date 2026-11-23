@@ -144,7 +144,7 @@
                         </StackPanel>
                         <!-- 幅が足りないときは折り返す -->
                         <WrapPanel>
-                            <Button x:Name="FullPlayButton" Content="&#xE768;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" MinWidth="36" VerticalAlignment="Stretch" Click="FullPlay_Click"
+                            <Button x:Name="FullPlayButton" Content="&#xF5B0;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" MinWidth="36" VerticalAlignment="Stretch" Click="FullPlay_Click"
                                     AutomationProperties.Name="再生" ToolTip="再生"/>
                             <Button Content="このフレームをステップに追加" Click="AddFrame_Click"/>
                             <Button Content="区間の開始" Margin="14,0,6,0" Click="RangeStart_Click"/>

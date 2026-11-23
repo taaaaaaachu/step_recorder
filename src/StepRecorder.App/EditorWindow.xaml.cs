@@ -608,7 +608,7 @@ public partial class EditorWindow : Window
         if (playing) { Player.Play(); StartPlayTimer(); }
         else if (videoView) Player.Pause();
         var name = playing ? "一時停止" : "再生";
-        FullPlayButton.Content = playing ? "" : "";
+        FullPlayButton.Content = playing ? "\uF8AE" : "\uF5B0"; // 塗りつぶしの一時停止・再生
         System.Windows.Automation.AutomationProperties.SetName(FullPlayButton, name);
         FullPlayButton.ToolTip = name;
     }
