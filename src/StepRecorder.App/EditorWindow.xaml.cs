@@ -153,6 +153,15 @@ public partial class EditorWindow : Window
         RefreshList(i);
     }
 
+    /// <summary>ステップを消し、続けて Delete を押せるよう、次に選ばれたステップにフォーカスを戻す(一覧を作り直すと外れる)。</summary>
+    void DeleteStepByKey()
+    {
+        DeleteStep_Click(this, new());
+        Steps.UpdateLayout();
+        if (Steps.ItemContainerGenerator.ContainerFromItem(Steps.SelectedItem) is ListBoxItem item) item.Focus();
+        else Steps.Focus();
+    }
+
     // ---- 文字の編集 ----
 
     void ScreenName_TextChanged(object sender, TextChangedEventArgs e)
@@ -403,7 +412,13 @@ public partial class EditorWindow : Window
         }
         if (Keyboard.FocusedElement is TextBox) return; // 入力中の Ctrl+Z などは TextBox 自身に任せる
         if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control) { Undo(); e.Handled = true; return; }
-        if (e.Key == Key.Delete) { DeleteHighlight_Click(this, new()); e.Handled = true; }
+        if (e.Key == Key.Y && Keyboard.Modifiers == ModifierKeys.Control) { Redo(); e.Handled = true; return; }
+        if (e.Key == Key.Delete)
+        {
+            if (Steps.IsKeyboardFocusWithin) DeleteStepByKey(); // 一覧を選んでいればステップ、そうでなければ強調枠
+            else DeleteHighlight_Click(this, new());
+            e.Handled = true;
+        }
         if (Keyboard.Modifiers == ModifierKeys.Alt && e.SystemKey is Key.Up or Key.Down)
         {
             Move(e.SystemKey == Key.Up ? -1 : 1);
@@ -868,28 +883,34 @@ public partial class EditorWindow : Window
 
     void MarkDirty() => dirty = true;
 
-    // ---- 元に戻す ----
+    // ---- 元に戻す・やり直す ----
 
     /// <summary>変更する直前に呼ぶ。今の状態を履歴に控える。</summary>
     void Checkpoint()
     {
         history.Push(session);
         dirty = true;
-        UndoButton.IsEnabled = true;
+        UpdateHistoryButtons();
     }
 
-    void Undo()
+    void Undo() => Restore(history.Undo(session));
+    void Redo() => Restore(history.Redo(session));
+
+    void Restore(Session? state)
     {
-        if (history.Undo() is not { } previous) return;
+        if (state == null) return;
         var i = CurrentIndex;
-        session.Steps = previous.Steps;
+        session.Steps = state.Steps;
         dirty = true;
         textCheckpointed = false;
-        UndoButton.IsEnabled = history.CanUndo;
+        UpdateHistoryButtons();
         RefreshList(i);
     }
 
+    void UpdateHistoryButtons() => (UndoButton.IsEnabled, RedoButton.IsEnabled) = (history.CanUndo, history.CanRedo);
+
     void Undo_Click(object sender, RoutedEventArgs e) => Undo();
+    void Redo_Click(object sender, RoutedEventArgs e) => Redo();
 
     bool Save()
     {

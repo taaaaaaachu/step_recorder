@@ -184,10 +184,32 @@ public class SessionHistoryTests
         h.Push(s);
         s.Steps.Clear();
 
-        Assert.Equal("b", h.Undo()!.Steps[0].Description);
-        Assert.Equal("a", h.Undo()!.Steps[0].Description);
+        Assert.Equal("b", h.Undo(s)!.Steps[0].Description);
+        Assert.Equal("a", h.Undo(s)!.Steps[0].Description);
         Assert.False(h.CanUndo);
-        Assert.Null(h.Undo());
+        Assert.Null(h.Undo(s));
+    }
+
+    [Fact]
+    public void 元に戻した分をやり直せる_新しく変更するとやり直せなくなる()
+    {
+        var h = new SessionHistory();
+        Session At(string name) => new() { TargetName = name };
+        h.Push(At("1"));
+        h.Push(At("2")); // 今は 3
+        Assert.False(h.CanRedo);
+
+        var two = h.Undo(At("3"))!;
+        Assert.Equal("2", two.TargetName);
+        Assert.Equal("1", h.Undo(two)!.TargetName);
+        Assert.Equal("2", h.Redo(At("1"))!.TargetName);
+        Assert.Equal("3", h.Redo(two)!.TargetName);
+        Assert.Null(h.Redo(At("3")));
+        Assert.Equal("2", h.Undo(At("3"))!.TargetName); // やり直したものも戻せる
+
+        h.Push(At("2")); // 戻したところから別の変更
+        Assert.False(h.CanRedo);
+        Assert.Null(h.Redo(At("x")));
     }
 
     [Fact]
@@ -195,9 +217,10 @@ public class SessionHistoryTests
     {
         var h = new SessionHistory(capacity: 2);
         foreach (var name in new[] { "1", "2", "3" }) h.Push(new Session { TargetName = name });
-        Assert.Equal("3", h.Undo()!.TargetName);
-        Assert.Equal("2", h.Undo()!.TargetName);
-        Assert.Null(h.Undo());
+        var now = new Session();
+        Assert.Equal("3", h.Undo(now)!.TargetName);
+        Assert.Equal("2", h.Undo(now)!.TargetName);
+        Assert.Null(h.Undo(now));
     }
 }
 
@@ -309,7 +332,7 @@ public class VideoExportTests
         s.Steps[1].VideoSpeed = 2;
         Assert.Contains("\"videoSpeed\": 2", Json());
         Assert.Equal(2, SessionStore.Clone(s).Steps[1].Speed);
-        Assert.Equal(1, history.Undo()!.Steps[1].Speed);
+        Assert.Equal(1, history.Undo(s)!.Steps[1].Speed);
     }
 
     [Theory]

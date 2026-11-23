@@ -81,6 +81,29 @@ public sealed class EditorSmokeTests : IDisposable
         PressKeys(editor, 0x11, 0x5A); // Ctrl+Z
         Wait(300);
         Assert.Equal(2, Count());
+
+        // 一覧のステップを選んで Delete。続けて押しても消える
+        ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "1. 画面1")); // 一覧の見出し
+        Wait(300);
+        PressKeys(editor, 0x2E);
+        Wait(300);
+        Assert.Equal(1, Count());
+        PressKeys(editor, 0x2E);
+        Wait(300);
+        Assert.Equal(0, Count());
+        PressKeys(editor, 0x11, 0x5A);
+        PressKeys(editor, 0x11, 0x5A);
+        Wait(300);
+        Assert.Equal(2, Count());
+        PressKeys(editor, 0x11, 0x59); // Ctrl+Y でやり直す
+        Wait(300);
+        Assert.Equal(1, Count());
+        ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "やり直す"));
+        Wait(300);
+        Assert.Equal(0, Count());
+        ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "元に戻す"));
+        Wait(300);
+        Assert.Equal(1, Count());
     }
 
     [E2EFact]
@@ -166,7 +189,7 @@ public sealed class EditorSmokeTests : IDisposable
         var editor = app.MainWindowHandle;
         Wait(800);
 
-        var heights = new[] { "Group", "UndoButton", "SaveButton", "ExportButton", "ExportMenuButton", "ClipFormatBox" }
+        var heights = new[] { "Group", "UndoButton", "RedoButton", "SaveButton", "ExportButton", "ExportMenuButton", "ClipFormatBox" }
             .ToDictionary(id => id, id => Math.Round(Find(editor, id).Current.BoundingRectangle.Height));
         if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } o)
             WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(o, "editor-toolbar.png"));
