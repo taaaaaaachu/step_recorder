@@ -27,7 +27,7 @@
     <AssemblyName>StepRecorder</AssemblyName>
     <RootNamespace>StepRecorder.App</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks> <!-- WGC と COM のつなぎで vtable を直接呼ぶ -->
-    <Version>0.0.0-dev</Version> <!-- リリースでは CI が -p:Version でタグの版にする -->
+    <Version>0.0.0-dev</Version> <!-- リリースでは CI が -p:Version でタグのバージョンにする -->
   </PropertyGroup>
 
 </Project>
