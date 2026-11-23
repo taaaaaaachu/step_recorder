@@ -749,10 +749,10 @@ public partial class EditorWindow : Window
         }
     }
 
-    void ExportButton_Click(object sender, RoutedEventArgs e)
+    void ExportMenuButton_Click(object sender, RoutedEventArgs e)
     {
-        var menu = ExportButton.ContextMenu!;
-        menu.PlacementTarget = ExportButton;
+        var menu = ExportMenuButton.ContextMenu!;
+        menu.PlacementTarget = ExportMenuButton;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;
     }

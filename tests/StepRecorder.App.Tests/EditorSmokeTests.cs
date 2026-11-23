@@ -154,6 +154,37 @@ public sealed class EditorSmokeTests : IDisposable
 
 
 
+    /// <summary>配布用に書き出すボタンの本体はそのままフォルダを選ぶ画面を出し、横の矢印は書き出し方のメニューを出す。</summary>
+    [E2EFact]
+    public void 配布用に書き出すの本体はフォルダに書き出し_矢印でHTML1ファイルを選べる()
+    {
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
+        WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, rec.NextImageFile));
+        rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), rec.NextImageFile, 400, 300, DateTimeOffset.Now);
+        SessionStore.Save(rec.Session, dir);
+        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Wait(500);
+        // ダイアログとメニューは別のウインドウに出るので、このプロセスのものをデスクトップ全体から探す
+        AutomationElement? Top(ControlType type, string name) => AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
+            new PropertyCondition(AutomationElement.ProcessIdProperty, app.Id),
+            new PropertyCondition(AutomationElement.ControlTypeProperty, type), new PropertyCondition(AutomationElement.NameProperty, name)));
+        void Invoke(string id) => ((InvokePattern)Find(editor, id).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+
+        Invoke("ExportButton");
+        AutomationElement? dialog = null;
+        Assert.True(Until(() => (dialog = Top(ControlType.Window, "配布用に書き出すフォルダ")) != null), "本体を押してもフォルダを選ぶ画面が出ない");
+        Assert.Null(Top(ControlType.MenuItem, "HTML 1 ファイルに書き出す...")); // メニューは出さない
+        var cancel = dialog!.FindFirst(TreeScope.Children, new AndCondition(
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button), new PropertyCondition(AutomationElement.NameProperty, "キャンセル")));
+        ((InvokePattern)cancel.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+        Assert.True(Until(() => Top(ControlType.Window, "配布用に書き出すフォルダ") == null), "フォルダを選ぶ画面が閉じない");
+
+        Invoke("ExportMenuButton");
+        Assert.True(Until(() => Top(ControlType.MenuItem, "HTML 1 ファイルに書き出す...") != null), "矢印を押しても書き出し方のメニューが出ない");
+        Assert.NotNull(Top(ControlType.MenuItem, "フォルダに書き出す..."));
+    }
+
     /// <summary>表示欄だけを別ウインドウに出し、閉じると編集画面に戻る。</summary>
     [E2EFact]
     public void 表示欄を別ウインドウに出して戻せる()
