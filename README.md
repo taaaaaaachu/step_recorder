@@ -58,4 +58,4 @@ dotnet publish tools/ColorDiag -c Release -r win-x64 --self-contained -p:Publish
 
 できた `StepRecorder.ColorDiag.exe` を対象の PC で実行する(インストール不要)。mp4 を exe にドロップすると、その動画が白潰れした状態で作られたものかも判定する。
 
-リリースは `v0.1.0` 形式のタグを push すると GitHub Actions が Velopack でパッケージを作り、Releases に公開する。
+リリースは `v0.1.0` 形式のタグを push すると GitHub Actions が Velopack でパッケージを作り、Releases に公開する。公開されたら、リリースノート(変更点の Markdown)を `gh release edit v0.1.0 --notes-file notes.md` で本文に書く。
