@@ -17,6 +17,7 @@ sealed class RecorderEngine
     readonly CaptureTarget target;
     readonly string dir;
     readonly bool captureCursor;
+    readonly int fps;
     readonly bool recordVideo;
     readonly HashSet<(HotkeyModifiers, int)> ownHotkeys = []; // 記録用のホットキー自体は記録しない
     readonly Recording rec;
@@ -66,6 +67,7 @@ sealed class RecorderEngine
         this.target = target;
         this.dir = dir;
         captureCursor = settings.CaptureCursor;
+        fps = FrameRate.Valid(settings.Fps);
         recordVideo = settings.DefaultMode == RecordMode.Video;
         Mode = settings.DefaultMode;
         foreach (var text in new[] { settings.HotkeyCapture, settings.HotkeyPause, settings.HotkeyStop, settings.HotkeyClip })
@@ -169,7 +171,7 @@ sealed class RecorderEngine
     /// <summary>録画を始める。音を録れなければ映像だけにし、理由を error.log に残す。</summary>
     VideoRecorder StartVideo(nint root, string file)
     {
-        var recorder = target.StartVideo(root, Path.Combine(dir, file), captureCursor, () => paused);
+        var recorder = target.StartVideo(root, Path.Combine(dir, file), captureCursor, () => paused, fps);
         if (recorder.AudioFailure is { } e) Log(new InvalidOperationException($"{file} の音を録れませんでした", e));
         return recorder;
     }

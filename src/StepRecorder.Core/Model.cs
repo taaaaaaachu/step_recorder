@@ -70,6 +70,10 @@ public sealed class Step
     /// <summary>実際に使う速さ。session.json は手で直せるので、0 や極端な値は範囲に収める。</summary>
     [JsonIgnore]
     public double Speed => Math.Clamp(VideoSpeed ?? 1, PlaybackSpeed.Choices[0], PlaybackSpeed.Choices[^1]);
+    /// <summary>配布用の書き出しと編集画面の再生で使うフレームレート。null なら録画したときのまま。録画したときより上げられない(使うときは FpsFor)。</summary>
+    public int? VideoFps { get; set; }
+    /// <summary>実際に使うフレームレート。recorded は動画ファイルのフレームレート。</summary>
+    public int FpsFor(int recorded) => VideoFps is { } f && f > 0 && f < recorded ? f : recorded;
     /// <summary>録画モードで、このステップを撮ったときの全編の動画上の時刻。</summary>
     public TimeSpan? VideoTime { get; set; }
     /// <summary>録画ボタンで録った動画のステップで押したキー(この動画の時刻)。全編から切り出した区間は Session.Keys を使う。無ければ null。</summary>
@@ -113,6 +117,23 @@ public static class PlaybackSpeed
     public static readonly double[] Choices = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 8];
 
     public static string Label(double speed) => speed == 1 ? "等速" : $"{speed.ToString("0.##", CultureInfo.InvariantCulture)} 倍速";
+}
+
+/// <summary>動画のフレームレート。</summary>
+public static class FrameRate
+{
+    /// <summary>選べるフレームレート(少ない順)。</summary>
+    public static readonly int[] Choices = [5, 10, 15, 24, 30, 60];
+
+    public const int Default = 15;
+
+    /// <summary>設定のフレームレート。session.json・settings.json は手で直せるので、選べない値は既定にする。</summary>
+    public static int Valid(int fps) => Choices.Contains(fps) ? fps : Default;
+
+    /// <summary>録画したときが recorded の動画で選べるもの(それ以下)。</summary>
+    public static int[] UpTo(int recorded) => [.. Choices.Where(f => f < recorded), recorded];
+
+    public static string Label(int fps) => $"{fps}fps";
 }
 
 /// <summary>配布用に書き出すときの、動画のステップの形式。</summary>

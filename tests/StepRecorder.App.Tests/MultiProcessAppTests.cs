@@ -92,7 +92,7 @@ public sealed class MultiProcessAppTests : IDisposable
         var target = new AppTarget(a.Process);
         var path = Path.Combine(dir, "switch.mp4");
 
-        var rec = target.StartVideo(target.InitialWindow, path, false, () => false);
+        var rec = target.StartVideo(target.InitialWindow, path, false, () => false, FrameRate.Default);
         Wait(1000);
         var b = Tab("Lime");
         SwitchTab(a.Window);
@@ -101,7 +101,7 @@ public sealed class MultiProcessAppTests : IDisposable
 
         using var reader = VideoClips.Reader.Open(path);
         var shown = new List<Shown>();
-        for (var t = TimeSpan.Zero; t < reader.Duration; t += TimeSpan.FromSeconds(1.0 / VideoRecorder.Fps)) shown.Add(What(reader.Frame(t)));
+        for (var t = TimeSpan.Zero; t < reader.Duration; t += TimeSpan.FromSeconds(1.0 / reader.Fps)) shown.Add(What(reader.Frame(t)));
         Assert.Equal(Shown.Red, shown[2]);
         Assert.Equal(Shown.Lime, shown[^1]);
         Assert.DoesNotContain(Shown.Neither, shown); // 切り替わりに白いコマも入らない
@@ -115,7 +115,7 @@ public sealed class MultiProcessAppTests : IDisposable
         var target = new AppTarget(a.Process);
         var path = Path.Combine(dir, "close.mp4");
 
-        var rec = target.StartVideo(a.Window, path, false, () => false);
+        var rec = target.StartVideo(a.Window, path, false, () => false, FrameRate.Default);
         Wait(1000);
         a.Process.Kill();
         a.Process.WaitForExit(3000);

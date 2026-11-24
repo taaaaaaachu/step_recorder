@@ -459,6 +459,22 @@ public sealed class EditorSmokeTests : IDisposable
         Press("元に戻す");
         Assert.Equal(ToggleState.On, toggle.Current.ToggleState);
 
+        // フレームレートは録画したとき(15fps)以下から選べ、保存される
+        var fps = Find(editor, "FpsBox");
+        var expand = (ExpandCollapsePattern)fps.GetCurrentPattern(ExpandCollapsePattern.Pattern);
+        expand.Expand();
+        Wait(300);
+        var items = fps.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)).Cast<AutomationElement>().ToList();
+        Assert.Equal(["5fps", "10fps", "15fps"], items.Select(i => i.Current.Name));
+        ((SelectionItemPattern)items[1].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        expand.Collapse();
+        Wait(300);
+        Press("保存");
+        Assert.Equal(10, SessionStore.Load(dir).Steps[0].VideoFps);
+        Press("元に戻す");
+        Press("保存");
+        Assert.Null(SessionStore.Load(dir).Steps[0].VideoFps);
+
         ((SelectionItemPattern)Find(editor, "Steps").FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))[1].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
         Assert.True(Until(() => !box.Current.IsEnabled), "音の無い動画でも押せる");
     }

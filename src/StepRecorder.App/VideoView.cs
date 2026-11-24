@@ -38,6 +38,8 @@ sealed class VideoView : Image
     TimeSpan? duration; // 再生を終える時刻(区間の終わりか、動画の終わり)。最初のフレームが出るまで null
     TimeSpan? stopAt;
     double speed = 1;
+    int? frameRate; // 見せるコマのフレームレート。null なら動画のまま
+    TimeSpan openedAt; // 開いた時刻。コマはここから数える(書き出しと同じ)
     bool playing, muted;
     MediaPlayer? sound;
     bool soundSettled; // 再生を始めた・飛んだあと、音の再生位置がそこに追いついたか。追いつくまでは飛んだ所で待つ
@@ -100,12 +102,13 @@ sealed class VideoView : Image
 
     /// <summary>
     /// at のフレームを出して止まった状態で開く。開き終える前に再生・シークしてよい。
-    /// end を渡すとそこで再生を終える。speed は再生の速さ。
+    /// end を渡すとそこで再生を終える。speed は再生の速さ。fps を渡すと、そのフレームレートのコマで見せる(動画より下げたときの見え方)。
     /// </summary>
-    public void Open(string path, TimeSpan at, TimeSpan? end = null, double speed = 1)
+    public void Open(string path, TimeSpan at, TimeSpan? end = null, double speed = 1, int? fps = null)
     {
         Close();
-        origin = at;
+        origin = openedAt = at;
+        frameRate = fps;
         stopAt = end;
         this.speed = speed;
         var opened = playback = new Playback(path, at);
@@ -147,6 +150,7 @@ sealed class VideoView : Image
         origin = TimeSpan.Zero;
         duration = stopAt = null;
         speed = 1;
+        frameRate = null;
         bitmap = null;
         Source = null;
     }
@@ -154,6 +158,7 @@ sealed class VideoView : Image
     void Request(TimeSpan at)
     {
         if (playback is not { } p) return;
+        if (frameRate is { } f && at > openedAt) at = openedAt + TimeSpan.FromSeconds(Math.Floor((at - openedAt).TotalSeconds * f + 1e-6) / f);
         Interlocked.Exchange(ref p.Target, at.Ticks);
         p.Wake.Set();
     }

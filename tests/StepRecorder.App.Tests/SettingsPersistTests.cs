@@ -25,7 +25,7 @@ public sealed class SettingsPersistTests : IDisposable
         var path = Path.Combine(profile, @"AppData\Roaming\step_recorder\settings.json");
         var output = Path.Combine(profile, "records");
         Directory.CreateDirectory(output);
-        new Settings { OutputDir = output, ClipFormat = ClipFormat.Gif, AutoUpdate = false }.Save(path);
+        new Settings { OutputDir = output, ClipFormat = ClipFormat.Gif, AutoUpdate = false, Fps = 30 }.Save(path);
 
         var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe")) { UseShellExecute = false };
         start.Environment["USERPROFILE"] = profile;
@@ -40,11 +40,23 @@ public sealed class SettingsPersistTests : IDisposable
         changed.ClipFormat = ClipFormat.Mp4;
         changed.Save(path);
 
+        // フレームレートは保存した値で出て、選び直すと保存される
+        var fps = Find(main, "Fps");
+        Assert.Equal("30fps", ((SelectionPattern)fps.GetCurrentPattern(SelectionPattern.Pattern)).Current.GetSelection()[0].Current.Name);
+        var expand = (ExpandCollapsePattern)fps.GetCurrentPattern(ExpandCollapsePattern.Pattern);
+        expand.Expand();
+        Wait(300);
+        ((SelectionItemPattern)fps.FindFirst(TreeScope.Descendants, new AndCondition(
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
+            new PropertyCondition(AutomationElement.NameProperty, "60fps"))).GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        expand.Collapse();
+
         ((TogglePattern)Find(main, "CaptureCursor").GetCurrentPattern(TogglePattern.Pattern)).Toggle(); // 保存されたことの目印
         var open = (InvokePattern)Find(main, new PropertyCondition(AutomationElement.NameProperty, "記録を開く...")).GetCurrentPattern(InvokePattern.Pattern);
         _ = Task.Run(open.Invoke); // 設定を保存してからファイル選択を出す(出ている間は返らないことがある)
 
         Assert.True(Until(() => Settings.Load(path).CaptureCursor), "保存されない");
         Assert.Equal(ClipFormat.Mp4, Settings.Load(path).ClipFormat);
+        Assert.Equal(60, Settings.Load(path).Fps);
     }
 }

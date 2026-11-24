@@ -144,6 +144,17 @@ public sealed class EncodeTests : IDisposable
             Assert.InRange(decoder.Frames.Count, 1, 31); // スローでも等速の 30 コマより増えない
         }
 
+        // フレームレートを下げて切り出せる。GIF は 10fps と下げた値の少ない方
+        var low = Path.Combine(dir, "low.mp4");
+        VideoClips.Cut(path, start, end, null, low, fps: 5);
+        Assert.Equal(5, VideoClips.FrameRate(low));
+        Assert.Equal(15, VideoClips.FrameRate(path));
+        Assert.InRange(VideoClips.Info(low).Duration.TotalSeconds, 2.8, 3.2);
+        var lowGif = Path.Combine(dir, "low.gif");
+        VideoClips.ToGif(path, start, end, null, lowGif, fps: 5);
+        using (var stream = File.OpenRead(lowGif))
+            Assert.InRange(new GifBitmapDecoder(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames.Count, 14, 16); // 3 秒を 5fps
+
         // ごく短い区間を 8 倍速にして 1 コマになっても書き出せる
         var tiny = Path.Combine(dir, "tiny.gif");
         VideoClips.ToGif(path, start, start + TimeSpan.FromSeconds(0.2), null, tiny, null, 8);

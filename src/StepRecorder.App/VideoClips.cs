@@ -21,6 +21,13 @@ static class VideoClips
         return reader.Frame(time);
     }
 
+    /// <summary>動画のフレームレート。</summary>
+    public static int FrameRate(string video)
+    {
+        using var reader = Reader.Open(video);
+        return reader.Fps;
+    }
+
     /// <summary>音が入っているか。</summary>
     public static bool HasAudio(string video) => Run(() => Task.FromResult(Reader.HasAudio(video)));
 
@@ -33,16 +40,18 @@ static class VideoClips
 
     /// <summary>
     /// start〜end(null なら最後まで)を、crop の範囲だけの mp4 に切り出す。速さは変えない(再生する側で変える)。
+    /// fps はフレームレート(null なら元の動画のまま。元より上げても同じコマが並ぶだけ)。
     /// keys・mouse があれば焼き込む(時刻・位置は元の動画のもの)。sound なら、元の動画に音があればその区間の音も入れる。
     /// MediaTranscoder の区間指定(ファイルからの変換)は E_POINTER で失敗するので、
     /// フレームを1枚ずつ取り出して録画と同じ方法でエンコードし直す。
     /// </summary>
     public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null,
-        IReadOnlyList<KeyChip>? keys = null, IReadOnlyList<MouseMark>? mouse = null, bool sound = false)
+        IReadOnlyList<KeyChip>? keys = null, IReadOnlyList<MouseMark>? mouse = null, bool sound = false, int? fps = null)
     {
         var burner = new KeyBurner(keys ?? []);
         var clicks = new MouseBurner(mouse ?? []);
         using var reader = Reader.Open(video);
+        var rate = fps ?? reader.Fps;
         var stop = end ?? reader.Duration;
         var audio = sound && HasAudio(video) ? Reader.Audio(video, start, stop) : null;
         var (w, h) = ((crop?.Width ?? reader.Width) & ~1, (crop?.Height ?? reader.Height) & ~1); // H.264 は縦横とも偶数
@@ -50,7 +59,7 @@ static class VideoClips
         {
             for (var i = 0; ; i++)
             {
-                var t = TimeSpan.FromSeconds((double)i / VideoRecorder.Fps);
+                var t = TimeSpan.FromSeconds((double)i / rate);
                 if (start + t >= stop) yield break;
                 progress?.Invoke(t / (stop - start));
                 var bgra = Bgra(Crop(reader.Frame(start + t), crop), w, h);
@@ -59,15 +68,16 @@ static class VideoClips
                 yield return (Nv12.FromBgra(bgra, w, h), t);
             }
         }
-        Task.Run(() => VideoRecorder.Encode(dst, w, h, Frames(), audio)).GetAwaiter().GetResult();
+        Task.Run(() => VideoRecorder.Encode(dst, w, h, Frames(), audio, rate)).GetAwaiter().GetResult();
     }
 
     /// <summary>
     /// start〜end(null なら最後まで)の crop の範囲を、speed 倍の速さで繰り返し再生する GIF アニメーションにする。
     /// keys・mouse があれば、縮めたあとの大きさで焼き込む(小さくした文字が潰れないように)。
+    /// コマは GifFps(10fps)か fps の少ない方。
     /// </summary>
     public static void ToGif(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null, double speed = 1,
-        IReadOnlyList<KeyChip>? keys = null, IReadOnlyList<MouseMark>? mouse = null)
+        IReadOnlyList<KeyChip>? keys = null, IReadOnlyList<MouseMark>? mouse = null, int fps = GifFps)
     {
         var burner = new KeyBurner(keys ?? []);
         var clicks = new MouseBurner(mouse ?? []);
@@ -75,7 +85,7 @@ static class VideoClips
         var stop = end ?? reader.Duration;
         var enc = new GifBitmapEncoder();
         // 速ければコマを間引く。遅ければ同じ絵を並べずに 1 コマの表示時間(1/100 秒単位)を延ばす
-        var delay = (int)Math.Round(100.0 / GifFps / Math.Min(speed, 1));
+        var delay = (int)Math.Round(100.0 / Math.Min(GifFps, fps) / Math.Min(speed, 1));
         var step = TimeSpan.FromSeconds(delay / 100.0 * speed);
         for (var at = TimeSpan.Zero; start + at < stop; at += step)
         {
@@ -113,8 +123,9 @@ static class VideoClips
         var src = Path.Combine(dir, st.VideoFile!);
         var start = st.VideoStart ?? TimeSpan.Zero;
         var (chips, marks) = (KeyOverlay.Chips(keys), MouseOverlay.Marks(mouse));
-        if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip, progress, st.Speed, chips, marks);
-        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress, chips, marks, sound: !st.HideAudio);
+        var fps = st.FpsFor(FrameRate(src));
+        if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip, progress, st.Speed, chips, marks, fps);
+        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress, chips, marks, sound: !st.HideAudio, fps: fps);
         if (poster != null) WindowCapture.SavePng(Frame(clip, TimeSpan.Zero), poster);
     }
 
@@ -186,7 +197,7 @@ static class VideoClips
         static readonly long SeekMargin = TimeSpan.FromSeconds(0.2).Ticks; // 表示順と復号順のずれの分、手前へ飛ぶ
 
         readonly IMFSourceReader source;
-        public readonly int Width, Height;
+        public readonly int Width, Height, Fps;
         public readonly TimeSpan Duration;
         Decoded? current, following;
         Decoded? shown; // DecodeIfChanged が最後に渡したもの
@@ -195,8 +206,8 @@ static class VideoClips
 
         static Reader() => MediaFactory.MFStartup().CheckError();
 
-        Reader(IMFSourceReader source, VideoInfo info) =>
-            (this.source, Width, Height, Duration) = (source, info.Width, info.Height, info.Duration);
+        Reader(IMFSourceReader source, VideoInfo info, int fps) =>
+            (this.source, Width, Height, Duration, Fps) = (source, info.Width, info.Height, info.Duration, fps);
 
         public static Reader Open(string video) => Run(async () =>
         {
@@ -208,7 +219,9 @@ static class VideoClips
                 nv12.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Video);
                 nv12.Set(MediaTypeAttributeKeys.Subtype, VideoFormatGuids.NV12);
                 source.SetCurrentMediaType(SourceReaderIndex.FirstVideoStream, nv12);
-                return new Reader(source, info);
+                using var type = source.GetCurrentMediaType(SourceReaderIndex.FirstVideoStream);
+                var rate = type.GetUInt64(MediaTypeAttributeKeys.FrameRate); // 上位が分子、下位が分母
+                return new Reader(source, info, Math.Max(1, (int)Math.Round((double)(rate >> 32) / Math.Max(1, rate & 0xFFFFFFFF))));
             }
             catch
             {

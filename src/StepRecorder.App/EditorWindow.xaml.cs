@@ -112,13 +112,19 @@ public partial class EditorWindow : Window
         ScreenName.Text = s?.ScreenName ?? "";
         Description.Text = s?.Description ?? "";
         SpeedBox.SelectedIndex = Array.IndexOf(PlaybackSpeed.Choices, s?.Speed ?? 1);
+        FpsBox.ItemsSource = null;
+        if (s?.VideoFile is { } video && RecordedFps(video) is { } recorded)
+        {
+            FpsBox.ItemsSource = FrameRate.UpTo(recorded).Select(FrameRate.Label).ToList();
+            FpsBox.SelectedIndex = Array.IndexOf(FrameRate.UpTo(recorded), s.FpsFor(recorded));
+        }
         ScreenName.IsEnabled = Description.IsEnabled = s != null;
         loading = false;
         selectedHighlight = -1;
         LeaveVideoView();
         StopClip();
         ShowClipBar(s);
-        PlayButton.Visibility = SpeedBox.Visibility = KeysBox.Visibility = MouseBox.Visibility = AudioBox.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
+        PlayButton.Visibility = SpeedBox.Visibility = FpsBox.Visibility = KeysBox.Visibility = MouseBox.Visibility = AudioBox.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
         if (s?.VideoFile != null) ShowOverlayBoxes(s);
         ToolAdd.IsEnabled = s?.VideoFile == null; // 動画には強調枠を付けない
         if (s?.VideoFile != null && ToolAdd.IsChecked == true) ToolSelect.IsChecked = true;
@@ -451,7 +457,7 @@ public partial class EditorWindow : Window
         if (Current is not { VideoFile: { } video } s) return;
         if (videoView) ShowStep(s); // 全編を見ていたら、そのステップの表示に戻してから
         clipSeeking = false; // シークバーで開いていたものは開き直す
-        Player.Open(FullPath(video), s.VideoStart ?? TimeSpan.Zero, s.VideoEnd, s.Speed);
+        Player.Open(FullPath(video), s.VideoStart ?? TimeSpan.Zero, s.VideoEnd, s.Speed, RecordedFps(video) is { } recorded ? s.FpsFor(recorded) : null);
         Player.Muted = s.HideAudio;
         Player.Visibility = Visibility.Visible;
         Player.Play();
@@ -556,6 +562,32 @@ public partial class EditorWindow : Window
         if (replay) Play_Click(this, new());
     }
 
+    /// <summary>動画のステップのフレームレートを変える(録画したとき以下)。再生中なら、そのフレームレートで区間の最初から再生し直す。</summary>
+    void Fps_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (loading || FpsBox.SelectedIndex < 0 || Current is not { VideoFile: { } video } s || RecordedFps(video) is not { } recorded) return;
+        var fps = FrameRate.UpTo(recorded)[FpsBox.SelectedIndex];
+        if (fps == s.FpsFor(recorded)) return;
+        var replay = clipPlaying;
+        Checkpoint();
+        s.VideoFps = fps == recorded ? null : fps;
+        if (replay) { StopClip(); Play_Click(this, new()); }
+    }
+
+    readonly Dictionary<string, int?> fileFps = [];
+
+    /// <summary>動画(記録フォルダからの相対パス)を録ったときのフレームレート。読めなければ null。ステップを選ぶたびに見るので覚えておく。</summary>
+    int? RecordedFps(string video)
+    {
+        if (!fileFps.TryGetValue(video, out var fps))
+        {
+            try { fps = VideoClips.FrameRate(FullPath(video)); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException) { fps = null; } // 消された動画。再生しようとしたときに知らせる
+            fileFps[video] = fps;
+        }
+        return fps;
+    }
+
     void StopClip()
     {
         if (!clipPlaying && !clipSeeking) return;
@@ -609,7 +641,7 @@ public partial class EditorWindow : Window
         if (videoView) return;
         StopClip();
         videoView = true;
-        Picture.Visibility = Overlay.Visibility = PlayButton.Visibility = SpeedBox.Visibility = Visibility.Collapsed;
+        Picture.Visibility = Overlay.Visibility = PlayButton.Visibility = SpeedBox.Visibility = FpsBox.Visibility = Visibility.Collapsed;
         SetStageSize(fullSize.Width, fullSize.Height);
         Player.Open(FullPath(session.VideoFile!), SliderTime); // 開くだけ。シークバーの位置で止まっている
         Player.Visibility = Visibility.Visible;
@@ -681,7 +713,7 @@ public partial class EditorWindow : Window
         if (e.Key is not (Key.Left or Key.Right) || Keyboard.Modifiers != ModifierKeys.None) return;
         e.Handled = true;
         SetFullPlaying(false);
-        TimeSlider.Value = Geometry.StepFrame(TimeSlider.Value, e.Key == Key.Right ? 1 : -1, VideoRecorder.Fps, TimeSlider.Maximum);
+        TimeSlider.Value = Geometry.StepFrame(TimeSlider.Value, e.Key == Key.Right ? 1 : -1, RecordedFps(session.VideoFile!) ?? FrameRate.Default, TimeSlider.Maximum);
     }
 
     // ---- タイムラインのズーム ----
@@ -801,12 +833,15 @@ public partial class EditorWindow : Window
 
     bool clipSeeking, clipQuiet;
     TimeSpan clipDuration;
-    static readonly TimeSpan OneFrame = TimeSpan.FromSeconds(1.0 / VideoRecorder.Fps);
+    TimeSpan OneFrame => TimeSpan.FromSeconds(1.0 / ClipFps); // 区間はこれより短くできない
 
     /// <summary>録画ボタンで録った動画のステップか(全編から切り出した区間は全編のシークバーで扱う)。</summary>
     bool IsOwnVideo(Step? s) => s?.VideoFile != null && s.VideoFile != session.VideoFile;
 
     TimeSpan ClipTime => TimeSpan.FromSeconds(ClipSlider.Value);
+
+    /// <summary>選んでいる動画のステップの、動画ファイルのフレームレート(コマ送りの単位)。</summary>
+    int ClipFps => Current?.VideoFile is { } video ? RecordedFps(video) ?? FrameRate.Default : FrameRate.Default;
 
     void ShowClipBar(Step? s)
     {
@@ -857,7 +892,7 @@ public partial class EditorWindow : Window
     {
         if (e.Key is not (Key.Left or Key.Right) || Keyboard.Modifiers != ModifierKeys.None) return;
         e.Handled = true;
-        ClipSlider.Value = Geometry.StepFrame(ClipSlider.Value, e.Key == Key.Right ? 1 : -1, VideoRecorder.Fps, ClipSlider.Maximum);
+        ClipSlider.Value = Geometry.StepFrame(ClipSlider.Value, e.Key == Key.Right ? 1 : -1, ClipFps, ClipSlider.Maximum);
     }
 
     void ClipStart_Click(object sender, RoutedEventArgs e) => SetClipRange(ClipTime, null);

@@ -113,6 +113,8 @@
                 <Button x:Name="PlayButton" Content="▶ 再生" Click="Play_Click" Visibility="Collapsed"/>
                 <ComboBox x:Name="SpeedBox" MinWidth="110" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" SelectionChanged="Speed_SelectionChanged"
                           AutomationProperties.Name="再生の速さ"/>
+                <ComboBox x:Name="FpsBox" MinWidth="90" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" SelectionChanged="Fps_SelectionChanged"
+                          AutomationProperties.Name="フレームレート"/>
                 <CheckBox x:Name="KeysBox" Content="キー表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Checked="Keys_Click" Unchecked="Keys_Click"/>
                 <CheckBox x:Name="MouseBox" Content="マウス表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Checked="Mouse_Click" Unchecked="Mouse_Click"/>
                 <CheckBox x:Name="AudioBox" Content="音声" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Checked="Audio_Click" Unchecked="Audio_Click"/>

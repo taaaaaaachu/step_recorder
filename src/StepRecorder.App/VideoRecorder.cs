@@ -30,7 +30,6 @@ namespace StepRecorder.App;
 /// </summary>
 sealed class VideoRecorder
 {
-    public const int Fps = 15;
     const DirectXPixelFormat PixelFormat = DirectXPixelFormat.B8G8R8A8UIntNormalized;
 
     /// <summary>何を録るか。Origin が動画に当たるスクリーン上の範囲で、そこへ Items(奥から順)を重ねる。</summary>
@@ -39,7 +38,7 @@ sealed class VideoRecorder
     readonly Input input;
     readonly bool cursor;
     readonly Func<bool> paused;
-    readonly int width, height;
+    readonly int width, height, fps;
 
     /// <summary>動画の大きさ。</summary>
     public int Width => width;
@@ -47,7 +46,7 @@ sealed class VideoRecorder
 
     readonly Stopwatch clock = new();
     readonly ManualResetEventSlim started = new();
-    readonly BlockingCollection<(byte[] Nv12, TimeSpan Time)> frames = new(boundedCapacity: Fps * 2); // 溜める前に NV12 にする(BGRA の 3/8 の大きさ)
+    readonly BlockingCollection<(byte[] Nv12, TimeSpan Time)> frames; // 溜める前に NV12 にする(BGRA の 3/8 の大きさ)
     readonly Thread loop;
     readonly Task encoding;
     readonly AudioRecorder? audio;
@@ -62,10 +61,12 @@ sealed class VideoRecorder
     /// <summary>音を録れなかった理由。録れていれば null。</summary>
     public Exception? AudioFailure { get; }
 
-    /// <summary>audioPid はそのプロセスの木の音を録る。null なら PC 全体の音。</summary>
-    VideoRecorder(Input input, string path, bool cursor, Func<bool> paused, uint? audioPid)
+    /// <summary>audioPid はそのプロセスの木の音を録る。null なら PC 全体の音。fps はフレームレート。</summary>
+    VideoRecorder(Input input, string path, bool cursor, Func<bool> paused, uint? audioPid, int fps)
     {
         this.input = input;
+        this.fps = fps;
+        frames = new(boundedCapacity: fps * 2);
         this.cursor = cursor;
         this.paused = paused;
         var frame = input.Origin();
@@ -74,7 +75,7 @@ sealed class VideoRecorder
         if (width <= 0 || height <= 0) throw new InvalidOperationException("録画するものの大きさが取れない");
         try { audio = AudioRecorder.Start(audioPid, () => clock.IsRunning && !paused() ? clock.Elapsed : null); }
         catch (Exception e) { AudioFailure = e; } // 古い Windows・音の出る機器が無いなど。映像は録る
-        encoding = Task.Run(() => Encode(path, width, height, frames.GetConsumingEnumerable(), audio == null ? null : AudioChunks(audio)));
+        encoding = Task.Run(() => Encode(path, width, height, frames.GetConsumingEnumerable(), audio == null ? null : AudioChunks(audio), fps));
         loop = new Thread(CaptureLoop) { IsBackground = true, Name = "video-capture" };
         loop.Start();
         started.Wait(); // 最初のフレームが揃うまで待つ(CurrentTime を操作の時刻と合わせるため)
@@ -84,7 +85,7 @@ sealed class VideoRecorder
     /// main を含むアプリのウィンドウを path に録画し始める。
     /// paused が true の間は録らず、時計も止める(停止していた時間は動画から詰まる)。
     /// </summary>
-    public static VideoRecorder Start(nint main, string path, bool cursor, Func<bool>? paused = null, AppProcesses? app = null)
+    public static VideoRecorder Start(nint main, string path, bool cursor, Func<bool>? paused = null, AppProcesses? app = null, int fps = FrameRate.Default)
     {
         app ??= new AppProcesses(ProcessId(main));
         var (current, className, origin) = (main, ClassName(main), FrameBounds(main));
@@ -99,12 +100,12 @@ sealed class VideoRecorder
             if (IsWindow(current)) origin = FrameBounds(current); // 閉じられて代わりも無ければ、最後の位置のまま
             return origin;
         }
-        return new(new(Origin, Items, CreateWindowItem), path, cursor, paused ?? (() => false), app.Pid);
+        return new(new(Origin, Items, CreateWindowItem), path, cursor, paused ?? (() => false), app.Pid, fps);
     }
 
     /// <summary>モニターに見えているものを丸ごと path に録画し始める。paused は Start と同じ。</summary>
-    public static VideoRecorder StartMonitor(nint monitor, RECT bounds, string path, bool cursor, Func<bool>? paused = null) =>
-        new(new(() => bounds, () => [(monitor, bounds)], CreateMonitorItem), path, cursor, paused ?? (() => false), null);
+    public static VideoRecorder StartMonitor(nint monitor, RECT bounds, string path, bool cursor, Func<bool>? paused = null, int fps = FrameRate.Default) =>
+        new(new(() => bounds, () => [(monitor, bounds)], CreateMonitorItem), path, cursor, paused ?? (() => false), null, fps);
 
     /// <summary>スクリーン上の点の、動画上の位置。動画の外なら null。</summary>
     public PixelPoint? ToVideo(POINT p)
@@ -160,14 +161,14 @@ sealed class VideoRecorder
                 {
                     clock.Stop();
                     foreach (var s in sources.Values) s.Update(); // 受け取って捨て続ける。溜めると再開したときに停止中の画面が写る
-                    Thread.Sleep(1000 / Fps);
+                    Thread.Sleep(1000 / fps);
                     continue;
                 }
                 clock.Start();
                 // 遅れたらその分のフレームは飛ばす(タイムスタンプは経過時間どおり)
-                var index = (long)(clock.Elapsed.TotalSeconds * Fps);
+                var index = (long)(clock.Elapsed.TotalSeconds * fps);
                 // タブの切り替え直後は、新しいウィンドウの絵が届くまで(長くても 1 秒)待つ。白いコマを挟まない
-                var arriving = next > 0 && items.Count > 0 && index - next < Fps
+                var arriving = next > 0 && items.Count > 0 && index - next < fps
                     && !items.Any(i => sources.TryGetValue(i.Handle, out var s) && s.Ready());
                 if (arriving) Thread.Sleep(10);
                 else if (index >= next)
@@ -178,12 +179,12 @@ sealed class VideoRecorder
                     foreach (var (h, r) in items)
                         if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - at.Left, r.Top - at.Top);
                     if (Resting()) continue; // 合成している間に止められたら、その絵は使わない
-                    var frame = (Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / Fps));
+                    var frame = (Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / fps));
                     while (!frames.TryAdd(frame, 100))
                         if (encoding.IsCompleted) return; // エンコードに失敗して誰も読まない。待ち続けると Stop が返らない
                     next = index + 1;
                 }
-                var wait = TimeSpan.FromSeconds((double)next / Fps) - clock.Elapsed;
+                var wait = TimeSpan.FromSeconds((double)next / fps) - clock.Elapsed;
                 if (wait > TimeSpan.Zero) Thread.Sleep(wait);
             }
         }
@@ -218,13 +219,13 @@ sealed class VideoRecorder
     /// frames(NV12 と、動画上の時刻)を順に mp4 に書く。録画と切り出しで使う。
     /// 色の変換は Windows に任せない(理由は Nv12 を参照)。
     /// frames は必要になった分だけ読むので、録画中のフレームを待ちながら渡してもよい。
-    /// audio(PCM と、動画上の時刻。形式は AudioRecorder のもの)があれば AAC で入れる。
+    /// audio(PCM と、動画上の時刻。形式は AudioRecorder のもの)があれば AAC で入れる。fps はフレームレート(frames の時刻の間隔と揃える)。
     /// </summary>
     public static async Task Encode(string path, int width, int height, IEnumerable<(byte[] Nv12, TimeSpan Time)> frames,
-        IEnumerable<(byte[] Pcm, TimeSpan Time)>? audio = null)
+        IEnumerable<(byte[] Pcm, TimeSpan Time)>? audio = null, int fps = FrameRate.Default)
     {
         var props = VideoEncodingProperties.CreateUncompressed(MediaEncodingSubtypes.Nv12, (uint)width, (uint)height);
-        props.FrameRate.Numerator = Fps;
+        props.FrameRate.Numerator = (uint)fps;
         props.FrameRate.Denominator = 1;
         var video = new VideoStreamDescriptor(props);
         var sound = new AudioStreamDescriptor(AudioEncodingProperties.CreatePcm(AudioRecorder.Rate, AudioRecorder.Channels, AudioRecorder.Bits));
@@ -240,7 +241,7 @@ sealed class VideoRecorder
             if (!(isSound ? nextSound!.MoveNext() : nextFrame.MoveNext())) { e.Request.Sample = null; return; }
             var (data, time) = isSound ? nextSound!.Current : nextFrame.Current;
             var sample = MediaStreamSample.CreateFromBuffer(data.AsBuffer(), time);
-            sample.Duration = isSound ? TimeSpan.FromSeconds((double)data.Length / AudioRecorder.BlockAlign / AudioRecorder.Rate) : TimeSpan.FromSeconds(1.0 / Fps);
+            sample.Duration = isSound ? TimeSpan.FromSeconds((double)data.Length / AudioRecorder.BlockAlign / AudioRecorder.Rate) : TimeSpan.FromSeconds(1.0 / fps);
             e.Request.Sample = sample;
         };
 
@@ -248,9 +249,9 @@ sealed class VideoRecorder
         profile.Audio = audio == null ? null : AudioEncodingProperties.CreateAac(AudioRecorder.Rate, AudioRecorder.Channels, 128_000);
         profile.Video.Width = (uint)width;
         profile.Video.Height = (uint)height;
-        profile.Video.FrameRate.Numerator = Fps;
+        profile.Video.FrameRate.Numerator = (uint)fps;
         profile.Video.FrameRate.Denominator = 1;
-        profile.Video.Bitrate = (uint)Math.Clamp(width * height * Fps / 8, 1_000_000, 12_000_000); // 画面の録画は動きが少ないので控えめ
+        profile.Video.Bitrate = (uint)Math.Clamp(width * height * fps / 8, 1_000_000, 12_000_000); // 画面の録画は動きが少ないので控えめ
 
         // 色の情報。書かないとブラウザーが高さだけで推測して、720 未満の動画の色がずれる(純赤が 248,36,0 になる)
         profile.Video.Properties[MediaTypeAttributeKeys.YuvMatrix] = Nv12.IsBt709(width, height) ? 1u : 2u; // MFVideoTransferMatrix

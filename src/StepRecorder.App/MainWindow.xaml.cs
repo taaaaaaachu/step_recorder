@@ -42,6 +42,8 @@ public partial class MainWindow : Window
         HkClip.Text = settings.HotkeyClip;
         Group.SelectedIndex = (int)settings.GroupMode;
         CaptureCursor.IsChecked = settings.CaptureCursor;
+        Fps.ItemsSource = FrameRate.Choices.Select(FrameRate.Label).ToList();
+        Fps.SelectedIndex = Array.IndexOf(FrameRate.Choices, FrameRate.Valid(settings.Fps));
         AutoUpdate.IsChecked = settings.AutoUpdate;
     }
 
@@ -64,6 +66,7 @@ public partial class MainWindow : Window
             s.HotkeyClip = HkClip.Text.Trim();
             s.GroupMode = (GroupMode)Group.SelectedIndex;
             s.CaptureCursor = CaptureCursor.IsChecked == true;
+            s.Fps = FrameRate.Choices[Math.Max(0, Fps.SelectedIndex)];
         });
         return true;
     }

@@ -18,6 +18,8 @@ public sealed class Settings
     public bool AutoUpdate { get; set; } = true;
     /// <summary>スクリーンショットにマウスカーソルを写すか。</summary>
     public bool CaptureCursor { get; set; }
+    /// <summary>録画のフレームレート(FrameRate.Choices のどれか)。</summary>
+    public int Fps { get; set; } = FrameRate.Default;
 
     public static string DefaultPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "step_recorder", "settings.json");

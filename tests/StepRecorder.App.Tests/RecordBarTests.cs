@@ -347,7 +347,7 @@ public sealed class RecordBarTests : IDisposable
         Wait(500);
         recorder.Stop();
         using var reader = VideoClips.Reader.Open(path);
-        for (var t = TimeSpan.Zero; t < reader.Duration; t += TimeSpan.FromSeconds(1.0 / VideoRecorder.Fps))
+        for (var t = TimeSpan.Zero; t < reader.Duration; t += TimeSpan.FromSeconds(1.0 / reader.Fps))
             Assert.Equal(0, NotBlue(new CroppedBitmap(reader.Frame(t), area)));
     }
 

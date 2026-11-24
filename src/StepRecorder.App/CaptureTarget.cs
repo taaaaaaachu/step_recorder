@@ -33,7 +33,7 @@ abstract class CaptureTarget
 
     public abstract Shot? Capture(nint window, bool cursor);
 
-    public abstract VideoRecorder StartVideo(nint window, string path, bool cursor, Func<bool> paused);
+    public abstract VideoRecorder StartVideo(nint window, string path, bool cursor, Func<bool> paused, int fps);
 
     /// <summary>ステップに載せるウィンドウの情報。</summary>
     public abstract WindowInfo Describe(nint window);
@@ -88,8 +88,8 @@ sealed class AppTarget(Process process) : CaptureTarget
 
     public override Shot? Capture(nint window, bool cursor) => WindowCapture.Capture(Existing(window), cursor, app);
 
-    public override VideoRecorder StartVideo(nint window, string path, bool cursor, Func<bool> paused) =>
-        VideoRecorder.Start(app.MainWindow(prefer: window), path, cursor, paused, app);
+    public override VideoRecorder StartVideo(nint window, string path, bool cursor, Func<bool> paused, int fps) =>
+        VideoRecorder.Start(app.MainWindow(prefer: window), path, cursor, paused, app, fps);
 
     public override WindowInfo Describe(nint window)
     {
@@ -136,8 +136,8 @@ sealed class MonitorTarget(DisplayMonitor monitor) : CaptureTarget
 
     public override Shot? Capture(nint window, bool cursor) => WindowCapture.CaptureMonitor(bounds, window, cursor);
 
-    public override VideoRecorder StartVideo(nint window, string path, bool cursor, Func<bool> paused) =>
-        VideoRecorder.StartMonitor(monitor.Handle, bounds, path, cursor, paused);
+    public override VideoRecorder StartVideo(nint window, string path, bool cursor, Func<bool> paused, int fps) =>
+        VideoRecorder.StartMonitor(monitor.Handle, bounds, path, cursor, paused, fps);
 
     /// <summary>プロセス名は操作したウィンドウのもの(画面一覧モードでまとめる単位になる)。題の無いもの(タスクバーなど)はモニターの名前にする。</summary>
     public override WindowInfo Describe(nint window)

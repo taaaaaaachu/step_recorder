@@ -111,6 +111,21 @@ public sealed class VideoViewTests : IDisposable
     }
 
     [DesktopFact]
+    public async Task フレームレートを下げると_そのコマで見せる()
+    {
+        var path = await MakeVideo(false);
+        OnSta(() =>
+        {
+            var view = new VideoView();
+            view.Open(path, TimeSpan.Zero, fps: 5);
+            Assert.True(PumpUntil(() => view.Source != null), "最初のフレームが出ない");
+            view.Position = TimeSpan.FromSeconds(0.35); // 5fps のコマは 0.2 秒のもの(15fps のままなら 0.35 秒のもの)
+            Assert.True(PumpUntil(() => Math.Abs(Pixels(view).Gray - (240 - 2 * 6)) <= 3), $"5fps のコマにならない: {Pixels(view).Gray}");
+            view.Close();
+        });
+    }
+
+    [DesktopFact]
     public void 開けない動画は落ちずに知らせる() => OnSta(() =>
     {
         var view = new VideoView();

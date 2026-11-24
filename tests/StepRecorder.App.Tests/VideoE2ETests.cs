@@ -122,6 +122,22 @@ public sealed class VideoE2ETests : IDisposable
     }
 
     [DesktopFact]
+    public void 指定したフレームレートで録画できる()
+    {
+        using var window = new ColorWindow(Colors.Blue);
+        foreach (var fps in new[] { 5, 30 })
+        {
+            var path = Path.Combine(dir, $"fps-{fps}.mp4");
+            var rec = VideoRecorder.Start(window.Handle, path, cursor: false, fps: fps);
+            Wait(1500);
+            rec.Stop();
+            using var reader = VideoClips.Reader.Open(path);
+            Assert.Equal(fps, reader.Fps);
+            Assert.InRange(reader.Duration.TotalSeconds, 1.2, 2.0);
+        }
+    }
+
+    [DesktopFact]
     public void 一時停止中は録らず_停止していた時間は詰める()
     {
         using var window = new ColorWindow(Colors.Blue);
@@ -151,7 +167,7 @@ public sealed class VideoE2ETests : IDisposable
         Assert.InRange(samples / (double)AudioRecorder.Rate, VideoInfo(path).Duration.TotalSeconds - 0.3, VideoInfo(path).Duration.TotalSeconds + 0.3);
         var colors = new List<Color>();
         using var reader = VideoClips.Reader.Open(path);
-        for (var t = TimeSpan.Zero; t < reader.Duration; t += TimeSpan.FromSeconds(1.0 / VideoRecorder.Fps))
+        for (var t = TimeSpan.Zero; t < reader.Duration; t += TimeSpan.FromSeconds(1.0 / reader.Fps))
             colors.Add(Center(reader.Frame(t)));
         Assert.DoesNotContain(colors, c => c.R > 128); // 赤は 1 枚も無い
         Assert.Contains(colors, c => c.B > 128);
