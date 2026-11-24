@@ -49,6 +49,7 @@ public partial class EditorWindow : Window
         Player.Failed += Player_Failed;
         // Slider はクリックを自分で処理済みにしてフォーカスを取らないので、処理済みでも受け取ってフォーカスを移す(押したらそのまま ←→ でコマ送り)
         TimeSlider.AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((_, _) => TimeSlider.Focus()), handledEventsToo: true);
+        ClipSlider.AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((_, _) => ClipSlider.Focus()), handledEventsToo: true);
         this.session = session;
         this.dir = dir;
         Title = $"step_recorder 編集 — {dir}";
@@ -117,6 +118,7 @@ public partial class EditorWindow : Window
         selectedHighlight = -1;
         LeaveVideoView();
         StopClip();
+        ShowClipBar(s);
         PlayButton.Visibility = SpeedBox.Visibility = KeysBox.Visibility = MouseBox.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
         if (s?.VideoFile != null) ShowOverlayBoxes(s);
         ToolAdd.IsEnabled = s?.VideoFile == null; // 動画には強調枠を付けない
@@ -449,6 +451,7 @@ public partial class EditorWindow : Window
         if (clipPlaying) { StopClip(); return; }
         if (Current is not { VideoFile: { } video } s) return;
         if (videoView) ShowStep(s); // 全編を見ていたら、そのステップの表示に戻してから
+        clipSeeking = false; // シークバーで開いていたものは開き直す
         Player.Open(FullPath(video), s.VideoStart ?? TimeSpan.Zero, s.VideoEnd, s.Speed);
         Player.Visibility = Visibility.Visible;
         Player.Play();
@@ -536,8 +539,8 @@ public partial class EditorWindow : Window
 
     void StopClip()
     {
-        if (!clipPlaying) return;
-        clipPlaying = false;
+        if (!clipPlaying && !clipSeeking) return;
+        clipPlaying = clipSeeking = false;
         Player.Close();
         Player.Visibility = Visibility.Collapsed;
         PlayButton.Content = "▶ 再生";
@@ -568,6 +571,7 @@ public partial class EditorWindow : Window
     void OnPlayTick()
     {
         if (fullPlaying) MoveSlider(Player.Position);
+        if (clipPlaying && ClipPanel.IsVisible) MoveClipSlider(Player.Position);
         if (KeysLayer.IsVisible) KeysView.Time = MouseView.Time = Player.Position;
     }
 
@@ -750,10 +754,7 @@ public partial class EditorWindow : Window
     {
         Checkpoint();
         var rec = new Recording(session);
-        // 消したステップの画像(保存までは残っていて、元に戻せる)と名前がぶつからないよう時刻を付ける
-        var file = $"images/{rec.NextId:D4}-{DateTime.Now:HHmmssfff}.png";
-        WindowCapture.SavePng(image, System.IO.Path.Combine(dir, file));
-        maybeUnused.Add(file);
+        var file = SaveImage(image);
         var index = Recording.IndexByVideoTime(session.Steps, time);
         var near = index > 0 ? session.Steps[index - 1] : session.Steps.FirstOrDefault();
         var st = rec.AddStep(trigger, near?.Window ?? new("", "", session.TargetName), file, image.PixelWidth, image.PixelHeight, DateTimeOffset.Now);
@@ -764,6 +765,126 @@ public partial class EditorWindow : Window
         session.Steps.Insert(index, st);
         UpdateTicks();
         RefreshList(index);
+    }
+
+    /// <summary>編集画面で作った画像を images に保存し、そのファイル名を返す。</summary>
+    string SaveImage(BitmapSource image)
+    {
+        // 消したステップの画像(保存までは残っていて、元に戻せる)と名前がぶつからないよう時刻を付ける
+        var file = $"images/{new Recording(session).NextId:D4}-{DateTime.Now:HHmmssfff}.png";
+        WindowCapture.SavePng(image, System.IO.Path.Combine(dir, file));
+        maybeUnused.Add(file);
+        return file;
+    }
+
+    // ---- 録画ボタンの動画のステップの区間 ----
+    // シークバーは動画ファイル全体で、使う区間を塗る。動かすと表示欄にそのフレームを出す(clipSeeking)
+
+    bool clipSeeking, clipQuiet;
+    TimeSpan clipDuration;
+    static readonly TimeSpan OneFrame = TimeSpan.FromSeconds(1.0 / VideoRecorder.Fps);
+
+    /// <summary>録画ボタンで録った動画のステップか(全編から切り出した区間は全編のシークバーで扱う)。</summary>
+    bool IsOwnVideo(Step? s) => s?.VideoFile != null && s.VideoFile != session.VideoFile;
+
+    TimeSpan ClipTime => TimeSpan.FromSeconds(ClipSlider.Value);
+
+    void ShowClipBar(Step? s)
+    {
+        ClipPanel.Visibility = Visibility.Collapsed;
+        if (!IsOwnVideo(s)) return;
+        try { clipDuration = VideoClips.Info(FullPath(s!.VideoFile!)).Duration; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; } // 消された動画。再生しようとしたときに知らせる
+        ClipPanel.Visibility = Visibility.Visible;
+        clipQuiet = true; // Maximum を変えると値が丸められて ValueChanged が来る。MoveClipSlider で戻す
+        ClipSlider.Maximum = clipDuration.TotalSeconds;
+        MoveClipSlider(s.VideoStart ?? TimeSpan.Zero);
+        ShowClipRange(s);
+    }
+
+    /// <summary>シークバーの塗りと表示を区間に合わせる。</summary>
+    void ShowClipRange(Step s)
+    {
+        var (start, end) = (s.VideoStart ?? TimeSpan.Zero, s.VideoEnd ?? clipDuration);
+        (ClipSlider.SelectionStart, ClipSlider.SelectionEnd) = (start.TotalSeconds, end.TotalSeconds);
+        ClipRangeLabel.Text = $"使う区間 {TimeText.Position(start)} 〜 {TimeText.Position(end)}";
+    }
+
+    /// <summary>シークバーを動かす(表示欄は変えない)。</summary>
+    void MoveClipSlider(TimeSpan t)
+    {
+        clipQuiet = true;
+        ClipSlider.Value = t.TotalSeconds;
+        clipQuiet = false;
+    }
+
+    void ClipSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        ClipTimeLabel.Text = TimeText.Position(ClipTime);
+        if (clipQuiet || Current is not { VideoFile: { } video } s) return;
+        if (clipPlaying) StopClip(); // 再生中に動かしたら止めて、動かした所を出す
+        if (!clipSeeking)
+        {
+            Player.Open(FullPath(video), ClipTime);
+            Player.Visibility = Visibility.Visible;
+            clipSeeking = true;
+            ShowOverlays(KeyOverlay.StrokesFor(session, s), MouseOverlay.StrokesFor(session, s), s.Crop);
+        }
+        else Player.Position = ClipTime;
+        KeysView.Time = MouseView.Time = ClipTime;
+    }
+
+    void ClipSlider_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Left or Key.Right) || Keyboard.Modifiers != ModifierKeys.None) return;
+        e.Handled = true;
+        ClipSlider.Value = Geometry.StepFrame(ClipSlider.Value, e.Key == Key.Right ? 1 : -1, VideoRecorder.Fps, ClipSlider.Maximum);
+    }
+
+    void ClipStart_Click(object sender, RoutedEventArgs e) => SetClipRange(ClipTime, null);
+    void ClipEnd_Click(object sender, RoutedEventArgs e) => SetClipRange(null, ClipTime);
+
+    /// <summary>区間の開始か終了を変える。端なら null(最初から・最後まで)。開始を変えたらポスターもそのフレームにする。</summary>
+    void SetClipRange(TimeSpan? newStart, TimeSpan? newEnd)
+    {
+        if (Current is not { } s || !IsOwnVideo(s)) return;
+        var (start, end) = (newStart ?? s.VideoStart ?? TimeSpan.Zero, newEnd ?? s.VideoEnd ?? clipDuration);
+        if (end - start < OneFrame)
+        {
+            MessageBox.Show(this, "開始より後に終了が来るようにしてください。", "step_recorder", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        Checkpoint();
+        s.VideoStart = start < OneFrame ? null : start;
+        s.VideoEnd = clipDuration - end < OneFrame ? null : end;
+        if (newStart != null) SetPoster(s);
+        RefreshList(CurrentIndex);
+        ShowClipRange(s); // 一覧の行(record)が前と同じ値だと選び直しにならず、ShowStep が呼ばれない
+    }
+
+    /// <summary>今の位置で2つのステップに分け、後ろを選ぶ。</summary>
+    void ClipSplit_Click(object sender, RoutedEventArgs e)
+    {
+        if (Current is not { } s || !IsOwnVideo(s)) return;
+        var at = ClipTime;
+        if (at - (s.VideoStart ?? TimeSpan.Zero) < OneFrame || (s.VideoEnd ?? clipDuration) - at < OneFrame)
+        {
+            MessageBox.Show(this, "使う区間(塗った所)の中で、分ける位置を選んでください。", "step_recorder", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        Checkpoint();
+        var i = CurrentIndex;
+        var after = Recording.SplitVideo(s, at, new Recording(session).NextId);
+        SetPoster(after);
+        session.Steps.Insert(i + 1, after);
+        RefreshList(i + 1);
+    }
+
+    /// <summary>ポスターを区間の最初のフレームにする(前のものは、使われていなければ保存したときに消す)。</summary>
+    void SetPoster(Step s)
+    {
+        maybeUnused.Add(s.ImageFile);
+        s.ImageFile = SaveImage(VideoClips.Frame(FullPath(s.VideoFile!), s.VideoStart ?? TimeSpan.Zero));
     }
 
     /// <summary>選んだらすぐ覚える(書き出さずに閉じても、次はその形式)。</summary>

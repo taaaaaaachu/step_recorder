@@ -134,6 +134,8 @@ public sealed class RecorderE2ETests : IDisposable
         var clip = session.Steps[0];
         Assert.Equal("videos/0001.mp4", clip.VideoFile);
         Assert.Equal("『氏名』欄をクリック", clip.Description);
+        Assert.InRange(clip.Operations[0].VideoTime!.Value.TotalSeconds, 0.2, 1.0); // 録り始めて 0.5 秒後のクリック(分割で振り分けるのに使う)
+        Assert.Null(session.Steps[1].Operations[0].VideoTime); // 録画を止めたあとの操作には付けない
         Assert.Empty(clip.Highlights);
         var (duration, w, h) = VideoE2ETests.VideoInfo(Path.Combine(dir, clip.VideoFile!));
         Assert.InRange(duration.TotalSeconds, 1.2, 2.5);

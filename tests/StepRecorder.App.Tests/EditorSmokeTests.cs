@@ -339,6 +339,75 @@ public sealed class EditorSmokeTests : IDisposable
                 Assert.True(At(x, y) > Math.Min(At(mid - 30, y), At(mid + 30, y)) - 40, $"途中に目盛りがある({x},{y})");
     }
 
+    /// <summary>録画ボタンで録った動画のステップは、シークバーで開始・終了を変えたり2つに分けたりできる。入力は送らず UI Automation で押す。</summary>
+    [DesktopFact]
+    public async Task 録画ボタンの動画のステップは区間を変えて分割できる()
+    {
+        // 3 秒の動画。コマごとに明るさを変え、ポスターがどの時刻のものか分かるようにする
+        Directory.CreateDirectory(Path.Combine(dir, "videos"));
+        var video = Path.Combine(dir, "videos", "0001.mp4");
+        await VideoRecorder.Encode(video, 320, 240, Enumerable.Range(0, 45).Select(i =>
+        {
+            var px = new byte[320 * 240 * 4];
+            Array.Fill(px, (byte)(20 + i * 4));
+            return (Nv12.FromBgra(px, 320, 240), TimeSpan.FromSeconds(i / 15.0));
+        }));
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
+        WindowCapture.SavePng(VideoClips.Frame(video, TimeSpan.Zero), Path.Combine(dir, rec.NextImageFile));
+        var st = rec.AddStep(CaptureTrigger.Video, new("画面", "W", "Demo"), rec.NextImageFile, 320, 240, DateTimeOffset.Now);
+        st.VideoFile = "videos/0001.mp4";
+        foreach (var (field, at) in new[] { ("氏名", 1.0), ("住所", 2.0) })
+        {
+            rec.AddOperation(new() { Kind = OperationKind.TextInput, Element = new(field, "Edit", field, null), Text = "x" });
+            st.Operations[^1].VideoTime = TimeSpan.FromSeconds(at);
+        }
+        SessionStore.Save(rec.Session, dir);
+
+        app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        var slider = (RangeValuePattern)Find(editor, "ClipSlider").GetCurrentPattern(RangeValuePattern.Pattern);
+        Assert.InRange(slider.Current.Maximum, 2.8, 3.2);
+        void Press(string name)
+        {
+            ((InvokePattern)Find(editor, new PropertyCondition(AutomationElement.NameProperty, name)).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            Wait(500);
+        }
+        void At(double sec) { slider.SetValue(sec); Wait(300); }
+        int Count() => Find(editor, "Steps").FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)).Count;
+
+        At(0.4);
+        Press("ここを開始に");
+        At(2.6);
+        Press("ここを終了に");
+        Assert.Equal("使う区間 0:00.4 〜 0:02.6", Find(editor, "ClipRangeLabel").Current.Name);
+        At(1.6);
+        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } o)
+            WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(o, "editor-clip.png"));
+        Press("ここで分割");
+        Assert.Equal(2, Count());
+        Assert.InRange(slider.Current.Value, 1.5, 1.7); // 後ろのステップを選び、その開始にいる
+        Press("元に戻す");
+        Assert.Equal(1, Count());
+        Press("やり直す");
+        Assert.Equal(2, Count());
+        Press("保存");
+
+        var saved = SessionStore.Load(dir);
+        double R(TimeSpan? t) => Math.Round(t!.Value.TotalSeconds, 1);
+        Assert.Equal((0.4, 1.6), (R(saved.Steps[0].VideoStart), R(saved.Steps[0].VideoEnd)));
+        Assert.Equal((1.6, 2.6), (R(saved.Steps[1].VideoStart), R(saved.Steps[1].VideoEnd)));
+        Assert.Equal(["『氏名』欄に「x」と入力", "『住所』欄に「x」と入力"], saved.Steps.Select(s => s.Description));
+        // ポスターはそれぞれの区間の最初のフレーム(使わなくなった最初のポスターは保存で消える)
+        Assert.False(File.Exists(Path.Combine(dir, "images", "0001.png")));
+        foreach (var (s, at) in saved.Steps.Zip([0.4, 1.6]))
+        {
+            var poster = BitmapFrame.Create(new Uri(Path.Combine(dir, s.ImageFile)), BitmapCreateOptions.None, BitmapCacheOption.OnLoad); // ファイルを掴んだままにしない
+            var px = new byte[4];
+            new FormatConvertedBitmap(poster, PixelFormats.Bgra32, null, 0).CopyPixels(new System.Windows.Int32Rect(10, 10, 1, 1), px, 4, 0);
+            Assert.InRange(px[1], 20 + at * 15 * 4 - 6, 20 + at * 15 * 4 + 6);
+        }
+    }
+
     /// <summary>録画モードの記録を開くと、全編の動画からフレームと区間をステップに足せる。配布用にも書き出せる。</summary>
     [E2EFact]
     public void 録画モードの記録では全編からフレームと区間を足せる()
