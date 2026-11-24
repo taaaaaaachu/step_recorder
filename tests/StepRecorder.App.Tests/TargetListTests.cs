@@ -11,15 +11,12 @@ public sealed class TargetListTests : IDisposable
 {
     Process? app;
 
-    public void Dispose()
-    {
-        try { app?.Kill(); app?.WaitForExit(5000); } catch (InvalidOperationException) { }
-    }
+    public void Dispose() => Close(app);
 
     [DesktopFact]
     public void 一覧のモニターを選ぶと_そのモニターに枠が出て消える()
     {
-        app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"));
+        app = Open(AppExe);
         // 逃がした設定で動いていること(利用者の設定を書き換えない)
         Assert.Equal(Path.Combine(Profile, "records"), ValueOf(app.MainWindowHandle, "OutputDir"));
         var combo = Find(app.MainWindowHandle, "Targets");

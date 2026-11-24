@@ -8,12 +8,10 @@ namespace StepRecorder.App.Tests;
 /// <summary>開始画面を実際に操作する。設定は記録開始などをしない限り保存されないので、利用者の設定は変わらない。</summary>
 public sealed class MainWindowTests : IDisposable
 {
-    readonly Process app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"));
+    readonly Process app = Launch(AppExe);
+    string[] expectedDialogs = [];
 
-    public void Dispose()
-    {
-        try { app.Kill(); app.WaitForExit(5000); } catch (InvalidOperationException) { }
-    }
+    public void Dispose() => Close(app, expectedDialogs);
 
     [E2EFact]
     public void ショートカットキー欄は押したキーの組み合わせが入る()
@@ -50,6 +48,7 @@ public sealed class MainWindowTests : IDisposable
     [E2EFact]
     public void 今すぐ確認で結果が新しい見た目のメッセージボックスに出る()
     {
+        expectedDialogs = ["インストールされていないため、更新を確認できません。"];
         ClickOn(app.MainWindowHandle, "CheckUpdate");
         // テストの実行はインストールしていないので、その旨が出る(メッセージボックスは持ち主の下にぶら下がる)
         Find(app.MainWindowHandle, new PropertyCondition(AutomationElement.NameProperty, "インストールされていないため、更新を確認できません。"));

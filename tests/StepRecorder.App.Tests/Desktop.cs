@@ -73,10 +73,7 @@ static class Desktop
     static string CreateProfile()
     {
         var root = Path.Combine(Path.GetTempPath(), "sr-test-profile-" + Guid.NewGuid());
-        // Desktop はフォルダを選ぶ画面が開くときに辿る(無いと「場所が利用できません」が出る)
-        foreach (var folder in new[] { @"AppData\Roaming", @"AppData\Local", "Documents", "Desktop" }) Directory.CreateDirectory(Path.Combine(root, folder));
-        new StepRecorder.Core.Settings { AutoUpdate = false, OutputDir = Path.Combine(root, "records") }
-            .Save(Path.Combine(root, @"AppData\Roaming\step_recorder\settings.json"));
+        MakeProfile(root, new StepRecorder.Core.Settings { AutoUpdate = false, OutputDir = Path.Combine(root, "records") });
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             try { Directory.Delete(root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
@@ -84,15 +81,43 @@ static class Desktop
         return root;
     }
 
-    /// <summary>起動してメインウィンドウが出るのを待つ(入力は送らない)。設定は Profile に逃がす。</summary>
-    public static Process Open(string exe, string args = "")
+    /// <summary>root を、settings で動くアプリの USERPROFILE にする。</summary>
+    public static void MakeProfile(string root, StepRecorder.Core.Settings settings)
+    {
+        // Desktop はフォルダ・ファイルを選ぶ画面が開くときに辿る(無いと「場所が利用できません」が出る)
+        foreach (var folder in new[] { @"AppData\Roaming", @"AppData\Local", "Documents", "Desktop" }) Directory.CreateDirectory(Path.Combine(root, folder));
+        settings.Save(Path.Combine(root, @"AppData\Roaming\step_recorder\settings.json"));
+    }
+
+    /// <summary>テストと一緒にビルドした step_recorder 本体。</summary>
+    public static string AppExe => Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe");
+
+    // 起動した step_recorder 本体に出たダイアログ。テスト用アプリはわざとダイアログを出すので見ない
+    static readonly ConditionalWeakTable<Process, DialogWatch> watches = [];
+
+    /// <summary>起動してメインウィンドウが出るのを待つ(入力は送らない)。設定は profile(省略すると Profile)に逃がす。</summary>
+    public static Process Open(string exe, string args = "", string? profile = null)
     {
         var start = new ProcessStartInfo(exe, args) { UseShellExecute = false };
-        start.Environment["USERPROFILE"] = Profile;
+        start.Environment["USERPROFILE"] = profile ?? Profile;
         var p = Process.Start(start)!;
+        if (exe == AppExe) watches.Add(p, new DialogWatch(p));
         for (var i = 0; i < 100 && p.MainWindowHandle == 0; i++) { Wait(100); p.Refresh(); }
         Assert.NotEqual(0, p.MainWindowHandle);
         return p;
+    }
+
+    /// <summary>
+    /// 起動したアプリを終わらせる。step_recorder 本体なら、起動してから出たダイアログ(すぐ閉じたものも)が expected(文言の一部)のどれでもなければ失敗にする。
+    /// エラーなどを出していても、テストの確かめた所が合っていれば通ってしまうのを防ぐ。わざと出すダイアログは、その文言を expected に渡す。
+    /// </summary>
+    public static void Close(Process? app, params string[] expected)
+    {
+        if (app == null) return;
+        var seen = watches.TryGetValue(app, out var watch) ? watch.Stop() : [];
+        try { app.Kill(); app.WaitForExit(5000); } catch (InvalidOperationException) { }
+        var unexpected = seen.Where(d => !expected.Any(d.Contains)).ToList();
+        Assert.True(unexpected.Count == 0, "想定していないダイアログが出た: " + string.Join(" | ", unexpected));
     }
 
     /// <summary>起動してメインウィンドウが出るのを待ち、前面に出す。</summary>

@@ -12,10 +12,11 @@ public sealed class EditorSmokeTests : IDisposable
 {
     readonly string dir = Path.Combine(Path.GetTempPath(), "sr-editor-" + Guid.NewGuid());
     Process? app;
+    string[] expectedDialogs = [];
 
     public void Dispose()
     {
-        try { app?.Kill(); app?.WaitForExit(5000); } catch (InvalidOperationException) { }
+        Close(app, expectedDialogs);
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
@@ -35,7 +36,7 @@ public sealed class EditorSmokeTests : IDisposable
         rec.Session.Steps[0].Crop = new(20, 20, 300, 200);
         SessionStore.Save(rec.Session, dir);
 
-        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         Assert.StartsWith("step_recorder 編集", Native.Text(editor));
         Wait(500); // 描画を待つ
@@ -90,7 +91,7 @@ public sealed class EditorSmokeTests : IDisposable
         rec.AddStep(CaptureTrigger.Manual, new("大きい画面", "W", "Demo"), file, 3000, 2000, DateTimeOffset.Now);
         SessionStore.Save(rec.Session, dir);
 
-        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         int Percent() => int.Parse(Find(editor, "ZoomLabel").Current.Name.TrimEnd('%'));
         Wait(500);
@@ -133,7 +134,7 @@ public sealed class EditorSmokeTests : IDisposable
         rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), file, 400, 300, DateTimeOffset.Now);
         SessionStore.Save(rec.Session, dir);
 
-        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         Wait(500);
         ClickOn(editor, "Description");
@@ -160,7 +161,7 @@ public sealed class EditorSmokeTests : IDisposable
         WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, rec.NextImageFile));
         rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), rec.NextImageFile, 400, 300, DateTimeOffset.Now);
         SessionStore.Save(rec.Session, dir);
-        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         Wait(500);
         // ダイアログとメニューは別のウインドウに出るので、このプロセスのものをデスクトップ全体から探す
@@ -169,6 +170,7 @@ public sealed class EditorSmokeTests : IDisposable
             new PropertyCondition(AutomationElement.ControlTypeProperty, type), new PropertyCondition(AutomationElement.NameProperty, name)));
         void Invoke(string id) => ((InvokePattern)Find(editor, id).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
 
+        expectedDialogs = ["配布用に書き出すフォルダ"];
         Invoke("ExportButton");
         AutomationElement? dialog = null;
         Assert.True(Until(() => (dialog = Top(ControlType.Window, "配布用に書き出すフォルダ")) != null), "本体を押してもフォルダを選ぶ画面が出ない");
@@ -191,7 +193,7 @@ public sealed class EditorSmokeTests : IDisposable
         WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, rec.NextImageFile));
         rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), rec.NextImageFile, 400, 300, DateTimeOffset.Now);
         SessionStore.Save(rec.Session, dir);
-        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         Wait(500);
 
@@ -241,7 +243,7 @@ public sealed class EditorSmokeTests : IDisposable
             rec.AddStep(CaptureTrigger.Manual, new(name, "W", "Demo"), file, 200, 100, DateTimeOffset.Now);
         }
         SessionStore.Save(rec.Session, dir);
-        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         Wait(500);
 
@@ -278,7 +280,7 @@ public sealed class EditorSmokeTests : IDisposable
         await VideoRecorder.Encode(Path.Combine(dir, "video.mp4"), 320, 240, Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))));
         SessionStore.Save(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" }, dir);
 
-        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         Wait(1000);
         var shot = VideoE2ETests.Bgr24(WindowCapture.Capture(editor)!.Image);
@@ -296,7 +298,7 @@ public sealed class EditorSmokeTests : IDisposable
         await VideoRecorder.Encode(Path.Combine(dir, "video.mp4"), 320, 240, Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))));
         SessionStore.Save(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" }, dir);
 
-        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         Wait(1000);
         var shot = WindowCapture.Capture(editor)!;
@@ -334,7 +336,7 @@ public sealed class EditorSmokeTests : IDisposable
         }
         SessionStore.Save(rec.Session, dir);
 
-        app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Open(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         var slider = (RangeValuePattern)Find(editor, "ClipSlider").GetCurrentPattern(RangeValuePattern.Pattern);
         Assert.InRange(slider.Current.Maximum, 2.8, 3.2);
@@ -397,7 +399,7 @@ public sealed class EditorSmokeTests : IDisposable
         }
         SessionStore.Save(rec.Session, dir);
 
-        app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Open(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         var box = Find(editor, "AudioBox");
         var toggle = (TogglePattern)box.GetCurrentPattern(TogglePattern.Pattern);
@@ -455,7 +457,7 @@ public sealed class EditorSmokeTests : IDisposable
         first.VideoTime = TimeSpan.FromSeconds(0.5);
         SessionStore.Save(recording.Session, dir);
 
-        app = Launch(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
         Wait(1000);
         var slider = (RangeValuePattern)Find(editor, "TimeSlider").GetCurrentPattern(RangeValuePattern.Pattern);

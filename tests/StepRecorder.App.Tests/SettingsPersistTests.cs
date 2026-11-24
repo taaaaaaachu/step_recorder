@@ -14,23 +14,19 @@ public sealed class SettingsPersistTests : IDisposable
 
     public void Dispose()
     {
-        try { app?.Kill(); app?.WaitForExit(5000); } catch (InvalidOperationException) { }
+        Close(app, "開く:"); // 最後に出す、記録を開く画面(出る前に終わることもある)
         if (Directory.Exists(profile)) Directory.Delete(profile, true);
     }
 
     [DesktopFact]
     public void 開始画面の保存で_編集画面で選んだ動画の形式を戻さない()
     {
-        foreach (var folder in new[] { @"AppData\Roaming", @"AppData\Local", "Documents" }) Directory.CreateDirectory(Path.Combine(profile, folder));
         var path = Path.Combine(profile, @"AppData\Roaming\step_recorder\settings.json");
         var output = Path.Combine(profile, "records");
         Directory.CreateDirectory(output);
-        new Settings { OutputDir = output, ClipFormat = ClipFormat.Gif, AutoUpdate = false, Fps = 30 }.Save(path);
+        MakeProfile(profile, new Settings { OutputDir = output, ClipFormat = ClipFormat.Gif, AutoUpdate = false, Fps = 30 });
 
-        var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe")) { UseShellExecute = false };
-        start.Environment["USERPROFILE"] = profile;
-        app = Process.Start(start)!;
-        Assert.True(Until(() => { app.Refresh(); return app.MainWindowHandle != 0; }, 10000), "起動しない");
+        app = Open(AppExe, profile: profile);
         var main = app.MainWindowHandle;
         // 逃がせていなければ、利用者の設定を書く前にやめる
         Assert.Equal(output, ValueOf(main, "OutputDir"));

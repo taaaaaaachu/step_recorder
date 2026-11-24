@@ -19,8 +19,7 @@ public sealed class MultiProcessAppTests : IDisposable
 
     public void Dispose()
     {
-        foreach (var p in started)
-            try { p.Kill(); p.WaitForExit(3000); } catch (InvalidOperationException) { }
+        foreach (var p in started) Close(p);
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
@@ -194,7 +193,7 @@ public sealed class MultiProcessAppTests : IDisposable
     [DesktopFact]
     public void 対象の一覧は開くたびに新しくなり_選択は残る()
     {
-        var app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"));
+        var app = Open(AppExe);
         started.Add(app);
         var combo = Find(app.MainWindowHandle, "Targets");
         var list = (ExpandCollapsePattern)combo.GetCurrentPattern(ExpandCollapsePattern.Pattern);
