@@ -253,6 +253,21 @@ public sealed class EditorSmokeTests : IDisposable
         ClickOn(editor, new PropertyCondition(AutomationElement.NameProperty, "別ウインドウで表示"));
         Assert.True(Until(() => WindowOfScroller() == popupTitle), "表示欄が別ウインドウに出ない");
 
+        // F・F11 でそのウインドウがある画面いっぱいになり、F・F11・Esc で戻る
+        var popup = (nint)Find(editor, new AndCondition(
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window),
+            new PropertyCondition(AutomationElement.NameProperty, popupTitle))).Current.NativeWindowHandle;
+        System.Windows.Rect Bounds() => AutomationElement.FromHandle(popup).Current.BoundingRectangle;
+        bool FullScreen() => Monitors.All().Any(m => Bounds() == new System.Windows.Rect(m.Bounds.X, m.Bounds.Y, m.Bounds.Width, m.Bounds.Height));
+        var normal = Bounds();
+        foreach (var (on, off) in new (ushort, ushort)[] { (0x7A, 0x1B), (0x46, 0x7A), (0x7A, 0x46) }) // F11→Esc、F→F11、F11→F
+        {
+            PressKeys(popup, on);
+            Assert.True(Until(FullScreen), $"キー {on:X} で全画面にならない: {Bounds()} / 画面 {string.Join(", ", Monitors.All().Select(m => m.Bounds))}");
+            PressKeys(popup, off);
+            Assert.True(Until(() => Bounds() == normal), $"キー {off:X} で元の大きさに戻らない");
+        }
+
         // 別ウインドウが編集画面の上に重なっていることがあるので、マウスではなく UI Automation で押す
         ((InvokePattern)Find(editor, new PropertyCondition(AutomationElement.NameProperty, "表示欄をここに戻す")).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
         Assert.True(Until(() => WindowOfScroller()?.StartsWith("step_recorder 編集") == true), "表示欄が戻らない");

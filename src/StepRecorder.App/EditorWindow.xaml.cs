@@ -978,6 +978,7 @@ public partial class EditorWindow : Window
             FontFamily = FontFamily, FontSize = FontSize,
             Content = PreviewBorder,
         };
+        popup.PreviewKeyDown += Popup_PreviewKeyDown;
         popup.PreviewKeyDown += Window_PreviewKeyDown; // Ctrl+Z やズームのキーも効くように
         popup.Closed += (_, _) =>
         {
@@ -989,6 +990,29 @@ public partial class EditorWindow : Window
         popup.Show();
         PopOutButton.Content = "表示欄を戻す";
     }
+
+    /// <summary>別ウインドウは F か F11 で、そのウインドウがある画面いっぱいに出す。F・F11・Esc で戻す。</summary>
+    void Popup_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (popup is not { } w || Keyboard.Modifiers != ModifierKeys.None) return;
+        var full = w.WindowStyle == WindowStyle.None;
+        if (e.Key is not (Key.F or Key.F11) && !(full && e.Key == Key.Escape)) return;
+        e.Handled = true;
+        if (full)
+        {
+            w.WindowStyle = WindowStyle.SingleBorderWindow;
+            w.ResizeMode = ResizeMode.CanResize;
+            w.WindowState = popupState;
+            return;
+        }
+        popupState = w.WindowState;
+        w.WindowState = WindowState.Normal; // 最大化したまま枠を消すと、タスクバーの分が空いたままになる
+        w.WindowStyle = WindowStyle.None;
+        w.ResizeMode = ResizeMode.NoResize; // リサイズできるままだと、その枠の分(7px)だけ画面からはみ出す
+        w.WindowState = WindowState.Maximized; // 枠が無ければ、タスクバーも覆って画面いっぱいになる
+    }
+
+    WindowState popupState; // 全画面にする前の状態(戻すときに使う)
 
     // ---- 保存 ----
 
