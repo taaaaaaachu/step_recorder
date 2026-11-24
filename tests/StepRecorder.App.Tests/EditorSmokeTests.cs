@@ -376,14 +376,14 @@ public sealed class EditorSmokeTests : IDisposable
         int Count() => Find(editor, "Steps").FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)).Count;
 
         At(0.4);
-        Press("ここを開始に");
+        Press("開始位置");
         At(2.6);
-        Press("ここを終了に");
+        Press("終了位置");
         Assert.Equal("使う区間 0:00.4 〜 0:02.6", Find(editor, "ClipRangeLabel").Current.Name);
         At(1.6);
         if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } o)
             WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(o, "editor-clip.png"));
-        Press("ここで分割");
+        Press("分割");
         Assert.Equal(2, Count());
         Assert.InRange(slider.Current.Value, 1.5, 1.7); // 後ろのステップを選び、その開始にいる
         Press("元に戻す");
