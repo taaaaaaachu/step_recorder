@@ -73,7 +73,8 @@ static class Desktop
     static string CreateProfile()
     {
         var root = Path.Combine(Path.GetTempPath(), "sr-test-profile-" + Guid.NewGuid());
-        foreach (var folder in new[] { @"AppData\Roaming", @"AppData\Local", "Documents" }) Directory.CreateDirectory(Path.Combine(root, folder));
+        // Desktop はフォルダを選ぶ画面が開くときに辿る(無いと「場所が利用できません」が出る)
+        foreach (var folder in new[] { @"AppData\Roaming", @"AppData\Local", "Documents", "Desktop" }) Directory.CreateDirectory(Path.Combine(root, folder));
         new StepRecorder.Core.Settings { AutoUpdate = false, OutputDir = Path.Combine(root, "records") }
             .Save(Path.Combine(root, @"AppData\Roaming\step_recorder\settings.json"));
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
