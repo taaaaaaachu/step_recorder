@@ -82,6 +82,9 @@ public sealed class Step
     /// <summary>動画にマウスの操作を重ねない(キーとは別に選ぶ)。</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool HideMouse { get; set; }
+    /// <summary>動画の音を使わない(再生・HTML では消音、配布用の mp4 には入れない)。既定(false)は使う(false は書かない)。</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool HideAudio { get; set; }
 }
 
 public sealed class Session

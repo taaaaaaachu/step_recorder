@@ -13,6 +13,9 @@ sealed class AppProcesses
     readonly uint pid;
     readonly string? path; // null なら pid だけで見る
 
+    /// <summary>最初に渡されたプロセス(録音するプロセスの木の根)。</summary>
+    public uint Pid => pid;
+
     public AppProcesses(uint pid)
     {
         this.pid = pid;

@@ -128,7 +128,7 @@ sealed class RecorderEngine
         // ステップは録り始めたら作り、録っている間の操作はこのステップに足す
         if (!target.TryGetActiveWindow(lastTargetRoot, out var root)) return;
         var file = rec.NextVideoFile;
-        var recorder = target.StartVideo(root, Path.Combine(dir, file), captureCursor, () => paused);
+        var recorder = StartVideo(root, file);
         var step = rec.AddStep(CaptureTrigger.Video, target.Describe(root), rec.NextImageFile,
             recorder.Width, recorder.Height, DateTimeOffset.Now);
         step.VideoFile = file;
@@ -163,8 +163,18 @@ sealed class RecorderEngine
 
     void StartFullVideo()
     {
-        full = target.StartVideo(lastTargetRoot, Path.Combine(dir, FullVideoFile), captureCursor, () => paused);
+        full = StartVideo(lastTargetRoot, FullVideoFile);
     }
+
+    /// <summary>録画を始める。音を録れなければ映像だけにし、理由を error.log に残す。</summary>
+    VideoRecorder StartVideo(nint root, string file)
+    {
+        var recorder = target.StartVideo(root, Path.Combine(dir, file), captureCursor, () => paused);
+        if (recorder.AudioFailure is { } e) Log(new InvalidOperationException($"{file} の音を録れませんでした", e));
+        return recorder;
+    }
+
+    void Log(Exception e) => File.AppendAllText(Path.Combine(dir, "error.log"), $"{DateTimeOffset.Now:O} {e}\n");
 
     void StopVideos()
     {
@@ -190,7 +200,7 @@ sealed class RecorderEngine
         foreach (var a in queue.GetConsumingEnumerable())
         {
             try { a(); }
-            catch (Exception e) { File.AppendAllText(Path.Combine(dir, "error.log"), $"{DateTimeOffset.Now:O} {e}\n"); }
+            catch (Exception e) { Log(e); }
         }
     }
 

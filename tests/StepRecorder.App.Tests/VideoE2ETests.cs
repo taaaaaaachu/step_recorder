@@ -144,6 +144,11 @@ public sealed class VideoE2ETests : IDisposable
         rec.Stop();
 
         Assert.InRange(VideoInfo(path).Duration.TotalSeconds, 1.6, 2.6); // 2.2 秒の停止は入らない
+        // 音(このプロセスの音。鳴らしていないので無音)も入り、止めていた分は詰まって映像と同じ長さ
+        Assert.Null(rec.AudioFailure);
+        Assert.True(VideoClips.HasAudio(path));
+        var samples = Task.Run(() => VideoClips.Reader.Audio(path, TimeSpan.Zero, TimeSpan.FromSeconds(10)).Sum(c => c.Pcm.Length) / AudioRecorder.BlockAlign).GetAwaiter().GetResult();
+        Assert.InRange(samples / (double)AudioRecorder.Rate, VideoInfo(path).Duration.TotalSeconds - 0.3, VideoInfo(path).Duration.TotalSeconds + 0.3);
         var colors = new List<Color>();
         using var reader = VideoClips.Reader.Open(path);
         for (var t = TimeSpan.Zero; t < reader.Duration; t += TimeSpan.FromSeconds(1.0 / VideoRecorder.Fps))

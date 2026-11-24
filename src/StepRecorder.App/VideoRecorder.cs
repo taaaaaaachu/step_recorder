@@ -26,6 +26,7 @@ namespace StepRecorder.App;
 /// ダイアログなど同じアプリのウィンドウは静止画と同じく Z オーダーの順に重ねる。
 /// 画面の大きさは録画開始時のメインウィンドウで固定し、位置は今のメインウィンドウに追従する(AppProcesses.Follow)。
 /// モニターは 1 枚を丸ごと録る。大きさと位置は録画開始時のまま。
+/// 音も録る(AudioRecorder)。録れなければ映像だけにし、理由を AudioFailure に残す。
 /// </summary>
 sealed class VideoRecorder
 {
@@ -49,14 +50,20 @@ sealed class VideoRecorder
     readonly BlockingCollection<(byte[] Nv12, TimeSpan Time)> frames = new(boundedCapacity: Fps * 2); // 溜める前に NV12 にする(BGRA の 3/8 の大きさ)
     readonly Thread loop;
     readonly Task encoding;
+    readonly AudioRecorder? audio;
     volatile bool stopping;
+    long stoppedAt; // 止めたときの動画上の時刻(Ticks)。音はここまで書く
     volatile object origin; // 動画に当たるスクリーン上の範囲(RECT)。録画のスレッドが更新し、ToVideo が読む
     Exception? error;
 
     /// <summary>録画開始からの、一時停止を除いた経過時間(動画上の時刻と同じ)。</summary>
     public TimeSpan CurrentTime => clock.Elapsed;
 
-    VideoRecorder(Input input, string path, bool cursor, Func<bool> paused)
+    /// <summary>音を録れなかった理由。録れていれば null。</summary>
+    public Exception? AudioFailure { get; }
+
+    /// <summary>audioPid はそのプロセスの木の音を録る。null なら PC 全体の音。</summary>
+    VideoRecorder(Input input, string path, bool cursor, Func<bool> paused, uint? audioPid)
     {
         this.input = input;
         this.cursor = cursor;
@@ -65,7 +72,9 @@ sealed class VideoRecorder
         origin = frame;
         (width, height) = (frame.Width & ~1, frame.Height & ~1); // H.264 は縦横とも偶数
         if (width <= 0 || height <= 0) throw new InvalidOperationException("録画するものの大きさが取れない");
-        encoding = Task.Run(() => Encode(path, width, height, frames.GetConsumingEnumerable()));
+        try { audio = AudioRecorder.Start(audioPid, () => clock.IsRunning && !paused() ? clock.Elapsed : null); }
+        catch (Exception e) { AudioFailure = e; } // 古い Windows・音の出る機器が無いなど。映像は録る
+        encoding = Task.Run(() => Encode(path, width, height, frames.GetConsumingEnumerable(), audio == null ? null : AudioChunks(audio)));
         loop = new Thread(CaptureLoop) { IsBackground = true, Name = "video-capture" };
         loop.Start();
         started.Wait(); // 最初のフレームが揃うまで待つ(CurrentTime を操作の時刻と合わせるため)
@@ -90,12 +99,12 @@ sealed class VideoRecorder
             if (IsWindow(current)) origin = FrameBounds(current); // 閉じられて代わりも無ければ、最後の位置のまま
             return origin;
         }
-        return new(new(Origin, Items, CreateWindowItem), path, cursor, paused ?? (() => false));
+        return new(new(Origin, Items, CreateWindowItem), path, cursor, paused ?? (() => false), app.Pid);
     }
 
     /// <summary>モニターに見えているものを丸ごと path に録画し始める。paused は Start と同じ。</summary>
     public static VideoRecorder StartMonitor(nint monitor, RECT bounds, string path, bool cursor, Func<bool>? paused = null) =>
-        new(new(() => bounds, () => [(monitor, bounds)], CreateMonitorItem), path, cursor, paused ?? (() => false));
+        new(new(() => bounds, () => [(monitor, bounds)], CreateMonitorItem), path, cursor, paused ?? (() => false), null);
 
     /// <summary>スクリーン上の点の、動画上の位置。動画の外なら null。</summary>
     public PixelPoint? ToVideo(POINT p)
@@ -108,8 +117,10 @@ sealed class VideoRecorder
     /// <summary>録画を止め、mp4 を書き終えるまで待つ。</summary>
     public void Stop()
     {
+        Interlocked.Exchange(ref stoppedAt, clock.Elapsed.Ticks);
         stopping = true;
         loop.Join();
+        audio?.Dispose();
         frames.CompleteAdding();
         Task.WaitAny(encoding);
         if (error != null) throw new InvalidOperationException("録画に失敗した", error); // エンコードの失敗(フレームが無い)より、その原因を伝える
@@ -184,32 +195,57 @@ sealed class VideoRecorder
         }
     }
 
+    // ---- 音 ----
+
+    static readonly TimeSpan AudioChunk = TimeSpan.FromSeconds(0.1);
+    static readonly TimeSpan AudioLag = TimeSpan.FromSeconds(0.3); // 鳴ってから届くまでの遅れ。これだけ待ってから渡す
+
+    /// <summary>録った音を 0.1 秒ずつ渡す。届くのを待ちながら渡すので、止めるまで終わらない。</summary>
+    IEnumerable<(byte[] Pcm, TimeSpan Time)> AudioChunks(AudioRecorder audio)
+    {
+        for (var at = TimeSpan.Zero; ; at += AudioChunk)
+        {
+            while (!stopping && clock.Elapsed < at + AudioChunk + AudioLag) Thread.Sleep(10); // 一時停止中は時計が止まっているので待ち続ける
+            var end = stopping ? TimeSpan.FromTicks(Interlocked.Read(ref stoppedAt)) : TimeSpan.MaxValue;
+            if (at >= end) yield break;
+            yield return (audio.Timeline.Take(at + AudioChunk < end ? at + AudioChunk : end), at);
+        }
+    }
+
     // ---- エンコード ----
 
     /// <summary>
     /// frames(NV12 と、動画上の時刻)を順に mp4 に書く。録画と切り出しで使う。
     /// 色の変換は Windows に任せない(理由は Nv12 を参照)。
     /// frames は必要になった分だけ読むので、録画中のフレームを待ちながら渡してもよい。
+    /// audio(PCM と、動画上の時刻。形式は AudioRecorder のもの)があれば AAC で入れる。
     /// </summary>
-    public static async Task Encode(string path, int width, int height, IEnumerable<(byte[] Nv12, TimeSpan Time)> frames)
+    public static async Task Encode(string path, int width, int height, IEnumerable<(byte[] Nv12, TimeSpan Time)> frames,
+        IEnumerable<(byte[] Pcm, TimeSpan Time)>? audio = null)
     {
         var props = VideoEncodingProperties.CreateUncompressed(MediaEncodingSubtypes.Nv12, (uint)width, (uint)height);
         props.FrameRate.Numerator = Fps;
         props.FrameRate.Denominator = 1;
-        var source = new MediaStreamSource(new VideoStreamDescriptor(props)) { BufferTime = TimeSpan.Zero };
+        var video = new VideoStreamDescriptor(props);
+        var sound = new AudioStreamDescriptor(AudioEncodingProperties.CreatePcm(AudioRecorder.Rate, AudioRecorder.Channels, AudioRecorder.Bits));
+        var source = audio == null ? new MediaStreamSource(video) : new MediaStreamSource(video, sound);
+        source.BufferTime = TimeSpan.Zero;
         source.Starting += (_, e) => e.Request.SetActualStartPosition(TimeSpan.Zero);
-        using var next = frames.GetEnumerator();
+        using var nextFrame = frames.GetEnumerator();
+        using var nextSound = audio?.GetEnumerator();
         source.SampleRequested += (_, e) =>
         {
-            // 次のフレームを渡す。無くなったら null を返して終わらせる
-            if (!next.MoveNext()) { e.Request.Sample = null; return; }
-            var sample = MediaStreamSample.CreateFromBuffer(next.Current.Nv12.AsBuffer(), next.Current.Time);
-            sample.Duration = TimeSpan.FromSeconds(1.0 / Fps);
+            // 次のフレーム(音)を渡す。無くなったら null を返して終わらせる
+            var isSound = e.Request.StreamDescriptor == sound;
+            if (!(isSound ? nextSound!.MoveNext() : nextFrame.MoveNext())) { e.Request.Sample = null; return; }
+            var (data, time) = isSound ? nextSound!.Current : nextFrame.Current;
+            var sample = MediaStreamSample.CreateFromBuffer(data.AsBuffer(), time);
+            sample.Duration = isSound ? TimeSpan.FromSeconds((double)data.Length / AudioRecorder.BlockAlign / AudioRecorder.Rate) : TimeSpan.FromSeconds(1.0 / Fps);
             e.Request.Sample = sample;
         };
 
         var profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.Auto);
-        profile.Audio = null;
+        profile.Audio = audio == null ? null : AudioEncodingProperties.CreateAac(AudioRecorder.Rate, AudioRecorder.Channels, 128_000);
         profile.Video.Width = (uint)width;
         profile.Video.Height = (uint)height;
         profile.Video.FrameRate.Numerator = Fps;

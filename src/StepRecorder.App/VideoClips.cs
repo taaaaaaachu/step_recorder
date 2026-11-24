@@ -21,6 +21,9 @@ static class VideoClips
         return reader.Frame(time);
     }
 
+    /// <summary>音が入っているか。</summary>
+    public static bool HasAudio(string video) => Run(() => Task.FromResult(Reader.HasAudio(video)));
+
     /// <summary>動画の長さと大きさ。</summary>
     public static (TimeSpan Duration, int Width, int Height) Info(string video)
     {
@@ -30,17 +33,18 @@ static class VideoClips
 
     /// <summary>
     /// start〜end(null なら最後まで)を、crop の範囲だけの mp4 に切り出す。速さは変えない(再生する側で変える)。
-    /// keys・mouse があれば焼き込む(時刻・位置は元の動画のもの)。
+    /// keys・mouse があれば焼き込む(時刻・位置は元の動画のもの)。sound なら、元の動画に音があればその区間の音も入れる。
     /// MediaTranscoder の区間指定(ファイルからの変換)は E_POINTER で失敗するので、
     /// フレームを1枚ずつ取り出して録画と同じ方法でエンコードし直す。
     /// </summary>
     public static void Cut(string video, TimeSpan start, TimeSpan? end, PixelRect? crop, string dst, Action<double>? progress = null,
-        IReadOnlyList<KeyChip>? keys = null, IReadOnlyList<MouseMark>? mouse = null)
+        IReadOnlyList<KeyChip>? keys = null, IReadOnlyList<MouseMark>? mouse = null, bool sound = false)
     {
         var burner = new KeyBurner(keys ?? []);
         var clicks = new MouseBurner(mouse ?? []);
         using var reader = Reader.Open(video);
         var stop = end ?? reader.Duration;
+        var audio = sound && HasAudio(video) ? Reader.Audio(video, start, stop) : null;
         var (w, h) = ((crop?.Width ?? reader.Width) & ~1, (crop?.Height ?? reader.Height) & ~1); // H.264 は縦横とも偶数
         IEnumerable<(byte[], TimeSpan)> Frames()
         {
@@ -55,7 +59,7 @@ static class VideoClips
                 yield return (Nv12.FromBgra(bgra, w, h), t);
             }
         }
-        Task.Run(() => VideoRecorder.Encode(dst, w, h, Frames())).GetAwaiter().GetResult();
+        Task.Run(() => VideoRecorder.Encode(dst, w, h, Frames(), audio)).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -110,7 +114,7 @@ static class VideoClips
         var start = st.VideoStart ?? TimeSpan.Zero;
         var (chips, marks) = (KeyOverlay.Chips(keys), MouseOverlay.Marks(mouse));
         if (format == ClipFormat.Gif) ToGif(src, start, st.VideoEnd, st.Crop, clip, progress, st.Speed, chips, marks);
-        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress, chips, marks);
+        else Cut(src, start, st.VideoEnd, st.Crop, clip, progress, chips, marks, sound: !st.HideAudio);
         if (poster != null) WindowCapture.SavePng(Frame(clip, TimeSpan.Zero), poster);
     }
 
@@ -214,6 +218,61 @@ static class VideoClips
         });
 
         public void Dispose() => source.Dispose();
+
+        /// <summary>音が入っているか。MTA のスレッドから呼ぶ。</summary>
+        public static bool HasAudio(string video)
+        {
+            using var source = MediaFactory.MFCreateSourceReaderFromURL(Path.GetFullPath(video), null!);
+            try
+            {
+                using var type = source.GetNativeMediaType(SourceReaderIndex.FirstAudioStream, 0);
+                return true;
+            }
+            catch (SharpGen.Runtime.SharpGenException) { return false; } // 音のストリームが無い
+        }
+
+        /// <summary>
+        /// start〜stop の音(PCM。形式は AudioRecorder のもの。時刻は start から)。読みながら返すので、MTA のスレッドで回す。
+        /// </summary>
+        public static IEnumerable<(byte[] Pcm, TimeSpan Time)> Audio(string video, TimeSpan start, TimeSpan stop)
+        {
+            using var source = MediaFactory.MFCreateSourceReaderFromURL(Path.GetFullPath(video), null!);
+            source.SetStreamSelection(SourceReaderIndex.AllStreams, false);
+            source.SetStreamSelection(SourceReaderIndex.FirstAudioStream, true);
+            using (var pcm = MediaFactory.MFCreateMediaType())
+            {
+                pcm.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Audio);
+                pcm.Set(MediaTypeAttributeKeys.Subtype, AudioFormatGuids.Pcm);
+                pcm.Set(MediaTypeAttributeKeys.AudioBitsPerSample, AudioRecorder.Bits);
+                pcm.Set(MediaTypeAttributeKeys.AudioSamplesPerSecond, AudioRecorder.Rate);
+                pcm.Set(MediaTypeAttributeKeys.AudioNumChannels, AudioRecorder.Channels);
+                source.SetCurrentMediaType(SourceReaderIndex.FirstAudioStream, pcm);
+            }
+            source.SetCurrentPosition(start.Ticks);
+            const int Ba = AudioRecorder.BlockAlign;
+            var last = (long)((stop - start).TotalSeconds * AudioRecorder.Rate); // start から数えたサンプルの位置
+            long next = 0;
+            while (next < last)
+            {
+                using var sample = source.ReadSample(SourceReaderIndex.FirstAudioStream, SourceReaderControlFlag.None, out _, out var flags, out var time);
+                if (sample == null)
+                {
+                    if ((flags & SourceReaderFlag.EndOfStream) != 0) yield break;
+                    continue;
+                }
+                using var buffer = sample.ConvertToContiguousBuffer();
+                buffer.Lock(out var data, out _, out var length);
+                var bytes = new byte[length];
+                try { Marshal.Copy(data, bytes, 0, length); }
+                finally { buffer.Unlock(); }
+                // 飛んだ先は start より少し前から始まるので、渡し済みの位置より前は捨てる
+                var first = (long)Math.Round((time - start.Ticks) / (double)TimeSpan.TicksPerSecond * AudioRecorder.Rate);
+                var (from, to) = (Math.Max(0, next - first), Math.Min(length / Ba, last - first));
+                if (to <= from) continue;
+                yield return (bytes[(int)(from * Ba)..(int)(to * Ba)], TimeSpan.FromSeconds((double)(first + from) / AudioRecorder.Rate));
+                next = first + to;
+            }
+        }
 
         /// <summary>time に最も近いフレーム(同じ近さなら前の方)。終わりを過ぎていれば最後のフレーム。</summary>
         public BitmapSource Frame(TimeSpan time)

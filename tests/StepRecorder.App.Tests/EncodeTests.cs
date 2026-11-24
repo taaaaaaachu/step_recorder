@@ -149,4 +149,55 @@ public sealed class EncodeTests : IDisposable
         VideoClips.ToGif(path, start, start + TimeSpan.FromSeconds(0.2), null, tiny, null, 8);
         Assert.True(File.Exists(tiny));
     }
+
+    /// <summary>音を入れてエンコードでき、区間を切り出しても音が付いてくる(音を使わない指定なら入れない)。</summary>
+    [DesktopFact]
+    public async Task 音を入れてエンコードし_切り出しても区間の音が残る()
+    {
+        const int w = 160, h = 120, rate = AudioRecorder.Rate;
+        var nv12 = Nv12.FromBgra(new byte[w * h * 4], w, h);
+        var frames = Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))).ToList(); // 2 秒
+        // 最初の 1 秒は 440Hz、あとの 1 秒は無音。0.1 秒ずつ渡す
+        IEnumerable<(byte[], TimeSpan)> Sound()
+        {
+            for (var c = 0; c < 20; c++)
+            {
+                var pcm = new byte[rate / 10 * AudioRecorder.BlockAlign];
+                for (var i = 0; c < 10 && i < rate / 10; i++)
+                {
+                    var v = (short)(Math.Sin(2 * Math.PI * 440 * (c * rate / 10 + i) / rate) * 12000);
+                    BitConverter.TryWriteBytes(pcm.AsSpan(i * 4), v);
+                    BitConverter.TryWriteBytes(pcm.AsSpan(i * 4 + 2), v);
+                }
+                yield return (pcm, TimeSpan.FromSeconds(c / 10.0));
+            }
+        }
+        var path = Path.Combine(dir, "sound.mp4");
+        await VideoRecorder.Encode(path, w, h, frames, Sound());
+        Assert.True(VideoClips.HasAudio(path));
+
+        // 区間の音の大きさ(左チャンネルの二乗平均)
+        static double Loudness(string video, double from, double to) => Task.Run(() =>
+        {
+            var pcm = VideoClips.Reader.Audio(video, TimeSpan.FromSeconds(from), TimeSpan.FromSeconds(to)).SelectMany(c => c.Pcm).ToArray();
+            Assert.InRange(pcm.Length / AudioRecorder.BlockAlign, (to - from) * rate * 0.95, (to - from) * rate * 1.01);
+            return Math.Sqrt(Enumerable.Range(0, pcm.Length / 4).Average(i => Math.Pow(BitConverter.ToInt16(pcm, i * 4), 2)));
+        }).GetAwaiter().GetResult();
+        Assert.InRange(Loudness(path, 0.2, 0.8), 6000, 10000); // 振幅 12000 の正弦波は 8485
+        Assert.InRange(Loudness(path, 1.2, 1.8), 0, 300);
+
+        // 0.5〜1.5 秒を切り出すと、前半に音があり後半は無音
+        var cut = Path.Combine(dir, "cut.mp4");
+        VideoClips.Cut(path, TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1.5), null, cut, sound: true);
+        Assert.True(VideoClips.HasAudio(cut));
+        Assert.InRange(Loudness(cut, 0.1, 0.4), 6000, 10000);
+        Assert.InRange(Loudness(cut, 0.6, 0.9), 0, 300);
+
+        var mute = Path.Combine(dir, "mute.mp4");
+        VideoClips.Cut(path, TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1.5), null, mute, sound: false);
+        Assert.False(VideoClips.HasAudio(mute));
+        var silent = Path.Combine(dir, "silent.mp4");
+        await VideoRecorder.Encode(silent, w, h, frames);
+        Assert.False(VideoClips.HasAudio(silent));
+    }
 }

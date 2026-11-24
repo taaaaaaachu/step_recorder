@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="NAudio.Wasapi" Version="3.3.0" />
     <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" /> <!-- 動画のフレームを色変換せずに(NV12 のまま)受け取る -->
