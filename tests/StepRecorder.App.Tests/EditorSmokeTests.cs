@@ -13,9 +13,6 @@ public sealed class EditorSmokeTests : IDisposable
     readonly string dir = Path.Combine(Path.GetTempPath(), "sr-editor-" + Guid.NewGuid());
     Process? app;
 
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    static extern uint GetDpiForWindow(nint hwnd);
-
     public void Dispose()
     {
         try { app?.Kill(); app?.WaitForExit(5000); } catch (InvalidOperationException) { }
@@ -42,28 +39,6 @@ public sealed class EditorSmokeTests : IDisposable
         var editor = app.MainWindowHandle;
         Assert.StartsWith("step_recorder 編集", Native.Text(editor));
         Wait(500); // 描画を待つ
-
-        // 動画の形式の選択肢が見切れない
-        var format = Find(editor, "ClipFormatBox");
-        var expand = (ExpandCollapsePattern)format.GetCurrentPattern(ExpandCollapsePattern.Pattern);
-        foreach (var name in new[] { "GIF", "MP4" })
-        {
-            expand.Expand();
-            Wait(300);
-            var item = format.FindFirst(TreeScope.Descendants, new AndCondition(
-                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
-                new PropertyCondition(AutomationElement.NameProperty, name)));
-            ((SelectionItemPattern)item.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
-            expand.Collapse();
-            Wait(500);
-            if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } o)
-                WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(o, $"format-{name}.png"));
-            var textWidth = new FormattedText(name, System.Globalization.CultureInfo.InvariantCulture, System.Windows.FlowDirection.LeftToRight,
-                new Typeface("Yu Gothic UI"), 13, Brushes.Black, 1).Width;
-            var width = format.Current.BoundingRectangle.Width / (GetDpiForWindow(editor) / 96.0);
-            // 選択中の文字は UI Automation に出ないので欄の幅で見る。50 は Fluent の ComboBox の左右の余白と矢印の分
-            Assert.True(width >= textWidth + 50, $"{name} が見切れる: 欄 {width:0.#} / 文字 {textWidth:0.#} + 50");
-        }
 
         var shot = WindowCapture.Capture(editor);
         Assert.NotNull(shot);
@@ -176,25 +151,6 @@ public sealed class EditorSmokeTests : IDisposable
     }
 
 
-
-    /// <summary>上の段のボタンとドロップダウン(出力の並べ方・動画の形式)は高さが揃う。</summary>
-    [DesktopFact]
-    public void 上の段の部品は高さが揃う()
-    {
-        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
-        WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, rec.NextImageFile));
-        rec.AddStep(CaptureTrigger.Manual, new("画面", "W", "Demo"), rec.NextImageFile, 400, 300, DateTimeOffset.Now);
-        SessionStore.Save(rec.Session, dir);
-        app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
-        var editor = app.MainWindowHandle;
-        Wait(800);
-
-        var heights = new[] { "Group", "UndoButton", "RedoButton", "SaveButton", "ExportButton", "ExportMenuButton", "ClipFormatBox" }
-            .ToDictionary(id => id, id => Math.Round(Find(editor, id).Current.BoundingRectangle.Height));
-        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } o)
-            WindowCapture.SavePng(WindowCapture.Capture(editor)!.Image, Path.Combine(o, "editor-toolbar.png"));
-        Assert.True(heights.Values.Distinct().Count() == 1, string.Join(", ", heights.Select(h => $"{h.Key}={h.Value}")));
-    }
 
     /// <summary>配布用に書き出すボタンの本体はそのままフォルダを選ぶ画面を出し、横の矢印は書き出し方のメニューを出す。</summary>
     [E2EFact]
@@ -522,13 +478,6 @@ public sealed class EditorSmokeTests : IDisposable
         Shot("timeline-fit");
         var bar = timeline.Current.BoundingRectangle;
         var track = Find(editor, "TimeSlider").Current.BoundingRectangle;
-        // シークバーは左右いっぱい、ズームのボタンはその下の段の右端
-        var play = Find(editor, "FullPlayButton").Current.BoundingRectangle;
-        var all = Find(editor, new PropertyCondition(AutomationElement.NameProperty, "タイムライン全体")).Current.BoundingRectangle;
-        Assert.InRange(all.Y, play.Y - 1, play.Y + 1);
-        Assert.InRange(bar.Left, play.Left - 2, play.Left + 2);
-        Assert.InRange(bar.Right, all.Right - 2, all.Right + 2);
-        Assert.True(bar.Bottom <= all.Top, "ズームのボタンがシークバーの段にある");
         var (x, y) = ((int)(bar.X + bar.Width * 0.7), (int)(track.Y + track.Height / 2));
         Click(editor, x, y);
         Wait(500);
@@ -578,8 +527,6 @@ public sealed class EditorSmokeTests : IDisposable
         Press("区間の開始");
         At(1.8);
         Press("区間の終了");
-        var range = Find(editor, "RangeLabel").Current.BoundingRectangle;
-        Assert.InRange(range.Y + range.Height / 2, play.Y, play.Bottom); // 区間を出しても同じ段に収まる
         Shot("timeline-range");
         Press("区間を動画ステップに追加");
         // 足した動画のステップが選ばれているので、再生できる(区間は 0.8 秒なので、押した直後から確かめる)

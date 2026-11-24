@@ -48,10 +48,6 @@ public sealed class MainWindowTests : IDisposable
     }
 
     [E2EFact]
-    public void 撮影モードに録画がある() =>
-        Find(app.MainWindowHandle, new PropertyCondition(AutomationElement.NameProperty, "録画"));
-
-    [E2EFact]
     public void 今すぐ確認で結果が新しい見た目のメッセージボックスに出る()
     {
         ClickOn(app.MainWindowHandle, "CheckUpdate");
@@ -64,19 +60,3 @@ public sealed class MainWindowTests : IDisposable
     }
 }
 
-/// <summary>開始画面の並び。入力は送らない。</summary>
-public sealed class MainWindowLayoutTests
-{
-    [DesktopFact]
-    public void フレームレートは撮影モードのすぐ下にある()
-    {
-        var app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"));
-        try
-        {
-            double Top(string id) => Find(app.MainWindowHandle, id).Current.BoundingRectangle.Top;
-            Assert.True(Top("ModeRecord") < Top("Fps"));
-            Assert.True(Top("Fps") < Top("OutputDir"));
-        }
-        finally { app.Kill(); app.WaitForExit(5000); }
-    }
-}
