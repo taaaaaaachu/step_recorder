@@ -3,14 +3,28 @@ namespace StepRecorder.Core;
 /// <summary>マウスの操作。Back・Forward はマウスの横の戻る・進むボタン(XBUTTON1・2)。WheelUp 以降がホイール。</summary>
 public enum MouseAction { Left, Right, Middle, Back, Forward, WheelUp, WheelDown, WheelLeft, WheelRight }
 
-/// <summary>マウスの操作 1 つ。Time は動画上の時刻、(X, Y) は動画上の画素の位置(トリミング前)。</summary>
-public sealed record MouseStroke(TimeSpan Time, int X, int Y, MouseAction Action);
+/// <summary>動画上の時刻と位置(画素。トリミング前)。</summary>
+public sealed record MousePoint(TimeSpan Time, int X, int Y);
 
-/// <summary>画面に出すマウスの表示 1 つ。Start から End まで (X, Y) に出す。</summary>
-public sealed record MouseMark(TimeSpan Start, TimeSpan End, int X, int Y, MouseAction Action)
+/// <summary>マウスの操作 1 つ。Time は動画上の時刻、(X, Y) は動画上の画素の位置(トリミング前)。</summary>
+public sealed record MouseStroke(TimeSpan Time, int X, int Y, MouseAction Action)
+{
+    /// <summary>ボタンを押したまま動かしたときの、離すまでの位置(最後は離した時刻)。動かさずに離したら null。</summary>
+    public List<MousePoint>? Drag { get; set; }
+}
+
+/// <summary>画面に出すマウスの表示 1 つ。Start から End まで出す。輪は (X, Y)、マウスの絵は Drag に沿って動く。</summary>
+public sealed record MouseMark(TimeSpan Start, TimeSpan End, int X, int Y, MouseAction Action, IReadOnlyList<MousePoint>? Drag = null)
 {
     public bool IsWheel => MouseOverlay.IsWheel(Action);
+
+    /// <summary>time にマウスの絵を置く位置(押した所か、ドラッグ中ならその時刻までに動いた所)。</summary>
+    public (int X, int Y) PicAt(TimeSpan time) =>
+        Drag?.LastOrDefault(p => p.Time <= time) is { } p ? (p.X, p.Y) : (X, Y);
 }
+
+/// <summary>time に出す表示 1 つ。Phase はクリックの輪の広がりの段階(0〜Phases-1。広がり終えたら null、ホイールは 0)。(PicX, PicY) はマウスの絵の位置。</summary>
+public sealed record MouseShown(MouseMark Mark, int? Phase, int PicX, int PicY);
 
 /// <summary>
 /// 動画に重ねるマウスの表示の時間割。クリックは広がって消える輪と、押したボタンを塗ったマウスの絵(ボタンで色も違う。戻る・進むは胴に矢印)。ホイールは向きの矢印。
@@ -59,13 +73,22 @@ public static class MouseOverlay
             if (wheel && at >= 0 && m.Time - marks[at].Last <= WheelGap) marks[at] = marks[at] with { Last = m.Time };
             else marks.Add((m, m.Time));
         }
-        return marks.Select(x => new MouseMark(x.First.Time, x.Last + (IsWheel(x.First.Action) ? WheelLinger : Ripple),
-            x.First.X, x.First.Y, x.First.Action)).ToList();
+        return marks.Select(x => new MouseMark(x.First.Time, End(x.First, x.Last), x.First.X, x.First.Y, x.First.Action, x.First.Drag)).ToList();
     }
 
-    /// <summary>time に出す表示と、クリックの輪の広がりの段階(0〜Phases-1。ホイールは 0)。</summary>
-    public static IReadOnlyList<(MouseMark Mark, int Phase)> Visible(IReadOnlyList<MouseMark> marks, TimeSpan time) =>
+    // ホイールは最後に回してから少し残す。クリックは輪が消えるまでで、ドラッグなら離すまでマウスの絵を出す
+    static TimeSpan End(MouseStroke m, TimeSpan last) =>
+        IsWheel(m.Action) ? last + WheelLinger
+        : m.Drag is [.., var up] && up.Time > m.Time + Ripple ? up.Time : m.Time + Ripple;
+
+    /// <summary>time に出す表示。</summary>
+    public static IReadOnlyList<MouseShown> Visible(IReadOnlyList<MouseMark> marks, TimeSpan time) =>
         marks.Where(m => m.Start <= time && time < m.End)
-            .Select(m => (m, m.IsWheel ? 0 : Math.Min(Phases - 1, (int)((time - m.Start) / (m.End - m.Start) * Phases))))
+            .Select(m =>
+            {
+                var (x, y) = m.PicAt(time);
+                var phase = (int)((time - m.Start) / Ripple * Phases);
+                return new MouseShown(m, m.IsWheel ? 0 : phase < Phases ? phase : null, x, y);
+            })
             .ToList();
 }

@@ -188,7 +188,8 @@ public static class Export
               new ResizeObserver(() => { shown = null; draw(); }).observe(v);
             });
             // クリックとホイールを、再生に合わせて重ねる(焼き込みと同じ見た目。クリックは広がりながら消える輪、ホイールは向きの三角)。
-            // data-mouse は [出し始め, 消す, x, y, 操作] で、操作は 0〜4 がボタン(左・右・中・戻る・進む)、5〜8 がホイール(上・下・左・右)
+            // data-mouse は [出し始め, 消す, x, y, 操作(, ドラッグ)] で、操作は 0〜4 がボタン(左・右・中・戻る・進む)、5〜8 がホイール(上・下・左・右)。
+            // ドラッグは押したまま動かした位置を [秒, x, y, 秒, x, y, ...] と並べたもので、マウスの絵はそれについていく(輪は押した所に出す)
             document.querySelectorAll('video[data-mouse]').forEach(v => {
               const marks = JSON.parse(v.dataset.mouse), [ax, ay, , ah] = v.dataset.mouseArea.split(' ').map(Number), radius = +v.dataset.mouseRadius;
               const canvas = v.parentElement.querySelector('canvas.mouse'), ctx = canvas.getContext('2d');
@@ -200,21 +201,27 @@ public static class Export
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.clearRect(0, 0, w, h);
                 const t = v.currentTime;
-                for (const [s, e, x, y, a] of marks) {
+                for (const [s, e, x, y, a, drag] of marks) {
                   if (t < s || t >= e) continue;
                   const cx = (x - ax) * k, cy = (y - ay) * k;
                   ctx.beginPath();
                   if (a < 5) {
-                    const p = (Math.min(PHASES - 1, Math.floor((t - s) / (e - s) * PHASES)) + 0.5) / PHASES, fade = 1 - p * 0.8;
-                    ctx.arc(cx, cy, r * (0.35 + 0.65 * p), 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(${colors[a]},${0.35 * fade})`;
-                    ctx.strokeStyle = `rgba(${colors[a]},${fade})`;
-                    ctx.lineWidth = r * 0.14;
-                    ctx.fill();
-                    ctx.stroke();
-                    // 押したボタンを塗ったマウスの絵。右下に置くとはみ出すなら左・上に置く(MouseOverlay.PicSide)
+                    const phase = Math.floor((t - s) / RIPPLE * PHASES);
+                    if (phase < PHASES) {
+                      const p = (phase + 0.5) / PHASES, fade = 1 - p * 0.8;
+                      ctx.arc(cx, cy, r * (0.35 + 0.65 * p), 0, Math.PI * 2);
+                      ctx.fillStyle = `rgba(${colors[a]},${0.35 * fade})`;
+                      ctx.strokeStyle = `rgba(${colors[a]},${fade})`;
+                      ctx.lineWidth = r * 0.14;
+                      ctx.fill();
+                      ctx.stroke();
+                    }
+                    // 押したボタンを塗ったマウスの絵(ドラッグ中はその時刻までに動いた所)。右下に置くとはみ出すなら左・上に置く(MouseOverlay.PicSide)
+                    let [mx, my] = [x, y];
+                    for (let i = 0; drag && i < drag.length && drag[i] <= t; i += 3) [mx, my] = [drag[i + 1], drag[i + 2]];
+                    const qx = (mx - ax) * k, qy = (my - ay) * k;
                     const pw = r * PIC_W, ph = r * PIC_H, off = r * PIC_OFF;
-                    const px = cx + off + pw > w ? cx - off - pw : cx + off, py = cy + off + ph > h ? cy - off - ph : cy + off, split = py + ph * 0.42;
+                    const px = qx + off + pw > w ? qx - off - pw : qx + off, py = qy + off + ph > h ? qy - off - ph : qy + off, split = py + ph * 0.42;
                     const body = new Path2D();
                     body.roundRect(px, py, pw, ph, pw * 0.45);
                     ctx.fillStyle = '#fff';
@@ -284,7 +291,7 @@ public static class Export
             </html>
 
             """.Replace("MAX_KEYS", KeyOverlay.MaxVisible.ToString(CultureInfo.InvariantCulture))
-               .Replace("PHASES", MouseOverlay.Phases.ToString(CultureInfo.InvariantCulture))
+               .Replace("PHASES", MouseOverlay.Phases.ToString(CultureInfo.InvariantCulture)).Replace("RIPPLE", Number(MouseOverlay.Ripple.TotalSeconds))
                .Replace("PIC_W", Number(MouseOverlay.PicWidth)).Replace("PIC_H", Number(MouseOverlay.PicHeight)).Replace("PIC_OFF", Number(MouseOverlay.PicOffset)));
         return sb.ToString();
     }
@@ -333,10 +340,13 @@ public static class Export
         var chips = KeyOverlay.Chips(KeyOverlay.StrokesFor(s, st));
         var keys = chips.Count == 0 ? "" :
             $" data-keys=\"{H(Json(chips.Select(k => new object[] { Sec(k.Start), Sec(k.End), k.Text })))}\" data-key-size=\"{Number(KeyOverlay.FontSize(c.Height))}\" data-key-rows=\"{c.Height}\"";
-        // マウスは [出し始め, 消す, x, y, 操作] の秒と、トリミング前の動画上の位置。data-mouse-area はトリミングの範囲(見えている所)
+        // マウスは [出し始め, 消す, x, y, 操作(, ドラッグ)] の秒と、トリミング前の動画上の位置。data-mouse-area はトリミングの範囲(見えている所)
         var marks = MouseOverlay.Marks(MouseOverlay.StrokesFor(s, st));
+        object[] Mark(MouseMark m) => m.Drag is { } drag
+            ? [Sec(m.Start), Sec(m.End), m.X, m.Y, (int)m.Action, drag.SelectMany(p => new object[] { Sec(p.Time), p.X, p.Y })]
+            : [Sec(m.Start), Sec(m.End), m.X, m.Y, (int)m.Action];
         var mouse = marks.Count == 0 ? "" :
-            $" data-mouse=\"{H(Json(marks.Select(m => new object[] { Sec(m.Start), Sec(m.End), m.X, m.Y, (int)m.Action })))}\" data-mouse-area=\"{c.X} {c.Y} {c.Width} {c.Height}\" data-mouse-radius=\"{Number(MouseOverlay.Radius(c.Height))}\"";
+            $" data-mouse=\"{H(Json(marks.Select(Mark)))}\" data-mouse-area=\"{c.X} {c.Y} {c.Width} {c.Height}\" data-mouse-radius=\"{Number(MouseOverlay.Radius(c.Height))}\"";
         var wrap = chips.Count > 0 || marks.Count > 0;
         if (wrap) sb.Append("<div class=\"clip-wrap\">");
         sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{src(ClipSource(st))}\" poster=\"{src(st.ImageFile)}\" width=\"{c.Width}\"{(st.HideAudio ? " muted" : "")}{range}{keys}{mouse}{style}></video>"); // 音を使わないなら消音で始める

@@ -84,6 +84,30 @@ public sealed class HtmlScriptTests : IDisposable
     }
 
     [DesktopFact]
+    public void ドラッグ中のマウスの絵は動いた所に描かれる()
+    {
+        var s = new Session { TargetName = "Demo", VideoFile = "video.mp4" };
+        s.Mouse = [new(TimeSpan.FromSeconds(1), 100, 100, MouseAction.Left) { Drag = [new(TimeSpan.FromSeconds(1.2), 400, 250), new(TimeSpan.FromSeconds(2), 400, 250)] }];
+        s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", Crop = new(0, 0, 640, 360) });
+        var r = MouseOverlay.Radius(360);
+        var (dx, dy) = (r * (MouseOverlay.PicOffset + MouseOverlay.PicWidth * 0.5), r * (MouseOverlay.PicOffset + MouseOverlay.PicHeight * 0.7)); // 絵の胴の中ほど
+        string N(double v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        // 押した所と動いた所の、絵の胴が白いか
+        var title = Run(Export.ToHtml(s, GroupMode.Sequence), $$"""
+            const v = document.querySelector('video'), c = v.parentElement.querySelector('canvas.mouse');
+            const at = t => {
+              v.currentTime = t; v.dispatchEvent(new Event('timeupdate'));
+              const k = v.clientHeight / 360 * devicePixelRatio, white = (x, y) => [...c.getContext('2d').getImageData(Math.round((x + {{N(dx)}}) * k), Math.round((y + {{N(dy)}}) * k), 1, 1).data].slice(0, 3).every(n => n > 200);
+              return `${white(100, 100) ? 'start' : '-'},${white(400, 250) ? 'moved' : '-'}`;
+            };
+            document.title = [at(1.1), at(1.8), at(2.1)].join(' / ');
+            """);
+
+        Assert.Equal("start,- / -,moved / -,-", title);
+    }
+
+    [DesktopFact]
     public void HTML1ファイルに埋め込んだ動画は再生でき_途中へ移れる()
     {
         // 2 秒の白い動画を、HTML 1 ファイルに埋め込んで開く

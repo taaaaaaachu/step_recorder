@@ -18,24 +18,30 @@ static class MouseOverlayDrawing
     static readonly Brush Back = Freeze(new SolidColorBrush(Color.FromArgb(0xD9, 0x20, 0x20, 0x20)));
     static readonly Brush Outline = Freeze(new SolidColorBrush(Color.FromRgb(0x30, 0x30, 0x30)));
 
-    /// <summary>
-    /// center に、半径 r の表示を描く。phase はクリックの輪の広がりの段階(MouseOverlay.Visible)。
-    /// side はマウスの絵を左・上に置くか(MouseOverlay.PicSide)。
-    /// </summary>
-    public static void Draw(DrawingContext dc, Point center, double r, MouseAction action, int phase, (bool Left, bool Up) side = default)
+    /// <summary>表示 1 つを動画上の位置に描く。area は見えている範囲(マウスの絵がはみ出さないよう置く向きを決める)。</summary>
+    public static void Draw(DrawingContext dc, MouseShown s, double r, Rect area)
     {
-        if (!MouseOverlay.IsWheel(action))
-        {
-            var p = (phase + 0.5) / MouseOverlay.Phases;
-            var fade = 1 - p * 0.8;
-            var color = Colors[(int)action];
-            var fill = new SolidColorBrush(Color.FromArgb((byte)(255 * 0.35 * fade), color.R, color.G, color.B));
-            var ring = new Pen(new SolidColorBrush(Color.FromArgb((byte)(255 * fade), color.R, color.G, color.B)), r * 0.14);
-            var radius = r * (0.35 + 0.65 * p);
-            dc.DrawEllipse(fill, ring, center, radius, radius);
-            DrawMouse(dc, center, r, action, new SolidColorBrush(color), side);
-            return;
-        }
+        var center = new Point(s.Mark.X, s.Mark.Y);
+        if (s.Mark.IsWheel) { Wheel(dc, center, r, s.Mark.Action); return; }
+        if (s.Phase is { } phase) Ring(dc, center, r, s.Mark.Action, phase);
+        Mouse(dc, new Point(s.PicX, s.PicY), r, s.Mark.Action, MouseOverlay.PicSide(s.PicX - area.X, s.PicY - area.Y, r, area.Width, area.Height));
+    }
+
+    /// <summary>center に、クリックの輪を描く。phase は広がりの段階(MouseOverlay.Visible)。</summary>
+    public static void Ring(DrawingContext dc, Point center, double r, MouseAction action, int phase)
+    {
+        var p = (phase + 0.5) / MouseOverlay.Phases;
+        var fade = 1 - p * 0.8;
+        var color = Colors[(int)action];
+        var fill = new SolidColorBrush(Color.FromArgb((byte)(255 * 0.35 * fade), color.R, color.G, color.B));
+        var ring = new Pen(new SolidColorBrush(Color.FromArgb((byte)(255 * fade), color.R, color.G, color.B)), r * 0.14);
+        var radius = r * (0.35 + 0.65 * p);
+        dc.DrawEllipse(fill, ring, center, radius, radius);
+    }
+
+    /// <summary>center に、ホイールの向きの三角を描く。</summary>
+    public static void Wheel(DrawingContext dc, Point center, double r, MouseAction action)
+    {
         dc.DrawEllipse(Back, null, center, r * 0.75, r * 0.75);
         var (dx, dy) = action switch { MouseAction.WheelUp => (0, -1), MouseAction.WheelDown => (0, 1), MouseAction.WheelLeft => (-1, 0), _ => (1, 0) };
         var q = r * 0.4;
@@ -51,9 +57,12 @@ static class MouseOverlayDrawing
         dc.DrawGeometry(Brushes.White, null, triangle);
     }
 
-    /// <summary>白いマウスの絵。押したボタン(左・右は上半分の片側、中はホイール)を color で塗る。</summary>
-    static void DrawMouse(DrawingContext dc, Point c, double r, MouseAction action, Brush color, (bool Left, bool Up) side)
+    /// <summary>
+    /// c の右下(side によっては左・上。MouseOverlay.PicSide)に、白いマウスの絵を描く。押したボタン(左・右は上半分の片側、中はホイール)をボタンの色で塗る。
+    /// </summary>
+    public static void Mouse(DrawingContext dc, Point c, double r, MouseAction action, (bool Left, bool Up) side)
     {
+        var color = new SolidColorBrush(Colors[(int)action]);
         var (w, h) = (r * MouseOverlay.PicWidth, r * MouseOverlay.PicHeight);
         var x = side.Left ? c.X - r * MouseOverlay.PicOffset - w : c.X + r * MouseOverlay.PicOffset;
         var y = side.Up ? c.Y - r * MouseOverlay.PicOffset - h : c.Y + r * MouseOverlay.PicOffset;
@@ -99,7 +108,8 @@ sealed class MouseBurner(IReadOnlyList<MouseMark> marks)
 {
     sealed record Block(byte[] Pixels, int Size);
 
-    readonly Dictionary<(int, MouseAction, int, (bool, bool)), Block> blocks = [];
+    // 形ごとの絵。phase は輪の段階で、-1 はマウスの絵(side はその向き)
+    readonly Dictionary<(int R, MouseAction Action, int Phase, (bool, bool) Side), Block> blocks = [];
 
     public bool IsEmpty => marks.Count == 0;
 
@@ -109,22 +119,32 @@ sealed class MouseBurner(IReadOnlyList<MouseMark> marks)
     /// </summary>
     public void Apply(byte[] bgra, int w, int h, TimeSpan time, PixelRect? crop = null, double scale = 1)
     {
-        foreach (var (m, phase) in MouseOverlay.Visible(marks, time))
+        var r = (int)Math.Round(MouseOverlay.Radius(h));
+        (double, double) Map(int x, int y) => ((x - (crop?.X ?? 0)) * scale, (y - (crop?.Y ?? 0)) * scale);
+        void Put((int, MouseAction, int, (bool, bool)) key, (double X, double Y) at)
         {
-            var r = (int)Math.Round(MouseOverlay.Radius(h));
-            var (x, y) = ((m.X - (crop?.X ?? 0)) * scale, (m.Y - (crop?.Y ?? 0)) * scale);
-            var side = m.IsWheel ? default : MouseOverlay.PicSide(x, y, r, w, h);
-            var key = (r, m.Action, phase, side);
-            if (!blocks.TryGetValue(key, out var block)) blocks[key] = block = Render(r, m.Action, phase, side);
-            KeyOverlay.Blend(bgra, w, h, block.Pixels, block.Size, block.Size, (int)Math.Round(x) - block.Size / 2, (int)Math.Round(y) - block.Size / 2);
+            if (!blocks.TryGetValue(key, out var block)) blocks[key] = block = Render(key);
+            KeyOverlay.Blend(bgra, w, h, block.Pixels, block.Size, block.Size, (int)Math.Round(at.X) - block.Size / 2, (int)Math.Round(at.Y) - block.Size / 2);
+        }
+        foreach (var s in MouseOverlay.Visible(marks, time))
+        {
+            var center = Map(s.Mark.X, s.Mark.Y);
+            if (s.Phase is { } phase) Put((r, s.Mark.Action, phase, default), center); // ホイールもここ(段階は 0)
+            if (s.Mark.IsWheel) continue;
+            var pic = Map(s.PicX, s.PicY);
+            Put((r, s.Mark.Action, -1, MouseOverlay.PicSide(pic.Item1, pic.Item2, r, w, h)), pic);
         }
     }
 
-    static Block Render(int r, MouseAction action, int phase, (bool, bool) side)
+    static Block Render((int R, MouseAction Action, int Phase, (bool, bool) Side) key)
     {
+        var (r, action, phase, side) = key;
         var size = 2 * ((int)Math.Ceiling(r * (MouseOverlay.PicOffset + MouseOverlay.PicHeight)) + 2); // 押した所を中心に、マウスの絵と線の太さまで入る大きさ
-        var visual = new DrawingVisual();
-        using (var dc = visual.RenderOpen()) MouseOverlayDrawing.Draw(dc, new Point(size / 2.0, size / 2.0), r, action, phase, side);
+        var (visual, c) = (new DrawingVisual(), new Point(size / 2.0, size / 2.0));
+        using (var dc = visual.RenderOpen())
+            if (MouseOverlay.IsWheel(action)) MouseOverlayDrawing.Wheel(dc, c, r, action);
+            else if (phase < 0) MouseOverlayDrawing.Mouse(dc, c, r, action, side);
+            else MouseOverlayDrawing.Ring(dc, c, r, action, phase);
         var target = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
         target.Render(visual);
         var pixels = new byte[size * size * 4];
@@ -137,7 +157,7 @@ sealed class MouseBurner(IReadOnlyList<MouseMark> marks)
 sealed class MouseOverlayView : FrameworkElement
 {
     IReadOnlyList<MouseMark> marks = [];
-    IReadOnlyList<(MouseMark, int)> shown = [];
+    IReadOnlyList<MouseShown> shown = [];
 
     public MouseOverlayView() => IsHitTestVisible = false;
 
@@ -170,12 +190,10 @@ sealed class MouseOverlayView : FrameworkElement
     public Rect Area { get; set; }
 
     /// <summary>今出しているもの(テスト用)。</summary>
-    internal IReadOnlyList<(MouseMark Mark, int Phase)> Shown => shown;
+    internal IReadOnlyList<MouseShown> Shown => shown;
 
     protected override void OnRender(DrawingContext dc)
     {
-        foreach (var (m, phase) in shown)
-            MouseOverlayDrawing.Draw(dc, new Point(m.X, m.Y), Radius, m.Action, phase,
-                MouseOverlay.PicSide(m.X - Area.X, m.Y - Area.Y, Radius, Area.Width, Area.Height));
+        foreach (var s in shown) MouseOverlayDrawing.Draw(dc, s, Radius, Area);
     }
 }

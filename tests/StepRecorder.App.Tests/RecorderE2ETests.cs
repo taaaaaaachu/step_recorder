@@ -267,6 +267,31 @@ public sealed class RecorderE2ETests : IDisposable
     }
 
     [E2EFact]
+    public void 録画中に押したまま動かした位置を_離すまで残す()
+    {
+        target = Launch(SampleExe);
+        var main = target.MainWindowHandle;
+        var engine = new RecorderEngine(new AppTarget(target), dir, new Settings { DefaultMode = RecordMode.Video });
+        engine.Start();
+        Wait(800);
+        var frame = Native.FrameBounds(main);
+        var box = Find(main, "nameBox").Current.BoundingRectangle;
+        var (x, y) = ((int)box.X + 5, (int)(box.Y + box.Height / 2));
+        Drag(main, x, y, x + 100, y);
+        Wait(300);
+        Click(main, x, y); // ただのクリックはドラッグにしない
+        Wait(500);
+
+        var mouse = Stop(engine).Mouse!;
+        Assert.Equal(2, mouse.Count);
+        var drag = mouse[0].Drag!;
+        Assert.True(drag.Count >= 2, $"動かした位置が {drag.Count} 個");
+        Assert.Equal((x + 100 - frame.Left, y - frame.Top), (drag[^1].X, drag[^1].Y)); // 最後は離した所
+        Assert.True(drag[0].Time > mouse[0].Time && drag[^1].Time - mouse[0].Time < TimeSpan.FromSeconds(1));
+        Assert.Null(mouse[1].Drag);
+    }
+
+    [E2EFact]
     public void 録画ボタンの動画で押したキーはそのステップに残す()
     {
         target = Launch(SampleExe);

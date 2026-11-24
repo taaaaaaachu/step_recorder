@@ -116,7 +116,7 @@ public sealed class EditorSmokeTests : IDisposable
         var scroll = (ScrollPattern)Find(editor, "Scroller").GetCurrentPattern(ScrollPattern.Pattern);
         var (h0, v0) = (scroll.Current.HorizontalScrollPercent, scroll.Current.VerticalScrollPercent);
         var (cx, cy) = ((int)(r.X + r.Width / 2), (int)(r.Y + r.Height / 2));
-        MiddleDrag(editor, cx, cy, cx - 200, cy - 150);
+        Drag(editor, cx, cy, cx - 200, cy - 150, middle: true);
         Wait(300);
         Assert.True(scroll.Current.HorizontalScrollPercent > h0 && scroll.Current.VerticalScrollPercent > v0,
             $"ドラッグで動かない: ({h0:0.#}, {v0:0.#}) → ({scroll.Current.HorizontalScrollPercent:0.#}, {scroll.Current.VerticalScrollPercent:0.#})");

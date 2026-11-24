@@ -154,20 +154,20 @@ static class Desktop
     /// <summary>カーソルを (x, y) へ動かす(クリックはしない)。</summary>
     public static void MoveCursor(int x, int y) => SetCursor(x, y);
 
-    /// <summary>ホイールボタン(中ボタン)を押したまま (x1, y1) から (x2, y2) へドラッグする。</summary>
-    public static void MiddleDrag(nint hwnd, int x1, int y1, int x2, int y2)
+    /// <summary>左ボタン(middle なら中ボタン)を押したまま (x1, y1) から (x2, y2) へドラッグする。動きは実際のマウスと同じく入力として送る(フックに届く)。</summary>
+    public static void Drag(nint hwnd, int x1, int y1, int x2, int y2, bool middle = false)
     {
         var pt = new Native.POINT { X = x1, Y = y1 };
         if (Native.ProcessId(Native.WindowFromPoint(pt)) != Native.ProcessId(hwnd))
             throw new InvalidOperationException("ドラッグ位置に別のウィンドウが重なっているので中止した");
         SetCursor(x1, y1);
-        Send(Mouse(0x0020)); // MIDDLEDOWN
+        Send(Mouse(middle ? 0x0020u : 0x0002u)); // MIDDLEDOWN / LEFTDOWN
         for (var i = 1; i <= 10; i++)
         {
-            SetCursor(x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10);
+            Send(MoveTo(x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10));
             Wait(20);
         }
-        Send(Mouse(0x0040)); // MIDDLEUP
+        Send(Mouse(middle ? 0x0040u : 0x0004u)); // MIDDLEUP / LEFTUP
     }
 
     /// <summary>(x, y) で Ctrl を押しながらホイールを回す。notches が正なら奥へ。</summary>
@@ -229,6 +229,13 @@ static class Desktop
         SetCursorPos(x, y);
     }
     static INPUT Mouse(uint flags) => new() { type = 0, u = new() { mi = new() { dwFlags = flags } } };
+
+    // 仮想画面全体を 0〜65535 にした位置への移動(MOVE | ABSOLUTE | VIRTUALDESK)
+    static INPUT MoveTo(int x, int y)
+    {
+        var (vx, vy, vw, vh) = (GetSystemMetrics(76), GetSystemMetrics(77), GetSystemMetrics(78), GetSystemMetrics(79));
+        return new() { type = 0, u = new() { mi = new() { dx = (int)Math.Round((x - vx) * 65535.0 / (vw - 1)), dy = (int)Math.Round((y - vy) * 65535.0 / (vh - 1)), dwFlags = 0x0001 | 0x8000 | 0x4000 } } };
+    }
     static INPUT Key(ushort vk, uint flags = 0) => new() { type = 1, u = new() { ki = new() { wVk = vk, dwFlags = flags } } };
     static INPUT Char(char c, uint flags) => new() { type = 1, u = new() { ki = new() { wScan = c, dwFlags = UNICODE | flags } } };
 
@@ -239,6 +246,7 @@ static class Desktop
 
     [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
     [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(nint value);
 }

@@ -37,6 +37,13 @@ sealed class RecorderEngine
     (AutomationElement? Element, bool Password) passwordField; // 1 打鍵ごとに UI Automation に問い合わせないよう、欄ごとに覚える
     nint lastTargetRoot;
     readonly Timer flushTimer;
+    (MouseStroke Stroke, VideoRecorder Recorder)? held; // ボタンを押している間の、押したときの操作と、それを残した動画
+
+    // フックスレッド専用。ボタンを押している間の動きを、DragInterval ごとにワーカーへ送る
+    bool holding;
+    long lastDragSent;
+    static readonly TimeSpan DragInterval = TimeSpan.FromSeconds(1.0 / 60);
+    const int DragThreshold = 4; // これより動かなければドラッグにしない(押したときの手ぶれ)
 
     // 動画(ワーカー専用)。clip はホットキーで録っている途中の動画のステップ、full は録画モードの全編
     (VideoRecorder Recorder, Step Step)? clip;
@@ -222,6 +229,18 @@ sealed class RecorderEngine
 
     nint MouseProc(int n, nint w, nint l)
     {
+        if (n >= 0 && holding && (int)w is WM_MOUSEMOVE or WM_LBUTTONUP or WM_RBUTTONUP or WM_MBUTTONUP)
+        {
+            var up = (int)w != WM_MOUSEMOVE;
+            if (up) holding = false;
+            var now = Stopwatch.GetTimestamp();
+            if (!Paused && (up || Stopwatch.GetElapsedTime(lastDragSent, now) >= DragInterval))
+            {
+                lastDragSent = now;
+                var pt = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(l).pt;
+                Enqueue(() => RecordDrag(pt, now, up));
+            }
+        }
         if (n >= 0 && !Paused && (int)w is WM_LBUTTONDOWN or WM_RBUTTONDOWN or WM_MBUTTONDOWN or WM_MOUSEWHEEL or WM_MOUSEHWHEEL or WM_XBUTTONDOWN)
         {
             var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(l);
@@ -254,10 +273,11 @@ sealed class RecorderEngine
                         };
                         var ev = new ClickEvent(DateTimeOffset.Now, new(info.pt.X, info.pt.Y), button);
                         var mode = Mode;
+                        holding = true;
                         Enqueue(() =>
                         {
                             Flush();
-                            RecordMouse(info.pt, action, pressed);
+                            held = RecordMouse(info.pt, action, pressed);
                             if (mode != RecordMode.Manual) OnClick(root, ev, pressed);
                         });
                         break;
@@ -363,14 +383,29 @@ sealed class RecorderEngine
         keys.Add(new KeyStroke(at < TimeSpan.Zero ? TimeSpan.Zero : at, text, label.IsChar));
     }
 
-    /// <summary>録画している間のクリック・ホイールを、動画に重ねるために動画上の時刻と位置と一緒に残す(残し先はキーと同じ)。動画の外は残さない。</summary>
-    void RecordMouse(POINT point, MouseAction action, long pressed)
+    /// <summary>
+    /// 録画している間のクリック・ホイールを、動画に重ねるために動画上の時刻と位置と一緒に残す(残し先はキーと同じ)。動画の外は残さない。
+    /// 残したら、その操作と動画を返す。
+    /// </summary>
+    (MouseStroke, VideoRecorder)? RecordMouse(POINT point, MouseAction action, long pressed)
     {
         var recorder = clip?.Recorder ?? full;
-        if (recorder?.ToVideo(point) is not { } p) return;
+        if (recorder?.ToVideo(point) is not { } p) return null;
         var at = recorder.CurrentTime - Stopwatch.GetElapsedTime(pressed);
         var list = clip is var (_, step) ? step.Mouse ??= [] : rec.Session.Mouse ??= [];
-        list.Add(new MouseStroke(at < TimeSpan.Zero ? TimeSpan.Zero : at, p.X, p.Y, action));
+        var stroke = new MouseStroke(at < TimeSpan.Zero ? TimeSpan.Zero : at, p.X, p.Y, action);
+        list.Add(stroke);
+        return (stroke, recorder);
+    }
+
+    /// <summary>ボタンを押したまま動かした位置を、押したときの操作に足す(up なら離した位置)。少ししか動かしていなければ足さない。動画の外は足さない。</summary>
+    void RecordDrag(POINT point, long at, bool up)
+    {
+        if (held is not var (stroke, recorder)) return;
+        if (up) held = null;
+        if (recorder != (clip?.Recorder ?? full) || recorder.ToVideo(point) is not { } p) return; // 押したときの動画をもう録っていない
+        if (stroke.Drag == null && (up || Math.Abs(p.X - stroke.X) <= DragThreshold && Math.Abs(p.Y - stroke.Y) <= DragThreshold)) return;
+        (stroke.Drag ??= []).Add(new MousePoint(recorder.CurrentTime - Stopwatch.GetElapsedTime(at), p.X, p.Y));
     }
 
     /// <summary>入力中の欄の値を読み、入力操作として記録する。同じ欄への続きの入力は Recording が1つにまとめる。</summary>

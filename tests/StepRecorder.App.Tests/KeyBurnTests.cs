@@ -132,6 +132,26 @@ public sealed class KeyBurnTests : IDisposable
     }
 
     [DesktopFact]
+    public void ドラッグ中のマウスの絵は動いた所に焼き込む()
+    {
+        var clip = Path.Combine(dir, "drag.mp4");
+        VideoClips.ExportClip(dir, new Step { VideoFile = "white.mp4" }, ClipFormat.Mp4, clip, null, [],
+            [new(TimeSpan.FromSeconds(0.5), 100, 100, MouseAction.Left) { Drag = [new(TimeSpan.FromSeconds(0.7), 400, 200), new(TimeSpan.FromSeconds(1.8), 400, 200)] }]);
+        var frame = VideoClips.Frame(clip, TimeSpan.FromSeconds(1.5)); // 輪は消え、絵は動いた所にある
+        if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } outDir) WindowCapture.SavePng(frame, Path.Combine(outDir, "mouse-drag.png"));
+        var r = MouseOverlay.Radius(H);
+        var px = VideoE2ETests.Bgr24(frame);
+        // 絵の左ボタン(左クリックなので赤)の中ほど
+        bool Red(double x, double y)
+        {
+            var i = ((int)(y + r * (MouseOverlay.PicOffset + MouseOverlay.PicHeight * 0.25)) * frame.PixelWidth + (int)(x + r * (MouseOverlay.PicOffset + MouseOverlay.PicWidth * 0.25))) * 3;
+            return px[i + 2] - px[i + 1] > 60 && px[i + 2] - px[i] > 60;
+        }
+        Assert.True(Red(400, 200), "動いた所に絵が無い");
+        Assert.False(Red(100, 100), "押した所に絵が残っている");
+    }
+
+    [DesktopFact]
     public void 戻る進むボタンは_マウスの絵の胴に向きの矢印を描く()
     {
         var clip = Path.Combine(dir, "side.mp4");

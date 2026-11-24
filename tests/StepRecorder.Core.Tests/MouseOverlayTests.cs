@@ -46,6 +46,28 @@ public class MouseOverlayTests
         Assert.Empty(MouseOverlay.Visible(marks, S(1.6)));
     }
 
+    static MouseStroke Dragged(params (double At, int X, int Y)[] path) =>
+        new(S(1), 10, 20, MouseAction.Left) { Drag = path.Select(p => new MousePoint(S(p.At), p.X, p.Y)).ToList() };
+
+    [Fact]
+    public void ドラッグ中はマウスの絵が動いた所についていき_輪は押した所で消え_離すまで出す()
+    {
+        var marks = MouseOverlay.Marks([Dragged((1.2, 50, 20), (1.5, 90, 40), (2, 120, 60))]);
+        Assert.Equal(S(2), Assert.Single(marks).End);
+        Assert.Equal(new MouseShown(marks[0], 1, 10, 20), Assert.Single(MouseOverlay.Visible(marks, S(1.1)))); // 動かす前は押した所
+        Assert.Equal(new MouseShown(marks[0], 3, 50, 20), Assert.Single(MouseOverlay.Visible(marks, S(1.3))));
+        Assert.Equal(new MouseShown(marks[0], null, 90, 40), Assert.Single(MouseOverlay.Visible(marks, S(1.7)))); // 輪は消え、絵だけ
+        Assert.Empty(MouseOverlay.Visible(marks, S(2)));
+    }
+
+    [Fact]
+    public void 輪が消える前に離したドラッグは_輪が消えるまで出す()
+    {
+        var mark = Assert.Single(MouseOverlay.Marks([Dragged((1.1, 50, 20), (1.2, 60, 20))]));
+        Assert.Equal(S(1.6), mark.End);
+        Assert.Equal((60, 20), mark.PicAt(S(1.5)));
+    }
+
     [Fact]
     public void ステップに重ねるのは区間の中だけで_キーとは別に出さない設定にできる()
     {
@@ -75,6 +97,18 @@ public class MouseOverlayTests
         Assert.Contains("\"wheelRight\"", json);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(json, "\"hideMouse\""));
     }
+
+    [Fact]
+    public void ドラッグの位置は読み書きでき_ドラッグしていなければ書かない()
+    {
+        var session = new Session { VideoFile = "video.mp4", Mouse = [Dragged((1.5, 90, 40)), M(3, MouseAction.Left)] };
+        var json = JsonSerializer.Serialize(session, SessionStore.Options);
+        var back = SessionStore.Clone(session);
+
+        Assert.Equal([new MousePoint(S(1.5), 90, 40)], back.Mouse![0].Drag);
+        Assert.Null(back.Mouse[1].Drag);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(json, "\"drag\""));
+    }
 }
 
 public class MouseOverlayHtmlTests
@@ -95,6 +129,16 @@ public class MouseOverlayHtmlTests
         Assert.StartsWith("<div class=\"clip-wrap\">", clip);
         Assert.EndsWith("<canvas class=\"mouse\"></canvas></div>", clip); // キーが無ければキーの欄は無し
         Assert.DoesNotContain("PHASES", html);
+        Assert.DoesNotContain("RIPPLE", html);
+    }
+
+    [Fact]
+    public void ドラッグは秒と位置を並べて渡す()
+    {
+        var s = WithMouse();
+        s.Mouse![0].Drag = [new(TimeSpan.FromSeconds(2.5), 320, 210), new(TimeSpan.FromSeconds(3), 340, 220)];
+        var clip = Export.ToHtml(s, GroupMode.Sequence).Split('\n').Single(l => l.Contains("<video"));
+        Assert.Contains("data-mouse=\"[[2,3,300,200,1,[2.5,320,210,3,340,220]]]\"", clip); // 離すまで出す
     }
 
     [Fact]
