@@ -18,7 +18,7 @@
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
                 <Button Content="↑" Click="Up_Click" ToolTip="上へ (Alt+↑)"/>
                 <Button Content="↓" Click="Down_Click" ToolTip="下へ (Alt+↓)"/>
-                <Button Content="削除" Click="DeleteStep_Click" ToolTip="一覧を選んでいるときは Delete"/>
+                <Button Content="削除" Click="DeleteStep_Click" ToolTip="削除 (Delete)"/>
             </StackPanel>
             <ListBox x:Name="Steps" SelectionChanged="Steps_SelectionChanged" HorizontalContentAlignment="Stretch"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -66,26 +66,24 @@
                         Click="Undo_Click" AutomationProperties.Name="元に戻す" ToolTip="元に戻す (Ctrl+Z)" IsEnabled="False"/>
                 <Button x:Name="RedoButton" Content="&#xE7A6;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" MinWidth="36" VerticalAlignment="Stretch"
                         Click="Redo_Click" AutomationProperties.Name="やり直す" ToolTip="やり直す (Ctrl+Y)" IsEnabled="False"/>
-                <Button x:Name="SaveButton" Content="保存" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Stretch" Padding="10,3" Margin="0,0,6,0" ToolTip="Ctrl+S"/>
+                <Button x:Name="SaveButton" Content="保存" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Stretch" Padding="10,3" Margin="0,0,6,0" ToolTip="保存 (Ctrl+S)"/>
                 <Button Content="HTMLを開く" Click="OpenHtml_Click"/>
                 <Button Content="フォルダを開く" Click="OpenFolder_Click"/>
                 <!-- 本体はフォルダに書き出す。右の矢印で、HTML 1 ファイルなどの書き出し方を選ぶ -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,6,0">
-                    <Button Content="配布用に書き出す..." Click="ExportFolder_Click" Margin="0" AutomationProperties.AutomationId="ExportButton"
-                            ToolTip="HTML と、使っている画像・動画を選んだフォルダに書き出します(あとから編集はできません)"/>
+                    <Button Content="配布用に書き出す..." Click="ExportFolder_Click" Margin="0" AutomationProperties.AutomationId="ExportButton"/>
                     <Button x:Name="ExportMenuButton" Click="ExportMenuButton_Click" Margin="1,0,0,0" Padding="6,3"
-                            AutomationProperties.AutomationId="ExportMenuButton" AutomationProperties.Name="ほかの書き出し方" ToolTip="ほかの書き出し方">
+                            AutomationProperties.AutomationId="ExportMenuButton" AutomationProperties.Name="ほかの書き出し方">
                         <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" VerticalAlignment="Center"/>
                         <Button.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="フォルダに書き出す..." Click="ExportFolder_Click" ToolTip="HTML と、使っている画像・動画を選んだフォルダに書き出します"/>
-                                <MenuItem Header="HTML 1 ファイルに書き出す..." Click="ExportSingle_Click"
-                                          ToolTip="画像と動画を HTML の中に埋め込みます。1 ファイルで渡せますが、大きくなります(動画が長いと開くのも重くなります)"/>
+                                <MenuItem Header="フォルダに書き出す..." Click="ExportFolder_Click"/>
+                                <MenuItem Header="HTML 1 ファイルに書き出す..." Click="ExportSingle_Click"/>
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
                 </StackPanel>
-                <ComboBox x:Name="ClipFormatBox" MinWidth="90" VerticalContentAlignment="Center" ToolTip="配布用に書き出すときの動画の形式"
+                <ComboBox x:Name="ClipFormatBox" MinWidth="90" VerticalContentAlignment="Center" ToolTip="動画形式"
                           SelectionChanged="ClipFormat_SelectionChanged">
                     <ComboBoxItem Content="MP4"/>
                     <ComboBoxItem Content="GIF"/>
@@ -108,22 +106,20 @@
                 <RadioButton x:Name="ToolSelect" Content="選択・移動" IsChecked="True"/>
                 <RadioButton x:Name="ToolAdd" Content="強調枠を追加"/>
                 <RadioButton x:Name="ToolCrop" Content="トリミング"/>
-                <Button Content="選択した枠を削除" Click="DeleteHighlight_Click" ToolTip="Delete"/>
+                <Button Content="選択した枠を削除" Click="DeleteHighlight_Click" ToolTip="選択した枠を削除 (Delete)"/>
                 <Button Content="トリミング解除" Click="ClearCrop_Click"/>
                 <Button x:Name="PlayButton" Content="▶ 再生" Click="Play_Click" Visibility="Collapsed"/>
                 <ComboBox x:Name="SpeedBox" MinWidth="110" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" SelectionChanged="Speed_SelectionChanged"
-                          AutomationProperties.Name="再生の速さ" ToolTip="この動画のステップの最初の速さ。HTML では見る人が変えられます。mp4 自体は等速のままです(GIF は焼き込み)"/>
-                <CheckBox x:Name="KeysBox" Content="キー表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Click="Keys_Click"
-                          ToolTip="録画中に押したキーを動画に重ねます。配布用に書き出す動画(MP4・GIF)には焼き込み、HTML では再生に合わせて重ねます"/>
-                <CheckBox x:Name="MouseBox" Content="マウス表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Click="Mouse_Click"
-                          ToolTip="録画中のクリック(押したボタンを塗ったマウスの絵と輪)とホイール(向きの矢印)を動画に重ねます。書き出しでの扱いはキー表示と同じです"/>
+                          AutomationProperties.Name="再生の速さ"/>
+                <CheckBox x:Name="KeysBox" Content="キー表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Click="Keys_Click"/>
+                <CheckBox x:Name="MouseBox" Content="マウス表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Click="Mouse_Click"/>
                 <Separator Margin="6,2,12,2"/>
                 <Button Content="−" Click="ZoomOut_Click" ToolTip="縮小 (Ctrl+ホイール / Ctrl+-)" MinWidth="30"/>
                 <TextBlock x:Name="ZoomLabel" AutomationProperties.AutomationId="ZoomLabel" Text="100%" MinWidth="44" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <Button Content="+" Click="ZoomIn_Click" ToolTip="拡大 (Ctrl+ホイール / Ctrl++)" MinWidth="30"/>
-                <Button Content="100%" Click="ZoomActual_Click" ToolTip="Ctrl+0"/>
-                <Button Content="全体" Click="ZoomFit_Click" ToolTip="画像全体が収まる大きさにする"/>
-                <Button x:Name="PopOutButton" Content="別ウインドウで表示" Click="PopOut_Click" ToolTip="表示欄だけを別のウインドウに出します(閉じると戻ります)"/>
+                <Button Content="100%" Click="ZoomActual_Click" ToolTip="等倍 (Ctrl+0)"/>
+                <Button Content="全体" Click="ZoomFit_Click"/>
+                <Button x:Name="PopOutButton" Content="別ウインドウで表示" Click="PopOut_Click"/>
             </WrapPanel>
 
             <!-- TickFrequency が大きいのは、Ticks が空のとき WPF が 1 秒おきに目盛りを描かないようにするため -->
@@ -135,7 +131,7 @@
                                   SizeChanged="TimeScroller_SizeChanged" PreviewMouseWheel="TimeScroller_PreviewMouseWheel">
                         <Slider x:Name="TimeSlider" AutomationProperties.AutomationId="TimeSlider" IsMoveToPointEnabled="True" TickPlacement="BottomRight" TickFrequency="1E9"
                                 Margin="0,0,0,12" SmallChange="0.1" LargeChange="1" ValueChanged="TimeSlider_ValueChanged" Thumb.DragCompleted="TimeSlider_DragCompleted" PreviewKeyDown="TimeSlider_PreviewKeyDown"
-                                ToolTip="目盛りはステップを撮った時刻。←→ でコマ送り、Ctrl+ホイールで拡大、ホイールで横に移動"/>
+                                ToolTip="←→ でコマ送り、Ctrl+ホイールで拡大、ホイールで横に移動"/>
                     </ScrollViewer>
                     <DockPanel Margin="0,6,0,0">
                         <!-- 読み上げ名は画像のズームのボタンと区別するため -->
@@ -143,12 +139,12 @@
                             <TextBlock x:Name="TimeLabel" Text="0:00.0" MinWidth="48" TextAlignment="Right" VerticalAlignment="Center" Margin="16,0,8,0"/>
                             <Button Content="−" MinWidth="30" Click="TimeZoomOut_Click" AutomationProperties.Name="タイムラインを縮小" ToolTip="タイムラインを縮小 (Ctrl+ホイール)"/>
                             <Button Content="+" MinWidth="30" Click="TimeZoomIn_Click" AutomationProperties.Name="タイムラインを拡大" ToolTip="タイムラインを拡大 (Ctrl+ホイール)"/>
-                            <Button Content="全体" Margin="0" Click="TimeZoomFit_Click" AutomationProperties.Name="タイムライン全体" ToolTip="全編が収まる幅に戻す"/>
+                            <Button Content="全体" Margin="0" Click="TimeZoomFit_Click" AutomationProperties.Name="タイムライン全体"/>
                         </StackPanel>
                         <!-- 幅が足りないときは折り返す -->
                         <WrapPanel>
                             <Button x:Name="FullPlayButton" Content="&#xF5B0;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" MinWidth="36" VerticalAlignment="Stretch" Click="FullPlay_Click"
-                                    AutomationProperties.Name="再生" ToolTip="再生"/>
+                                    AutomationProperties.Name="再生"/>
                             <Button Content="このフレームをステップに追加" Click="AddFrame_Click"/>
                             <Button Content="区間の開始" Margin="14,0,6,0" Click="RangeStart_Click"/>
                             <Button Content="区間の終了" Click="RangeEnd_Click"/>
@@ -164,7 +160,7 @@
                 <StackPanel>
                     <Slider x:Name="ClipSlider" AutomationProperties.AutomationId="ClipSlider" IsMoveToPointEnabled="True" IsSelectionRangeEnabled="True"
                             SmallChange="0.1" LargeChange="1" ValueChanged="ClipSlider_ValueChanged" PreviewKeyDown="ClipSlider_PreviewKeyDown"
-                            ToolTip="塗った所が使う区間。←→ でコマ送り"/>
+                            ToolTip="←→ でコマ送り"/>
                     <DockPanel Margin="0,6,0,0">
                         <TextBlock x:Name="ClipTimeLabel" DockPanel.Dock="Right" Text="0:00.0" MinWidth="48" TextAlignment="Right" VerticalAlignment="Center" Margin="16,0,0,0"/>
                         <WrapPanel>

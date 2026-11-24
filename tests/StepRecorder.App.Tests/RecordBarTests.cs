@@ -351,28 +351,6 @@ public sealed class RecordBarTests : IDisposable
             Assert.Equal(0, NotBlue(new CroppedBitmap(reader.Frame(t), area)));
     }
 
-    [DesktopFact]
-    public void モニターを録るときはツールチップを出さない()
-    {
-        Exception? error = null;
-        var sta = new Thread(() =>
-        {
-            try
-            {
-                var settings = new Settings();
-                // 表示しないので、フックもホットキーも録画も始まらない
-                var hidden = new RecordBar(new RecorderEngine(new MonitorTarget(Monitors.All()[0]), dir, settings), settings, dir);
-                Assert.Null(hidden.PinButton.ToolTip);
-                Assert.Null(hidden.ClipButton.ToolTip);
-            }
-            catch (Exception e) { error = e; }
-        });
-        sta.SetApartmentState(ApartmentState.STA);
-        sta.Start();
-        sta.Join();
-        Assert.Null(error);
-    }
-
     [E2EFact]
     public void マウスを乗せると出て_離すと引っ込み_中のボタンを押せる()
     {

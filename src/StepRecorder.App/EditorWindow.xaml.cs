@@ -44,7 +44,6 @@ public partial class EditorWindow : Window
     public EditorWindow(Session session, string dir, GroupMode mode)
     {
         InitializeComponent();
-        (KeysBox.Tag, MouseBox.Tag) = (KeysBox.ToolTip, MouseBox.ToolTip); // 記録が無いときの説明から戻すため
         Player.Ended += Player_Ended;
         Player.Failed += Player_Failed;
         // Slider はクリックを自分で処理済みにしてフォーカスを取らないので、処理済みでも受け取ってフォーカスを移す(押したらそのまま ←→ でコマ送り)
@@ -464,8 +463,8 @@ public partial class EditorWindow : Window
     void ShowOverlayBoxes(Step s)
     {
         loading = true;
-        SetBox(KeysBox, KeyOverlay.Recorded(session, s).Count > 0, s.HideKeys, "この動画の間に押したキーの記録がありません");
-        SetBox(MouseBox, MouseOverlay.Recorded(session, s).Count > 0, s.HideMouse, "この動画の間のクリック・ホイールの記録がありません");
+        SetBox(KeysBox, KeyOverlay.Recorded(session, s).Count > 0, s.HideKeys, "キー操作の記録がありません");
+        SetBox(MouseBox, MouseOverlay.Recorded(session, s).Count > 0, s.HideMouse, "マウス操作の記録がありません");
         loading = false;
     }
 
@@ -475,7 +474,7 @@ public partial class EditorWindow : Window
         box.IsChecked = recorded && !hidden;
         box.IsEnabled = recorded;
         ToolTipService.SetShowOnDisabled(box, true);
-        box.ToolTip = recorded ? box.Tag : none;
+        box.ToolTip = recorded ? null : none;
     }
 
     void Keys_Click(object sender, RoutedEventArgs e) => SetOverlay(s => s.HideKeys = KeysBox.IsChecked != true);
@@ -596,8 +595,8 @@ public partial class EditorWindow : Window
         Player.Visibility = Visibility.Visible;
         KeysBox.Visibility = MouseBox.Visibility = Visibility.Visible;
         loading = true;
-        SetBox(KeysBox, session.Keys is { Count: > 0 }, fullHideKeys, "録画中に押したキーの記録がありません");
-        SetBox(MouseBox, session.Mouse is { Count: > 0 }, fullHideMouse, "録画中のクリック・ホイールの記録がありません");
+        SetBox(KeysBox, session.Keys is { Count: > 0 }, fullHideKeys, "キー操作の記録がありません");
+        SetBox(MouseBox, session.Mouse is { Count: > 0 }, fullHideMouse, "マウス操作の記録がありません");
         loading = false;
         ShowFullOverlays();
         if (fit) FitZoom();
@@ -626,10 +625,8 @@ public partial class EditorWindow : Window
         fullPlaying = playing;
         if (playing) { Player.Play(); StartPlayTimer(); }
         else if (videoView) Player.Pause();
-        var name = playing ? "一時停止" : "再生";
         FullPlayButton.Content = playing ? "\uF8AE" : "\uF5B0"; // 塗りつぶしの一時停止・再生
-        System.Windows.Automation.AutomationProperties.SetName(FullPlayButton, name);
-        FullPlayButton.ToolTip = name;
+        System.Windows.Automation.AutomationProperties.SetName(FullPlayButton, playing ? "一時停止" : "再生");
     }
 
     /// <summary>タイムラインの目盛り(ステップを撮った時刻)を付け直す。</summary>

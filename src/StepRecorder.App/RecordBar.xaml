@@ -82,15 +82,14 @@
             </StackPanel>
         </Border>
         <Button x:Name="CaptureButton" Style="{StaticResource BarButton}" Tag="&#xE722;" Content="撮影" Click="Capture_Click"/>
-        <Button x:Name="ClipButton" Style="{StaticResource BarButton}" Tag="&#xE7C8;" BorderBrush="#FFFF5050" Content="録画" Click="Clip_Click"
-                ToolTip="押してから操作し、もう一度押すと動画のステップになります"/>
+        <Button x:Name="ClipButton" Style="{StaticResource BarButton}" Tag="&#xE7C8;" BorderBrush="#FFFF5050" Content="録画" Click="Clip_Click"/>
         <Button x:Name="PauseButton" Style="{StaticResource BarButton}" Tag="&#xE769;" Content="一時停止" Click="Pause_Click"/>
         <Button Style="{StaticResource StopButton}" Tag="&#xE71A;" Content="停止" Click="Stop_Click"/>
         <Border Background="#FF333333" CornerRadius="9" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center">
             <TextBlock x:Name="Count" Text="0 枚" Foreground="#FFD0D0D0" MinWidth="32" TextAlignment="Center"/>
         </Border>
         <!-- ピン。アイコンは Windows 同梱のフォントの線画(11 は Segoe Fluent Icons、10 は Segoe MDL2 Assets)。外すと E718、留めると針が真下を向いたピン。E840 はどちらのフォントでも針が左下 45 度なので、-45 度回す(E718 は 10 では横向きなので回しても揃わない) -->
-        <ToggleButton x:Name="PinButton" Margin="4,0,0,0" Checked="Pin_Changed" Unchecked="Pin_Changed" ToolTip="バーを引っ込めない"
+        <ToggleButton x:Name="PinButton" Margin="4,0,0,0" Checked="Pin_Changed" Unchecked="Pin_Changed"
                       AutomationProperties.AutomationId="PinButton" AutomationProperties.Name="バーを引っ込めない">
             <ToggleButton.Style>
                 <Style TargetType="ToggleButton">

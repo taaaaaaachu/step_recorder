@@ -64,7 +64,6 @@ public partial class RecordBar : Window
             State.Text = "● 記録中(録画)";
         }
         recordingLabel = State.Text;
-        if (engine.CapturesScreen) ClipButton.ToolTip = PinButton.ToolTip = null; // ツールチップは別のウィンドウなので録画に写ってしまう
         var area = SystemParameters.WorkArea;
         Left = area.Left + (area.Width - Width) / 2;
         Top = area.Top; // タブが画面の端にくっつくように

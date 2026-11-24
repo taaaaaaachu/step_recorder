@@ -32,16 +32,14 @@
             </Grid.RowDefinitions>
 
             <Label Content="対象"/>
-            <ComboBox x:Name="Targets" Grid.Column="1" Margin="0,3" DisplayMemberPath="Label" SelectionChanged="Targets_SelectionChanged" DropDownOpened="Targets_DropDownOpened"
-                      ToolTip="画面を選ぶと、そのモニターに見えているものを丸ごと記録します(他のアプリや通知も写ります)。アプリを選ぶと、そのアプリのウィンドウだけを記録します"/>
+            <ComboBox x:Name="Targets" Grid.Column="1" Margin="0,3" DisplayMemberPath="Label" SelectionChanged="Targets_SelectionChanged" DropDownOpened="Targets_DropDownOpened"/>
             <Button Grid.Column="2" Content="更新" Click="Refresh_Click"/>
 
             <Label Grid.Row="1" Content="撮影モード"/>
             <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center">
                 <RadioButton x:Name="ModeClick" Content="クリックごと" Margin="0,0,12,0"/>
                 <RadioButton x:Name="ModeManual" Content="手動" Margin="0,0,12,0"/>
-                <RadioButton x:Name="ModeRecord" Content="録画"
-                             ToolTip="クリックごとに撮りつつ、記録の最初から最後までを動画に録ります。編集画面で好きな時刻のフレームや区間をステップとして足せます"/>
+                <RadioButton x:Name="ModeRecord" Content="録画"/>
             </StackPanel>
 
             <Label Grid.Row="2" Content="出力先"/>
@@ -55,8 +53,7 @@
             <Label Grid.Row="5" Content="停止キー"/>
             <TextBox x:Name="HkStop" Grid.Row="5" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
             <Label Grid.Row="6" Content="録画キー"/>
-            <TextBox x:Name="HkClip" Grid.Row="6" Grid.Column="1" Style="{StaticResource HotkeyBox}"
-                     ToolTip="押してから操作し、もう一度押すと、その間の動画が1つのステップになります。録画モードでは使いません"/>
+            <TextBox x:Name="HkClip" Grid.Row="6" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
 
             <Label Grid.Row="7" Content="同じ画面の扱い"/>
             <ComboBox x:Name="Group" Grid.Row="7" Grid.Column="1" Margin="0,3" SelectedIndex="0">
