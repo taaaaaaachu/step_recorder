@@ -237,7 +237,7 @@ sealed class VideoRecorder
         source.SampleRequested += (_, e) =>
         {
             // 次のフレーム(音)を渡す。無くなったら null を返して終わらせる
-            var isSound = e.Request.StreamDescriptor == sound;
+            var isSound = ReferenceEquals(e.Request.StreamDescriptor, sound); // 同じストリームか
             if (!(isSound ? nextSound!.MoveNext() : nextFrame.MoveNext())) { e.Request.Sample = null; return; }
             var (data, time) = isSound ? nextSound!.Current : nextFrame.Current;
             var sample = MediaStreamSample.CreateFromBuffer(data.AsBuffer(), time);
@@ -312,7 +312,9 @@ sealed class VideoRecorder
             pool = Direct3D11CaptureFramePool.CreateFreeThreaded(gpu.WinRT, PixelFormat, 2, poolSize);
             session = pool.CreateCaptureSession(item);
             session.IsCursorCaptureEnabled = cursor;
-            try { session.IsBorderRequired = false; } catch (Exception) { } // 録画中の黄色い枠。消せない環境もある
+            // 録画中の黄色い枠。Windows 10 2004 では消せない(Windows 11 などで使える)。使えるはずのバージョンでも消せない環境がある
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348))
+                try { session.IsBorderRequired = false; } catch (Exception) { }
             session.StartCapture();
         }
 
