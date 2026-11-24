@@ -42,30 +42,30 @@
                 <RadioButton x:Name="ModeRecord" Content="録画"/>
             </StackPanel>
 
-            <Label Grid.Row="2" Content="出力先"/>
-            <TextBox x:Name="OutputDir" Grid.Row="2" Grid.Column="1"/>
-            <Button Grid.Row="2" Grid.Column="2" Content="参照" Click="Browse_Click"/>
+            <Label Grid.Row="2" Content="フレームレート"/>
+            <ComboBox x:Name="Fps" Grid.Row="2" Grid.Column="1" Margin="0,3" HorizontalAlignment="Left" MinWidth="110" AutomationProperties.Name="フレームレート"/>
 
-            <Label Grid.Row="3" Content="手動撮影キー"/>
-            <TextBox x:Name="HkCapture" Grid.Row="3" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
-            <Label Grid.Row="4" Content="一時停止キー"/>
-            <TextBox x:Name="HkPause" Grid.Row="4" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
-            <Label Grid.Row="5" Content="停止キー"/>
-            <TextBox x:Name="HkStop" Grid.Row="5" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
-            <Label Grid.Row="6" Content="録画キー"/>
-            <TextBox x:Name="HkClip" Grid.Row="6" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
+            <Label Grid.Row="3" Content="出力先"/>
+            <TextBox x:Name="OutputDir" Grid.Row="3" Grid.Column="1"/>
+            <Button Grid.Row="3" Grid.Column="2" Content="参照" Click="Browse_Click"/>
 
-            <Label Grid.Row="7" Content="同じ画面の扱い"/>
-            <ComboBox x:Name="Group" Grid.Row="7" Grid.Column="1" Margin="0,3" SelectedIndex="0">
+            <Label Grid.Row="4" Content="手動撮影キー"/>
+            <TextBox x:Name="HkCapture" Grid.Row="4" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
+            <Label Grid.Row="5" Content="一時停止キー"/>
+            <TextBox x:Name="HkPause" Grid.Row="5" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
+            <Label Grid.Row="6" Content="停止キー"/>
+            <TextBox x:Name="HkStop" Grid.Row="6" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
+            <Label Grid.Row="7" Content="録画キー"/>
+            <TextBox x:Name="HkClip" Grid.Row="7" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>
+
+            <Label Grid.Row="8" Content="同じ画面の扱い"/>
+            <ComboBox x:Name="Group" Grid.Row="8" Grid.Column="1" Margin="0,3" SelectedIndex="0">
                 <ComboBoxItem Content="手順モード(撮った順に並べる)"/>
                 <ComboBoxItem Content="画面一覧モード(画面ごとにまとめる)"/>
             </ComboBox>
 
-            <Label Grid.Row="8" Content="マウスカーソル"/>
-            <CheckBox x:Name="CaptureCursor" Grid.Row="8" Grid.Column="1" Content="スクリーンショットと動画に写す" VerticalAlignment="Center"/>
-
-            <Label Grid.Row="9" Content="フレームレート"/>
-            <ComboBox x:Name="Fps" Grid.Row="9" Grid.Column="1" Margin="0,3" HorizontalAlignment="Left" MinWidth="110" AutomationProperties.Name="フレームレート"/>
+            <Label Grid.Row="9" Content="マウスカーソル"/>
+            <CheckBox x:Name="CaptureCursor" Grid.Row="9" Grid.Column="1" Content="スクリーンショットと動画に写す" VerticalAlignment="Center"/>
 
             <Label Grid.Row="10" Content="自動更新"/>
             <DockPanel Grid.Row="10" Grid.Column="1">

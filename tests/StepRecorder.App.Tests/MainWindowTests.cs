@@ -63,3 +63,20 @@ public sealed class MainWindowTests : IDisposable
             m.ModuleName.Equals("comctl32.dll", StringComparison.OrdinalIgnoreCase) && m.FileVersionInfo.FileMajorPart >= 6);
     }
 }
+
+/// <summary>開始画面の並び。入力は送らない。</summary>
+public sealed class MainWindowLayoutTests
+{
+    [DesktopFact]
+    public void フレームレートは撮影モードのすぐ下にある()
+    {
+        var app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"));
+        try
+        {
+            double Top(string id) => Find(app.MainWindowHandle, id).Current.BoundingRectangle.Top;
+            Assert.True(Top("ModeRecord") < Top("Fps"));
+            Assert.True(Top("Fps") < Top("OutputDir"));
+        }
+        finally { app.Kill(); app.WaitForExit(5000); }
+    }
+}
