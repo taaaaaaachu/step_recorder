@@ -63,6 +63,7 @@ public sealed class VideoE2ETests : IDisposable
         {
             WindowCapture.SavePng(before, Path.Combine(outDir, "frame-before.png"));
             WindowCapture.SavePng(after, Path.Combine(outDir, "frame-after.png"));
+            WindowCapture.SavePng(still.Image, Path.Combine(outDir, "still-after.png"));
         }
 
         // 録画の最後のフレームは、静止画のうちメインウィンドウの範囲とほぼ同じ(上下逆さま・ずれ・ダイアログ抜けが無い)
@@ -70,6 +71,19 @@ public sealed class VideoE2ETests : IDisposable
         var (ox, oy) = (frame.Left - still.Bounds.Left, frame.Top - still.Bounds.Top);
         Assert.True(MeanDiff(after, still.Image, ox, oy) < 6, $"静止画と違う: {MeanDiff(after, still.Image, ox, oy):0.0}");
         Assert.True(MeanDiff(before, still.Image, ox, oy) > MeanDiff(after, still.Image, ox, oy) + 2, "ダイアログが写っていない");
+
+        // Windows 11 の角の丸みの外(透明)が、動画で黒い四角にならない。静止画では縁の線(PrintWindow が黒のまま残す)が黒くならない
+        var d = WindowCapture.AppWindows(main, new AppProcesses(Native.ProcessId(main))).Last(w => w.Hwnd != main).Rect;
+        static byte Darkest(Color c) => Math.Min(c.R, Math.Min(c.G, c.B));
+        foreach (var (x, y) in new[] { (d.Left, d.Top), (d.Right - 1, d.Top), (d.Left, d.Bottom - 1), (d.Right - 1, d.Bottom - 1) })
+        {
+            // 角の外には後ろのウィンドウが見える。後ろがボタンの縁などの濃い色のこともあるので、黒(直す前は 0〜20)でないことだけを見る
+            var now = ColorAt(after, x - frame.Left, y - frame.Top);
+            Assert.True(Math.Max(now.R, Math.Max(now.G, now.B)) > 60, $"動画のダイアログの角 ({x},{y}) が黒い: {now}");
+        }
+        var (mx, my) = ((d.Left + d.Right) / 2, (d.Top + d.Bottom) / 2);
+        foreach (var (x, y) in new[] { (d.Left, my), (d.Right - 1, my), (mx, d.Bottom - 1), (frame.Left, my), (frame.Right - 1, my) })
+            Assert.True(Darkest(ColorAt(still.Image, x - still.Bounds.Left, y - still.Bounds.Top)) > 100, $"静止画の縁 ({x},{y}) が黒い");
     }
 
     [E2EFact]

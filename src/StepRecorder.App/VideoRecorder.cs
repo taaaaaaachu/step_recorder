@@ -32,8 +32,8 @@ sealed class VideoRecorder
 {
     const DirectXPixelFormat PixelFormat = DirectXPixelFormat.B8G8R8A8UIntNormalized;
 
-    /// <summary>何を録るか。Origin が動画に当たるスクリーン上の範囲で、そこへ Items(奥から順)を重ねる。</summary>
-    sealed record Input(Func<RECT> Origin, Func<List<(nint Handle, RECT Rect)>> Items, Func<nint, GraphicsCaptureItem> CreateItem);
+    /// <summary>何を録るか。Origin が動画に当たるスクリーン上の範囲で、そこへ Items(奥から順)を重ねる。Blend なら透明度を見て重ねる(ウィンドウ)。</summary>
+    sealed record Input(Func<RECT> Origin, Func<List<(nint Handle, RECT Rect)>> Items, Func<nint, GraphicsCaptureItem> CreateItem, bool Blend);
 
     readonly Input input;
     readonly bool cursor;
@@ -100,12 +100,12 @@ sealed class VideoRecorder
             if (IsWindow(current)) origin = FrameBounds(current); // 閉じられて代わりも無ければ、最後の位置のまま
             return origin;
         }
-        return new(new(Origin, Items, CreateWindowItem), path, cursor, paused ?? (() => false), app.Pid, fps);
+        return new(new(Origin, Items, CreateWindowItem, true), path, cursor, paused ?? (() => false), app.Pid, fps);
     }
 
     /// <summary>モニターに見えているものを丸ごと path に録画し始める。paused は Start と同じ。</summary>
     public static VideoRecorder StartMonitor(nint monitor, RECT bounds, string path, bool cursor, Func<bool>? paused = null, int fps = FrameRate.Default) =>
-        new(new(() => bounds, () => [(monitor, bounds)], CreateMonitorItem), path, cursor, paused ?? (() => false), null, fps);
+        new(new(() => bounds, () => [(monitor, bounds)], CreateMonitorItem, false), path, cursor, paused ?? (() => false), null, fps);
 
     /// <summary>スクリーン上の点の、動画上の位置。動画の外なら null。</summary>
     public PixelPoint? ToVideo(POINT p)
@@ -177,7 +177,7 @@ sealed class VideoRecorder
                     origin = at;
                     Array.Fill(canvas, (byte)0xFF); // ウィンドウ同士の隙間は白
                     foreach (var (h, r) in items)
-                        if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - at.Left, r.Top - at.Top);
+                        if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - at.Left, r.Top - at.Top, input.Blend);
                     if (Resting()) continue; // 合成している間に止められたら、その絵は使わない
                     var frame = (Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / fps));
                     while (!frames.TryAdd(frame, 100))
@@ -324,15 +324,21 @@ sealed class VideoRecorder
 
         /// <summary>
         /// 最新のフレームを、合成先(上の行から並んだ BGRA)の (x, y) に描く。まだ1枚も届いていなければ何もしない。
+        /// blend なら透明度を見て重ねる(そのまま写すと、Windows 11 のウィンドウの角の外が黒い四角になる)。
         /// </summary>
-        public void DrawTo(byte[] canvas, int cw, int ch, int x, int y)
+        public void DrawTo(byte[] canvas, int cw, int ch, int x, int y, bool blend)
         {
             Update();
             var from = Math.Max(0, -x);
             var count = Math.Min(w, cw - x) - from;
             if (count <= 0) return;
             for (var row = Math.Max(0, -y); row < h && y + row < ch; row++)
-                Buffer.BlockCopy(pixels, (row * w + from) * 4, canvas, ((y + row) * cw + x + from) * 4, count * 4);
+            {
+                var src = pixels.AsSpan((row * w + from) * 4, count * 4);
+                var dst = canvas.AsSpan(((y + row) * cw + x + from) * 4, count * 4);
+                if (blend) Alpha.Over(src, dst);
+                else src.CopyTo(dst);
+            }
         }
 
         /// <summary>最初のフレームが届いたか。</summary>

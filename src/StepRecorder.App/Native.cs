@@ -80,6 +80,7 @@ static class Native
     [DllImport("user32.dll")] public static extern bool GetIconInfo(nint icon, out ICONINFO info);
     [DllImport("user32.dll")] public static extern bool DrawIconEx(nint hdc, int x, int y, nint icon, int cx, int cy, uint step, nint brush, uint flags);
     [DllImport("user32.dll")] public static extern bool PrintWindow(nint hwnd, nint hdc, uint flags);
+    [DllImport("gdi32.dll")] public static extern uint GetPixel(nint hdc, int x, int y);
     [DllImport("user32.dll")] public static extern nint GetDC(nint hwnd);
     [DllImport("user32.dll")] public static extern int ReleaseDC(nint hwnd, nint hdc);
     [DllImport("gdi32.dll")] public static extern nint CreateCompatibleDC(nint hdc);

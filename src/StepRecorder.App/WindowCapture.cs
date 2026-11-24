@@ -110,6 +110,28 @@ static class WindowCapture
         return windows;
     }
 
+    /// <summary>
+    /// PrintWindow は Windows 11 のウィンドウの縁の線(DWM が描く 1px)を黒のまま残すので、
+    /// 左・右の縁の下半分と、下の縁が真っ黒なら、その線は写さずに下にあるものを残す(左右の縁の上の方はタイトルバーの色で描かれる)。
+    /// dc は wr(ウィンドウの矩形)を描いたもの。
+    /// </summary>
+    static RECT WithoutBlackEdges(nint dc, RECT visible, RECT wr)
+    {
+        bool Black(int x, int y, int dx, int dy, int n)
+        {
+            for (var i = 0; i < n; i++)
+                if ((GetPixel(dc, x + i * dx - wr.Left, y + i * dy - wr.Top) & 0xFFFFFF) != 0) return false;
+            return true;
+        }
+        var v = visible;
+        if (v.Width < 3 || v.Height < 3) return v;
+        var (half, rows) = (v.Top + v.Height / 2, v.Height - v.Height / 2);
+        if (Black(v.Left, half, 0, 1, rows)) v.Left++;
+        if (Black(v.Right - 1, half, 0, 1, rows)) v.Right--;
+        if (Black(v.Left, v.Bottom - 1, 1, 0, v.Width)) v.Bottom--;
+        return v;
+    }
+
     /// <summary>hwnd を描き、見えている範囲 visible だけを合成先に写す。</summary>
     static void Draw(nint hwnd, RECT visible, RECT u, nint dst, nint screen)
     {
@@ -121,6 +143,7 @@ static class WindowCapture
         {
             if (!PrintWindow(hwnd, dc, PW_RENDERFULLCONTENT))
                 BitBlt(dc, 0, 0, wr.Width, wr.Height, screen, wr.Left, wr.Top, SRCCOPY); // 描けないウィンドウは画面から
+            else visible = WithoutBlackEdges(dc, visible, wr);
             BitBlt(dst, visible.Left - u.Left, visible.Top - u.Top, visible.Width, visible.Height,
                 dc, visible.Left - wr.Left, visible.Top - wr.Top, SRCCOPY);
         }
