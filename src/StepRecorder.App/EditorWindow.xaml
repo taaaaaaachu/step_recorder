@@ -170,7 +170,7 @@
                         <WrapPanel>
                             <Button Content="開始位置" Click="ClipStart_Click"/>
                             <Button Content="終了位置" Click="ClipEnd_Click"/>
-                            <Button Content="分割" Margin="14,0,6,0" Click="ClipSplit_Click" ToolTip="この位置で2つの動画のステップに分けます。録画中の操作も前後に分けて説明を作り直します"/>
+                            <Button Content="分割" Margin="14,0,6,0" Click="ClipSplit_Click"/>
                             <TextBlock x:Name="ClipRangeLabel" VerticalAlignment="Center" Foreground="#555"/>
                         </WrapPanel>
                     </DockPanel>
