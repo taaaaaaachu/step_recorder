@@ -18,10 +18,10 @@ public sealed class VideoViewTests : IDisposable
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
-    /// <summary>左半分は純赤、右半分は何枚目かを明るさにしたグレー。</summary>
-    async Task<string> MakeVideo()
+    /// <summary>左半分は純赤、右半分は何枚目かを明るさにしたグレー。sound なら音(無音)も入れる。音のある動画は音を時計にして再生する。</summary>
+    async Task<string> MakeVideo(bool sound)
     {
-        var path = Path.Combine(dir, "view.mp4");
+        var path = Path.Combine(dir, sound ? "view-sound.mp4" : "view.mp4");
         await VideoRecorder.Encode(path, W, H, Enumerable.Range(0, Frames).Select(i =>
         {
             var px = new byte[W * H * 4];
@@ -31,14 +31,16 @@ public sealed class VideoViewTests : IDisposable
                 px.AsSpan((y * W + W / 2) * 4, W / 2 * 4).Fill((byte)(240 - i * 6));
             }
             return (Nv12.FromBgra(px, W, H), TimeSpan.FromSeconds(i / 15.0));
-        }));
+        }), sound ? Enumerable.Range(0, Frames * 10 / 15).Select(i => (new byte[AudioRecorder.Rate / 10 * AudioRecorder.BlockAlign], TimeSpan.FromSeconds(i / 10.0))) : null);
         return path;
     }
 
-    [DesktopFact]
-    public async Task シークと再生で正しい色のフレームを出し_閉じるとファイルを離す()
+    [DesktopTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task シークと再生で正しい色のフレームを出し_閉じるとファイルを離す(bool sound)
     {
-        var path = await MakeVideo();
+        var path = await MakeVideo(sound);
         OnSta(() =>
         {
             var view = new VideoView();
@@ -57,7 +59,12 @@ public sealed class VideoViewTests : IDisposable
             Assert.True(PumpUntil(() => Math.Abs(Pixels(view).Gray - (240 - 5 * 6)) <= 3), "戻ったフレームが出ない");
 
             view.Play();
-            PumpUntil(() => false, 500);
+            var seen = new List<double>();
+            PumpUntil(() => { seen.Add(view.Position.TotalSeconds); return false; }, 500);
+            Assert.Equal(sound, view.FollowsAudio); // 音があれば、音の再生位置を時計にしている
+            // 位置は細かく進む(音の再生位置の更新が粗いと、映像がコマ飛びする)
+            var steps = seen.Zip(seen.Skip(1), (x, y) => y - x).Where(d => d > 0).ToList();
+            Assert.True(steps.Max() < 0.15, $"位置が {steps.Max():0.000} 秒飛んだ: {string.Join(" ", seen.Select(x => x.ToString("0.000")))}");
             view.Pause();
             var paused = view.Position;
             Assert.InRange(paused.TotalSeconds, 0.7, 1.3);
@@ -75,10 +82,12 @@ public sealed class VideoViewTests : IDisposable
         });
     }
 
-    [DesktopFact]
-    public async Task 速さを変えて再生し_区間の終わりを越えない()
+    [DesktopTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task 速さを変えて再生し_区間の終わりを越えない(bool sound)
     {
-        var path = await MakeVideo();
+        var path = await MakeVideo(sound);
         OnSta(() =>
         {
             var view = new VideoView();

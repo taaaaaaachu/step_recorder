@@ -6,14 +6,15 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Windows.Media.Core;
 using MediaPlayer = Windows.Media.Playback.MediaPlayer;
+using MediaPlaybackState = Windows.Media.Playback.MediaPlaybackState;
 
 namespace StepRecorder.App;
 
 /// <summary>
-/// 動画(音声なし)の表示と再生。書き出しと同じ方法で復号した画像を出す。
+/// 動画の表示と再生。書き出しと同じ方法で復号した画像を出す。
 /// MediaElement は明るさの範囲をドライバーに伝えないので、NVIDIA の既定の設定では 16〜235 のまま出て眠い色になる。
-/// 音は同じファイルを MediaPlayer で鳴らし、再生・一時停止・シーク・速さを映像の時計に合わせる。
-/// ponytail: 音は映像と別の時計で進む。長く再生してずれが気になるなら、一定の間隔で位置を合わせ直す
+/// 音のある動画は、同じファイルを MediaPlayer で鳴らし、再生中はその再生位置を映像の時刻にする(音を時計にするので、長く再生してもずれない)。
+/// 音の無い動画は Stopwatch を時計にする。
 /// </summary>
 sealed class VideoView : Image
 {
@@ -24,7 +25,10 @@ sealed class VideoView : Image
         public readonly AutoResetEvent Wake = new(true);
         public long Target = start.Ticks;
         public volatile bool Closed;
+        public volatile bool HasAudio;
     }
+
+    static readonly TimeSpan Settle = TimeSpan.FromSeconds(0.5); // 音の再生位置が飛んだ先からこれ以上離れていれば、まだ反映されていない
 
     readonly DispatcherTimer timer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(30) };
     readonly Stopwatch clock = new();
@@ -36,6 +40,10 @@ sealed class VideoView : Image
     double speed = 1;
     bool playing, muted;
     MediaPlayer? sound;
+    bool soundSettled; // 再生を始めた・飛んだあと、音の再生位置がそこに追いついたか。追いつくまでは飛んだ所で待つ
+
+    /// <summary>今、音の再生位置を時計にしているか。</summary>
+    internal bool FollowsAudio => clock.IsRunning && sound != null && soundSettled;
 
     /// <summary>音を消す。</summary>
     public bool Muted
@@ -64,7 +72,7 @@ sealed class VideoView : Image
     {
         get
         {
-            var at = origin + clock.Elapsed * speed;
+            var at = SoundPosition() ?? origin + clock.Elapsed * speed;
             return duration is { } end && at > end ? end : at;
         }
         set
@@ -72,9 +80,22 @@ sealed class VideoView : Image
             origin = value;
             if (clock.IsRunning) clock.Restart();
             else clock.Reset();
-            if (clock.IsRunning && sound != null) sound.PlaybackSession.Position = value;
+            if (clock.IsRunning && sound != null)
+            {
+                soundSettled = false;
+                sound.PlaybackSession.Position = value;
+            }
             Request(value);
         }
+    }
+
+    /// <summary>再生中の、音の再生位置。音が無い・止まっているなら null。鳴り始めるまで・飛んだ先が反映されるまでは飛んだ所。</summary>
+    TimeSpan? SoundPosition()
+    {
+        if (!clock.IsRunning || sound?.PlaybackSession is not { } session) return null;
+        var at = session.Position;
+        if (!soundSettled && session.PlaybackState == MediaPlaybackState.Playing && (at - origin).Duration() < Settle) soundSettled = true;
+        return soundSettled ? at : origin;
     }
 
     /// <summary>
@@ -89,8 +110,6 @@ sealed class VideoView : Image
         this.speed = speed;
         var opened = playback = new Playback(path, at);
         new Thread(() => DecodeLoop(opened)) { IsBackground = true, Name = "video-view" }.Start();
-        sound = new MediaPlayer { AutoPlay = false, IsMuted = muted, Source = MediaSource.CreateFromUri(new Uri(path)) };
-        sound.CommandManager.IsEnabled = false; // Windows のメディアの操作(音量を変えたときに出る表示など)に出さない
     }
 
     public void Play()
@@ -104,11 +123,12 @@ sealed class VideoView : Image
     public void Pause()
     {
         if (!playing) return;
+        var at = Position; // 音を止める前に読む
         playing = false;
         timer.Stop();
         sound?.Pause();
-        Position = Position; // 時計を止めた所のフレームにする
         clock.Reset();
+        Position = at; // 止めた所のフレームにする
     }
 
     public void Close()
@@ -153,6 +173,7 @@ sealed class VideoView : Image
         try
         {
             using var reader = VideoClips.Reader.Open(p.Path);
+            p.HasAudio = VideoClips.Reader.HasAudio(p.Path);
             var bgra = new byte[reader.Width * reader.Height * 4];
             while (true)
             {
@@ -183,6 +204,11 @@ sealed class VideoView : Image
         bitmap.WritePixels(new Int32Rect(0, 0, width, height), bgra, width * 4, 0);
         if (duration != null) return;
         duration = stopAt is { } end && end < length ? end : length;
+        if (p.HasAudio)
+        {
+            sound = new MediaPlayer { AutoPlay = false, IsMuted = muted, Source = MediaSource.CreateFromUri(new Uri(p.Path)) };
+            sound.CommandManager.IsEnabled = false; // Windows のメディアの操作(音量を変えたときに出る表示など)に出さない
+        }
         if (playing) StartClock();
     }
 
@@ -190,6 +216,7 @@ sealed class VideoView : Image
     {
         clock.Start();
         if (sound == null) return;
+        soundSettled = false;
         sound.PlaybackSession.PlaybackRate = speed;
         sound.PlaybackSession.Position = Position;
         sound.Play();

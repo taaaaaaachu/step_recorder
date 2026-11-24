@@ -28,6 +28,16 @@ public sealed class DesktopFactAttribute : FactAttribute
     }
 }
 
+/// <summary>DesktopFact の Theory 版。</summary>
+public sealed class DesktopTheoryAttribute : TheoryAttribute
+{
+    public DesktopTheoryAttribute()
+    {
+        if (!Desktop.InputAllowed && Environment.GetEnvironmentVariable("STEP_RECORDER_DESKTOP") != "1")
+            Skip = "STEP_RECORDER_DESKTOP=1 で有効になる(実行中はウィンドウが開く。入力は送らない)";
+    }
+}
+
 /// <summary>E2E テスト用のデスクトップ操作。入力は対象が前面・最上位にあると確かめてから送る(他のアプリに入力しないため)。</summary>
 static class Desktop
 {
