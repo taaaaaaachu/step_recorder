@@ -118,7 +118,7 @@ public partial class EditorWindow : Window
         LeaveVideoView();
         StopClip();
         ShowClipBar(s);
-        PlayButton.Visibility = SpeedBox.Visibility = KeysBox.Visibility = MouseBox.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
+        PlayButton.Visibility = SpeedBox.Visibility = KeysBox.Visibility = MouseBox.Visibility = AudioBox.Visibility = s?.VideoFile != null ? Visibility.Visible : Visibility.Collapsed;
         if (s?.VideoFile != null) ShowOverlayBoxes(s);
         ToolAdd.IsEnabled = s?.VideoFile == null; // 動画には強調枠を付けない
         if (s?.VideoFile != null && ToolAdd.IsChecked == true) ToolSelect.IsChecked = true;
@@ -452,6 +452,7 @@ public partial class EditorWindow : Window
         if (videoView) ShowStep(s); // 全編を見ていたら、そのステップの表示に戻してから
         clipSeeking = false; // シークバーで開いていたものは開き直す
         Player.Open(FullPath(video), s.VideoStart ?? TimeSpan.Zero, s.VideoEnd, s.Speed);
+        Player.Muted = s.HideAudio;
         Player.Visibility = Visibility.Visible;
         Player.Play();
         clipPlaying = true;
@@ -465,6 +466,7 @@ public partial class EditorWindow : Window
         loading = true;
         SetBox(KeysBox, KeyOverlay.Recorded(session, s).Count > 0, s.HideKeys, "キー操作の記録がありません");
         SetBox(MouseBox, MouseOverlay.Recorded(session, s).Count > 0, s.HideMouse, "マウス操作の記録がありません");
+        SetBox(AudioBox, HasAudio(s.VideoFile!), s.HideAudio, "音声の記録がありません");
         loading = false;
     }
 
@@ -481,21 +483,39 @@ public partial class EditorWindow : Window
 
     void Mouse_Click(object sender, RoutedEventArgs e) => SetOverlay(s => s.HideMouse = MouseBox.IsChecked != true);
 
+    void Audio_Click(object sender, RoutedEventArgs e) => SetOverlay(s => s.HideAudio = AudioBox.IsChecked != true);
+
+    readonly Dictionary<string, bool> audioFiles = [];
+
+    /// <summary>動画(記録フォルダからの相対パス)に音が入っているか。ステップを選ぶたびに見るので覚えておく。</summary>
+    bool HasAudio(string video)
+    {
+        if (!audioFiles.TryGetValue(video, out var has))
+        {
+            try { has = VideoClips.HasAudio(FullPath(video)); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or SharpGen.Runtime.SharpGenException) { has = false; } // 消された動画。再生しようとしたときに知らせる
+            audioFiles[video] = has;
+        }
+        return has;
+    }
+
     // 全編の表示での、キー表示・マウス表示のチェック。見え方だけを変え(保存しない)、そこから切り出した区間のステップの初期値になる
-    bool fullHideKeys, fullHideMouse;
+    bool fullHideKeys, fullHideMouse, fullHideAudio;
 
     void SetOverlay(Action<Step> change)
     {
         if (loading) return;
         if (videoView)
         {
-            (fullHideKeys, fullHideMouse) = (KeysBox.IsChecked != true, MouseBox.IsChecked != true);
+            (fullHideKeys, fullHideMouse, fullHideAudio) = (KeysBox.IsChecked != true, MouseBox.IsChecked != true, AudioBox.IsChecked != true);
+            Player.Muted = fullHideAudio;
             ShowFullOverlays();
             return;
         }
         if (Current is not { VideoFile: not null } s) return;
         Checkpoint();
         change(s);
+        Player.Muted = s.HideAudio;
         if (clipPlaying) ShowOverlays(KeyOverlay.StrokesFor(session, s), MouseOverlay.StrokesFor(session, s), s.Crop);
     }
 
@@ -593,10 +613,12 @@ public partial class EditorWindow : Window
         SetStageSize(fullSize.Width, fullSize.Height);
         Player.Open(FullPath(session.VideoFile!), SliderTime); // 開くだけ。シークバーの位置で止まっている
         Player.Visibility = Visibility.Visible;
-        KeysBox.Visibility = MouseBox.Visibility = Visibility.Visible;
+        KeysBox.Visibility = MouseBox.Visibility = AudioBox.Visibility = Visibility.Visible;
         loading = true;
         SetBox(KeysBox, session.Keys is { Count: > 0 }, fullHideKeys, "キー操作の記録がありません");
         SetBox(MouseBox, session.Mouse is { Count: > 0 }, fullHideMouse, "マウス操作の記録がありません");
+        SetBox(AudioBox, HasAudio(session.VideoFile!), fullHideAudio, "音声の記録がありません");
+        Player.Muted = fullHideAudio;
         loading = false;
         ShowFullOverlays();
         if (fit) FitZoom();
@@ -741,7 +763,7 @@ public partial class EditorWindow : Window
             return;
         }
         InsertFromVideo(CaptureTrigger.Video, VideoClips.Frame(FullPath(session.VideoFile!), start), start,
-            st => (st.VideoFile, st.VideoStart, st.VideoEnd, st.HideKeys, st.HideMouse) = (session.VideoFile, start, end, fullHideKeys, fullHideMouse));
+            st => (st.VideoFile, st.VideoStart, st.VideoEnd, st.HideKeys, st.HideMouse, st.HideAudio) = (session.VideoFile, start, end, fullHideKeys, fullHideMouse, fullHideAudio));
         (rangeStart, rangeEnd) = (null, null);
         RangeLabel.Text = "";
     }

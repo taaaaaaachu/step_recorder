@@ -423,6 +423,46 @@ public sealed class EditorSmokeTests : IDisposable
         }
     }
 
+    /// <summary>音の入った動画のステップは「音声」を外せて、保存・元に戻すの対象になる。音の無い動画では押せない。再生はしない(音を鳴らさない)。</summary>
+    [DesktopFact]
+    public async Task 動画のステップの音声はONOFFでき_音が無ければ押せない()
+    {
+        Directory.CreateDirectory(Path.Combine(dir, "videos"));
+        var nv12 = Nv12.FromBgra(new byte[160 * 120 * 4], 160, 120);
+        var frames = Enumerable.Range(0, 15).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))).ToList();
+        await VideoRecorder.Encode(Path.Combine(dir, "videos", "0001.mp4"), 160, 120, frames,
+            Enumerable.Range(0, 10).Select(i => (new byte[AudioRecorder.Rate / 10 * AudioRecorder.BlockAlign], TimeSpan.FromSeconds(i / 10.0))));
+        await VideoRecorder.Encode(Path.Combine(dir, "videos", "0002.mp4"), 160, 120, frames);
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
+        foreach (var video in new[] { "videos/0001.mp4", "videos/0002.mp4" })
+        {
+            WindowCapture.SavePng(Solid(160, 120, Colors.Gray), Path.Combine(dir, rec.NextImageFile));
+            rec.AddStep(CaptureTrigger.Video, new("画面", "W", "Demo"), rec.NextImageFile, 160, 120, DateTimeOffset.Now).VideoFile = video;
+        }
+        SessionStore.Save(rec.Session, dir);
+
+        app = Open(Path.Combine(AppContext.BaseDirectory, "StepRecorder.exe"), $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        var box = Find(editor, "AudioBox");
+        var toggle = (TogglePattern)box.GetCurrentPattern(TogglePattern.Pattern);
+        void Press(string name)
+        {
+            ((InvokePattern)Find(editor, new PropertyCondition(AutomationElement.NameProperty, name)).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            Wait(500);
+        }
+        Assert.True(box.Current.IsEnabled);
+        Assert.Equal(ToggleState.On, toggle.Current.ToggleState); // 初期値は使う
+        toggle.Toggle();
+        Wait(300);
+        Press("保存");
+        Assert.True(SessionStore.Load(dir).Steps[0].HideAudio);
+        Press("元に戻す");
+        Assert.Equal(ToggleState.On, toggle.Current.ToggleState);
+
+        ((SelectionItemPattern)Find(editor, "Steps").FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))[1].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        Assert.True(Until(() => !box.Current.IsEnabled), "音の無い動画でも押せる");
+    }
+
     /// <summary>録画モードの記録を開くと、全編の動画からフレームと区間をステップに足せる。配布用にも書き出せる。</summary>
     [E2EFact]
     public void 録画モードの記録では全編からフレームと区間を足せる()

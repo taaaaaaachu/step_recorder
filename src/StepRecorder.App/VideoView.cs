@@ -4,12 +4,16 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Windows.Media.Core;
+using MediaPlayer = Windows.Media.Playback.MediaPlayer;
 
 namespace StepRecorder.App;
 
 /// <summary>
 /// 動画(音声なし)の表示と再生。書き出しと同じ方法で復号した画像を出す。
 /// MediaElement は明るさの範囲をドライバーに伝えないので、NVIDIA の既定の設定では 16〜235 のまま出て眠い色になる。
+/// 音は同じファイルを MediaPlayer で鳴らし、再生・一時停止・シーク・速さを映像の時計に合わせる。
+/// ponytail: 音は映像と別の時計で進む。長く再生してずれが気になるなら、一定の間隔で位置を合わせ直す
 /// </summary>
 sealed class VideoView : Image
 {
@@ -30,7 +34,19 @@ sealed class VideoView : Image
     TimeSpan? duration; // 再生を終える時刻(区間の終わりか、動画の終わり)。最初のフレームが出るまで null
     TimeSpan? stopAt;
     double speed = 1;
-    bool playing;
+    bool playing, muted;
+    MediaPlayer? sound;
+
+    /// <summary>音を消す。</summary>
+    public bool Muted
+    {
+        get => muted;
+        set
+        {
+            muted = value;
+            if (sound != null) sound.IsMuted = value;
+        }
+    }
 
     /// <summary>最後(区間の終わりを指定していればそこ)まで再生した。</summary>
     public event Action? Ended;
@@ -56,6 +72,7 @@ sealed class VideoView : Image
             origin = value;
             if (clock.IsRunning) clock.Restart();
             else clock.Reset();
+            if (clock.IsRunning && sound != null) sound.PlaybackSession.Position = value;
             Request(value);
         }
     }
@@ -72,13 +89,15 @@ sealed class VideoView : Image
         this.speed = speed;
         var opened = playback = new Playback(path, at);
         new Thread(() => DecodeLoop(opened)) { IsBackground = true, Name = "video-view" }.Start();
+        sound = new MediaPlayer { AutoPlay = false, IsMuted = muted, Source = MediaSource.CreateFromUri(new Uri(path)) };
+        sound.CommandManager.IsEnabled = false; // Windows のメディアの操作(音量を変えたときに出る表示など)に出さない
     }
 
     public void Play()
     {
         if (playback == null) return;
         playing = true;
-        if (duration != null) clock.Start(); // 開いている途中なら、最初のフレームが出てから進める
+        if (duration != null) StartClock(); // 開いている途中なら、最初のフレームが出てから進める
         timer.Start();
     }
 
@@ -87,6 +106,7 @@ sealed class VideoView : Image
         if (!playing) return;
         playing = false;
         timer.Stop();
+        sound?.Pause();
         Position = Position; // 時計を止めた所のフレームにする
         clock.Reset();
     }
@@ -99,6 +119,8 @@ sealed class VideoView : Image
             p.Wake.Set();
         }
         playback = null;
+        sound?.Dispose();
+        sound = null;
         playing = false;
         timer.Stop();
         clock.Reset();
@@ -161,6 +183,15 @@ sealed class VideoView : Image
         bitmap.WritePixels(new Int32Rect(0, 0, width, height), bgra, width * 4, 0);
         if (duration != null) return;
         duration = stopAt is { } end && end < length ? end : length;
-        if (playing) clock.Start();
+        if (playing) StartClock();
+    }
+
+    void StartClock()
+    {
+        clock.Start();
+        if (sound == null) return;
+        sound.PlaybackSession.PlaybackRate = speed;
+        sound.PlaybackSession.Position = Position;
+        sound.Play();
     }
 }

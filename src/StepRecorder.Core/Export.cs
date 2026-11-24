@@ -339,7 +339,7 @@ public static class Export
             $" data-mouse=\"{H(Json(marks.Select(m => new object[] { Sec(m.Start), Sec(m.End), m.X, m.Y, (int)m.Action })))}\" data-mouse-area=\"{c.X} {c.Y} {c.Width} {c.Height}\" data-mouse-radius=\"{Number(MouseOverlay.Radius(c.Height))}\"";
         var wrap = chips.Count > 0 || marks.Count > 0;
         if (wrap) sb.Append("<div class=\"clip-wrap\">");
-        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{src(ClipSource(st))}\" poster=\"{src(st.ImageFile)}\" width=\"{c.Width}\"{range}{keys}{mouse}{style}></video>");
+        sb.Append($"<video class=\"clip\" controls preload=\"metadata\" src=\"{src(ClipSource(st))}\" poster=\"{src(st.ImageFile)}\" width=\"{c.Width}\"{(st.HideAudio ? " muted" : "")}{range}{keys}{mouse}{style}></video>"); // 音を使わないなら消音で始める
         if (marks.Count > 0) sb.Append("<canvas class=\"mouse\"></canvas>");
         if (chips.Count > 0) sb.Append("<div class=\"keys\"></div>");
         sb.Append(wrap ? "</div>\n" : "\n");

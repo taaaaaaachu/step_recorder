@@ -156,4 +156,15 @@ public class KeyOverlayHtmlTests
         }
         finally { Directory.Delete(dir, true); }
     }
+
+    [Fact]
+    public void 音を使わないステップの動画は消音で始め_設定は読み書きでき_使うときは書かない()
+    {
+        var s = WithKeys();
+        Assert.DoesNotContain(" muted", Export.ToHtml(s, GroupMode.Sequence));
+        Assert.DoesNotContain("hideAudio", JsonSerializer.Serialize(s.Steps[0], SessionStore.Options));
+        s.Steps[0].HideAudio = true;
+        Assert.Contains("width=\"640\" muted data-start=", Export.ToHtml(s, GroupMode.Sequence));
+        Assert.True(SessionStore.Clone(s).Steps[0].HideAudio);
+    }
 }

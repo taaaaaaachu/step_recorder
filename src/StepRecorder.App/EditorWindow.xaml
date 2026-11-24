@@ -113,8 +113,9 @@
                 <Button x:Name="PlayButton" Content="▶ 再生" Click="Play_Click" Visibility="Collapsed"/>
                 <ComboBox x:Name="SpeedBox" MinWidth="110" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" SelectionChanged="Speed_SelectionChanged"
                           AutomationProperties.Name="再生の速さ"/>
-                <CheckBox x:Name="KeysBox" Content="キー表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Click="Keys_Click"/>
-                <CheckBox x:Name="MouseBox" Content="マウス表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Click="Mouse_Click"/>
+                <CheckBox x:Name="KeysBox" Content="キー表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Checked="Keys_Click" Unchecked="Keys_Click"/>
+                <CheckBox x:Name="MouseBox" Content="マウス表示" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Checked="Mouse_Click" Unchecked="Mouse_Click"/>
+                <CheckBox x:Name="AudioBox" Content="音声" Margin="0,0,10,0" MinWidth="0" VerticalAlignment="Center" Visibility="Collapsed" Checked="Audio_Click" Unchecked="Audio_Click"/>
                 <Separator Margin="6,2,12,2"/>
                 <Button Content="−" Click="ZoomOut_Click" ToolTip="縮小 (Ctrl+ホイール / Ctrl+-)" MinWidth="30"/>
                 <TextBlock x:Name="ZoomLabel" AutomationProperties.AutomationId="ZoomLabel" Text="100%" MinWidth="44" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,6,0"/>
