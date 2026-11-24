@@ -52,6 +52,8 @@ public class KeyOverlayTests
 
         Assert.Equal(["B"], KeyOverlay.StrokesFor(session, range).Select(k => k.Text));
         Assert.Equal(["Z"], KeyOverlay.StrokesFor(session, clip).Select(k => k.Text));
+        (clip.Keys, clip.VideoStart, clip.VideoEnd) = ([Key(0.5, "Z"), Key(2, "Y"), Key(3, "X")], S(1), S(3)); // 録画ボタンの動画も区間で絞る
+        Assert.Equal(["Y"], KeyOverlay.StrokesFor(session, clip).Select(k => k.Text));
         range.HideKeys = true;
         Assert.Empty(KeyOverlay.StrokesFor(session, range));
         Assert.Equal(["B"], KeyOverlay.Recorded(session, range).Select(k => k.Text)); // 切り替えのチェックを出すかどうかに使う

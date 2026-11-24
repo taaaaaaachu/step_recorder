@@ -27,6 +27,8 @@ public sealed class Operation
 {
     public OperationKind Kind { get; set; }
     public DateTimeOffset Time { get; set; }
+    /// <summary>録画ボタンの動画の間の操作なら、その動画上の時刻(分割で振り分けるのに使う)。それ以外は null。</summary>
+    public TimeSpan? VideoTime { get; set; }
     public ElementInfo? Element { get; set; }
     public MouseButton? Button { get; set; }
     public bool DoubleClick { get; set; }

@@ -32,6 +32,7 @@ sealed class RecorderEngine
     ClickEvent? lastClick;
     Step? lastClickStep;
     AutomationElement? typing;
+    long typingPressed; // typing の欄で打ち始めたときの Stopwatch の時刻
     (AutomationElement? Element, bool Password) passwordField; // 1 打鍵ごとに UI Automation に問い合わせないよう、欄ごとに覚える
     nint lastTargetRoot;
     readonly Timer flushTimer;
@@ -229,7 +230,7 @@ sealed class RecorderEngine
                         {
                             Flush();
                             RecordMouse(info.pt, side, pressed);
-                            rec.AddOperation(new Operation { Kind = OperationKind.KeyPress, Keys = name, Time = at });
+                            AddOperation(new Operation { Kind = OperationKind.KeyPress, Keys = name, Time = at }, pressed);
                         });
                         break;
                     default:
@@ -245,7 +246,7 @@ sealed class RecorderEngine
                         {
                             Flush();
                             RecordMouse(info.pt, action, pressed);
-                            if (mode != RecordMode.Manual) OnClick(root, ev);
+                            if (mode != RecordMode.Manual) OnClick(root, ev, pressed);
                         });
                         break;
                 }
@@ -275,13 +276,13 @@ sealed class RecorderEngine
 
     // ---- ワーカースレッド ----
 
-    void OnClick(nint root, ClickEvent ev)
+    void OnClick(nint root, ClickEvent ev, long pressed)
     {
         if (clip != null)
         {
             // 動画を録っている間は撮らず、操作だけを動画のステップに足す(動画には強調枠を付けないので位置は持たない)
             var el = Uia.Info(Uia.FromPoint(ev.ScreenPoint.X, ev.ScreenPoint.Y), default);
-            rec.AddOperation(new Operation { Kind = OperationKind.Click, Time = ev.Time, Button = ev.Button, Element = el == null ? null : el with { Rect = null } });
+            AddOperation(new Operation { Kind = OperationKind.Click, Time = ev.Time, Button = ev.Button, Element = el == null ? null : el with { Rect = null } }, pressed);
             return;
         }
         if (lastClickStep != null && ClickRules.IsDoubleClick(lastClick, ev, (int)GetDoubleClickTime(),
@@ -316,7 +317,7 @@ sealed class RecorderEngine
         if (kind == KeyKind.Shortcut)
         {
             Flush();
-            rec.AddOperation(new Operation { Kind = OperationKind.KeyPress, Keys = name, Time = time });
+            AddOperation(new Operation { Kind = OperationKind.KeyPress, Keys = name, Time = time }, pressed);
         }
         else if (kind == KeyKind.Typing)
         {
@@ -324,6 +325,7 @@ sealed class RecorderEngine
             {
                 if (!target.OwnsKey(GetForegroundWindow())) return; // 処理するまでに対象の外へ移っていたら、そこの欄は読まない
                 typing = Uia.Focused();
+                typingPressed = pressed;
             }
             flushTimer.Change(1500, Timeout.Infinite); // 入力が止まったら確定させる
         }
@@ -366,7 +368,18 @@ sealed class RecorderEngine
         typing = null;
         var v = Uia.Value(e);
         if (v != null)
-            rec.AddOperation(new Operation { Kind = OperationKind.TextInput, Time = DateTimeOffset.Now, Element = Uia.Info(e, default), Text = v });
+            AddOperation(new Operation { Kind = OperationKind.TextInput, Time = DateTimeOffset.Now, Element = Uia.Info(e, default), Text = v }, typingPressed);
+    }
+
+    /// <summary>直近のステップに操作を足す。録画ボタンの動画の間なら、押した時刻(pressed)の動画上の時刻も持たせる(処理するまでの遅れを引く)。</summary>
+    void AddOperation(Operation op, long pressed)
+    {
+        if (clip is var (recorder, _))
+        {
+            var at = recorder.CurrentTime - Stopwatch.GetElapsedTime(pressed);
+            op.VideoTime = at < TimeSpan.Zero ? TimeSpan.Zero : at;
+        }
+        rec.AddOperation(op);
     }
 
 

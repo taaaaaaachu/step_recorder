@@ -22,6 +22,29 @@ public sealed class Recording(Session session)
         return i + 1;
     }
 
+    /// <summary>
+    /// 動画のステップを at で2つに分ける。st は at までになり、at からの写し(Id は newId)を返す。ファイルは分けず区間だけ変える。
+    /// 操作は動画上の時刻で前後に振り分け(時刻の無いものは前)、説明が手で直していないものなら、それぞれ作り直す。
+    /// キー・マウスは両方に残す(重ねるときに区間で絞る)。ポスターは呼ぶ側で作り直す。
+    /// </summary>
+    public static Step SplitVideo(Step st, TimeSpan at, int newId)
+    {
+        var after = SessionStore.Clone(new Session { Steps = [st] }).Steps[0];
+        var edited = st.Description != Describe(st);
+        after.Id = newId;
+        (st.VideoEnd, after.VideoStart) = (at, at);
+        st.Operations.RemoveAll(o => o.VideoTime >= at);
+        after.Operations.RemoveAll(o => !(o.VideoTime >= at));
+        if (!edited) (st.Description, after.Description) = (Describe(st), Describe(after));
+        return after;
+    }
+
+    /// <summary>操作から作る説明。動画のステップで操作が無ければ「『画面名』の操作(動画)」。</summary>
+    static string Describe(Step st) =>
+        st.Operations.Count == 0 && st.Trigger == CaptureTrigger.Video ? VideoDescription(st.Window) : Describer.Describe(st.Operations);
+
+    static string VideoDescription(WindowInfo window) => $"『{window.Title}』の操作(動画)";
+
     public Step AddStep(CaptureTrigger trigger, WindowInfo window, string imageFile,
         int width, int height, DateTimeOffset time, Operation? op = null)
     {
@@ -36,7 +59,7 @@ public sealed class Recording(Session session)
             Window = window,
             ScreenName = window.Title,
         };
-        if (trigger == CaptureTrigger.Video) step.Description = $"『{window.Title}』の操作(動画)"; // 操作が足されたらその説明に置き換わる
+        if (trigger == CaptureTrigger.Video) step.Description = VideoDescription(window); // 操作が足されたらその説明に置き換わる
         Session.Steps.Add(step);
         if (op != null) Append(step, op);
         return step;

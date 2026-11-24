@@ -40,13 +40,12 @@ public static class KeyOverlay
     /// </summary>
     public static IReadOnlyList<KeyStroke> Recorded(Session session, Step step) => InStep(session, step, session.Keys, step.Keys, k => k.Time);
 
-    /// <summary>動画のステップの分の記録。録画ボタンの動画はそのステップの own、全編から切り出した区間は whole のうち区間の中のもの。</summary>
+    /// <summary>動画のステップの分の記録。録画ボタンの動画はそのステップの own、全編から切り出した区間は whole の、どちらも区間の中のもの。</summary>
     internal static IReadOnlyList<T> InStep<T>(Session session, Step step, List<T>? whole, List<T>? own, Func<T, TimeSpan> time)
     {
         if (step.VideoFile == null) return [];
-        if (step.VideoFile != session.VideoFile) return own ?? [];
         var (start, end) = (step.VideoStart ?? TimeSpan.Zero, step.VideoEnd ?? TimeSpan.MaxValue);
-        return (whole ?? []).Where(x => time(x) >= start && time(x) < end).ToList();
+        return ((step.VideoFile == session.VideoFile ? whole : own) ?? []).Where(x => time(x) >= start && time(x) < end).ToList();
     }
 
     public static IReadOnlyList<KeyChip> Chips(IReadOnlyList<KeyStroke> strokes)

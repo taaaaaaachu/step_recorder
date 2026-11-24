@@ -64,6 +64,34 @@ public class RecordingTests
     }
 
     [Fact]
+    public void 動画のステップを分けると区間と操作と説明が前後に分かれる()
+    {
+        var rec = new Recording(new Session());
+        var st = rec.AddStep(CaptureTrigger.Video, Win, "images/0001.png", 1, 1, DateTimeOffset.Now);
+        st.VideoFile = "videos/0001.mp4";
+        st.VideoSpeed = 2;
+        rec.AddOperation(Input("氏名", "山田"));
+        st.Operations[0].VideoTime = TimeSpan.FromSeconds(1);
+        rec.AddOperation(Input("住所", "東京"));
+        st.Operations[1].VideoTime = TimeSpan.FromSeconds(5);
+
+        var after = Recording.SplitVideo(st, TimeSpan.FromSeconds(3), 7);
+
+        Assert.Equal((null, TimeSpan.FromSeconds(3)), (st.VideoStart, st.VideoEnd));
+        Assert.Equal((7, TimeSpan.FromSeconds(3), (TimeSpan?)null), (after.Id, after.VideoStart!.Value, after.VideoEnd));
+        Assert.Equal(("videos/0001.mp4", 2.0), (after.VideoFile, after.Speed));
+        Assert.Equal("『氏名』欄に「山田」と入力", st.Description);
+        Assert.Equal("『住所』欄に「東京」と入力", after.Description);
+
+        // 操作が無くなった側は動画の説明に。手で直した説明は両方に残す
+        var tail = Recording.SplitVideo(after, TimeSpan.FromSeconds(6), 8);
+        Assert.Equal("『メイン』の操作(動画)", tail.Description);
+        after.Description = "手で直した";
+        Assert.Equal("手で直した", Recording.SplitVideo(after, TimeSpan.FromSeconds(4), 9).Description);
+        Assert.Equal("手で直した", after.Description);
+    }
+
+    [Fact]
     public void ステップが無いときの操作は捨てる() =>
         Assert.False(new Recording(new Session()).AddOperation(Input("a", "b")));
 }
