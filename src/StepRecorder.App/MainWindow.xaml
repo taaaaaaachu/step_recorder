@@ -23,6 +23,13 @@
         </Style>
     </Window.Resources>
     <StackPanel Margin="14">
+        <!-- 編集画面の「続けて記録」から来たときだけ出す。保存先はその記録のフォルダに決まる -->
+        <Border x:Name="AppendPanel" Visibility="Collapsed" Background="#FFE8EEF7" CornerRadius="4" Padding="10,6" Margin="0,0,0,10">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="やめて編集に戻る" Click="CancelAppend_Click"/>
+                <TextBlock x:Name="AppendLabel" VerticalAlignment="Center" TextWrapping="Wrap" AutomationProperties.AutomationId="AppendLabel"/>
+            </DockPanel>
+        </Border>
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/>
@@ -47,7 +54,7 @@
 
             <Label Grid.Row="3" Content="出力先"/>
             <TextBox x:Name="OutputDir" Grid.Row="3" Grid.Column="1"/>
-            <Button Grid.Row="3" Grid.Column="2" Content="参照" Click="Browse_Click"/>
+            <Button x:Name="BrowseButton" Grid.Row="3" Grid.Column="2" Content="参照" Click="Browse_Click"/>
 
             <Label Grid.Row="4" Content="手動撮影キー"/>
             <TextBox x:Name="HkCapture" Grid.Row="4" Grid.Column="1" Style="{StaticResource HotkeyBox}"/>

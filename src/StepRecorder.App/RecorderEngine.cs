@@ -70,7 +70,8 @@ sealed class RecorderEngine
     /// <summary>動画のステップを録り始めた(true)・録り終えた(false)。ワーカースレッドから呼ばれる。</summary>
     public event Action<bool>? ClipChanged;
 
-    public RecorderEngine(CaptureTarget target, string dir, Settings settings)
+    /// <summary>existing を渡すと、その記録の続きとして末尾に足す(続けて記録)。番号は既存の続きになるのでファイル名はぶつからない。</summary>
+    public RecorderEngine(CaptureTarget target, string dir, Settings settings, Session? existing = null)
     {
         this.target = target;
         this.dir = dir;
@@ -81,7 +82,7 @@ sealed class RecorderEngine
         foreach (var text in new[] { settings.HotkeyCapture, settings.HotkeyPause, settings.HotkeyStop, settings.HotkeyClip })
             if (HotkeyInput.TryParse(text, out var mods, out var vk)) ownHotkeys.Add((mods, vk));
         lastTargetRoot = target.InitialWindow;
-        rec = new Recording(new Session { CreatedAt = DateTimeOffset.Now, TargetName = target.Name, Evidence = target.CollectEvidence() });
+        rec = new Recording(existing ?? new Session { CreatedAt = DateTimeOffset.Now, TargetName = target.Name, Evidence = target.CollectEvidence() });
         mouseProc = MouseProc;
         keyProc = KeyProc;
         flushTimer = new Timer(_ => Enqueue(Flush));
@@ -92,6 +93,9 @@ sealed class RecorderEngine
 
     /// <summary>画面に見えているものを撮るか(自分のウィンドウを写らないようにする必要がある)。</summary>
     public bool CapturesScreen => target.CapturesScreen;
+
+    /// <summary>今のステップ数(続けて記録なら前の分も入る)。始める前に読む。</summary>
+    public int StepCount => rec.Session.Steps.Count;
 
     /// <summary>対象があるモニター。</summary>
     public nint MonitorHandle => target.MonitorHandle;

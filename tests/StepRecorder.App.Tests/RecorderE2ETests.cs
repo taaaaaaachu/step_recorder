@@ -201,6 +201,36 @@ public sealed class RecorderE2ETests : IDisposable
     }
 
     [DesktopFact]
+    public void 続けて記録すると末尾に足し_画像の番号も全編の動画もぶつからない()
+    {
+        target = Open(SampleExe);
+        var settings = new Settings { DefaultMode = RecordMode.Video };
+        Session Record(Session? existing)
+        {
+            var engine = new RecorderEngine(new AppTarget(target), dir, settings, existing);
+            engine.Start();
+            Wait(800);
+            engine.CaptureManual();
+            Wait(800);
+            var s = Stop(engine);
+            SessionStore.Save(s, dir);
+            return s;
+        }
+
+        var first = Record(null);
+        var firstImage = File.ReadAllBytes(Path.Combine(dir, first.Steps[0].ImageFile));
+        var session = Record(SessionStore.Load(dir));
+
+        Assert.Equal([1, 2], session.Steps.Select(s => s.Id));
+        Assert.Equal(["images/0001.png", "images/0002.png"], session.Steps.Select(s => s.ImageFile));
+        Assert.Equal(firstImage, File.ReadAllBytes(Path.Combine(dir, "images", "0001.png"))); // 前の画像は上書きしない
+        Assert.Equal(["video.mp4", "video-2.mp4"], session.Videos.Select(v => v.File));
+        Assert.All(session.Videos, v => Assert.True(File.Exists(Path.Combine(dir, v.File))));
+        Assert.Equal(["video.mp4", "video-2.mp4"], session.Steps.Select(s => s.TimelineVideo));
+        Assert.Equal(first.CreatedAt, session.CreatedAt); // 記録の情報は最初のまま
+    }
+
+    [DesktopFact]
     public void 始めてすぐ止めても失敗にしない()
     {
         target = Open(SampleExe);

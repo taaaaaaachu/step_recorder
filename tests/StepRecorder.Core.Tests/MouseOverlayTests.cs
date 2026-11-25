@@ -106,7 +106,7 @@ public class MouseOverlayTests
         var back = SessionStore.Clone(session);
 
         Assert.Equal([new MousePoint(S(1.5), 90, 40)], back.Videos[0].Mouse![0].Drag);
-        Assert.Null(back.Videos[0].Mouse[1].Drag);
+        Assert.Null(back.Videos[0].Mouse![1].Drag);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(json, "\"drag\""));
     }
 }

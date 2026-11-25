@@ -188,29 +188,74 @@ public partial class MainWindow : Window
             return;
         }
         if (!ReadSettings()) return;
+        Session? existing = null;
+        if (appendDir != null && (existing = LoadForAppend(appendDir)) == null) return;
         CloseBadge();
 
-        var dir = Path.Combine(settings.OutputDir, Settings.SessionFolderName(DateTimeOffset.Now, target.Name));
+        var dir = appendDir ?? Path.Combine(settings.OutputDir, Settings.SessionFolderName(DateTimeOffset.Now, target.Name));
+        EndAppend();
         Directory.CreateDirectory(dir);
         var recordVideo = settings.DefaultMode == RecordMode.Video;
-        var bar = new RecordBar(new RecorderEngine(target, dir, settings), settings, dir);
+        var videosBefore = existing?.Videos.Count ?? 0;
+        var log = Path.Combine(dir, "error.log");
+        var loggedBefore = File.Exists(log); // 続けて記録では、前の記録のときのものが残っていることがある
+        var bar = new RecordBar(new RecorderEngine(target, dir, settings, existing), settings, dir);
         bar.Closed += (_, _) =>
         {
-            var log = Path.Combine(dir, "error.log");
-            var failed = File.Exists(log);
+            var failed = File.Exists(log) && !loggedBefore;
             var kept = bar.Result is { HasContent: true };
-            if (kept) OpenEditor(bar.Result!, dir);
+            // 続けて記録では、新しく何も撮れなくても前の記録があるので、フォルダは消さずに編集画面に戻る
+            if (kept || existing != null) OpenEditor(bar.Result ?? SessionStore.Load(dir), dir);
             else
             {
                 if (!failed) try { Directory.Delete(dir, true); } catch (IOException) { } // 失敗したときは理由(error.log)を残す
                 Show();
             }
             bar.Progress?.Finish();
-            if (recordVideo && bar.Result?.Videos.Count is not > 0) Fail($"録画できませんでした。理由はこのファイルに書いてあります:\n{log}");
+            if (recordVideo && (bar.Result?.Videos.Count ?? 0) <= videosBefore) Fail($"録画できませんでした。理由はこのファイルに書いてあります:\n{log}");
             else if (!kept && failed) Fail($"記録できませんでした。理由はこのファイルに書いてあります:\n{log}");
         };
         Hide();
         bar.Show();
+    }
+
+    // ---- 続けて記録(編集画面から戻ってきて、同じ記録の末尾に足す) ----
+
+    /// <summary>続けて記録する記録のフォルダ。null なら新しい記録。</summary>
+    string? appendDir;
+
+    void BeginAppend(string targetName, string dir)
+    {
+        appendDir = dir;
+        AppendLabel.Text = $"「{targetName}」の記録に続けて記録します。対象と撮影モードを選んで「記録開始」を押してください。";
+        AppendPanel.Visibility = Visibility.Visible;
+        OutputDir.IsEnabled = BrowseButton.IsEnabled = false; // 保存先はその記録のフォルダ
+    }
+
+    void EndAppend()
+    {
+        appendDir = null;
+        AppendPanel.Visibility = Visibility.Collapsed;
+        OutputDir.IsEnabled = BrowseButton.IsEnabled = true;
+    }
+
+    /// <summary>続けて記録する記録を読む。読めなければ知らせて、新しい記録に戻す。</summary>
+    Session? LoadForAppend(string dir)
+    {
+        try { return SessionStore.Load(dir); }
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidDataException)
+        {
+            EndAppend();
+            Fail($"続けて記録する記録を開けませんでした: {ex.Message}");
+            return null;
+        }
+    }
+
+    void CancelAppend_Click(object sender, RoutedEventArgs e)
+    {
+        var dir = appendDir!;
+        EndAppend();
+        OpenSession(dir);
     }
 
     void Open_Click(object sender, RoutedEventArgs e)
@@ -222,6 +267,7 @@ public partial class MainWindow : Window
 
     internal void OpenSession(string dir)
     {
+        EndAppend(); // 別の記録を開いたら、続けて記録はやめる
         Session session;
         try { session = SessionStore.Load(dir); }
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidDataException)
@@ -237,7 +283,11 @@ public partial class MainWindow : Window
     void OpenEditor(Session session, string dir)
     {
         var editor = new EditorWindow(session, dir, settings.GroupMode);
-        editor.Closed += (_, _) => Show();
+        editor.Closed += (_, _) =>
+        {
+            if (editor.ContinueRequested) BeginAppend(session.TargetName, dir);
+            Show();
+        };
         editor.Show();
         Native.BringToFront(new System.Windows.Interop.WindowInteropHelper(editor).Handle); // 記録を止めたあと、対象アプリの後ろに隠れないように
     }

@@ -71,6 +71,8 @@
                         VerticalAlignment="Stretch" Padding="10,3" Margin="0,0,6,0" AutomationProperties.Name="保存" ToolTip="保存 (Ctrl+S)"/>
                 <Button Content="HTMLを開く" Click="OpenHtml_Click"/>
                 <Button Content="フォルダを開く" Click="OpenFolder_Click"/>
+                <!-- 保存して開始画面に戻り、選び直した対象で同じ記録の末尾に足す -->
+                <Button Content="続けて記録" Click="Continue_Click" ToolTip="保存して開始画面に戻り、この記録の続きを記録する"/>
                 <!-- 本体はフォルダに書き出す。右の矢印で、HTML 1 ファイルなどの書き出し方を選ぶ -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,6,0">
                     <Button Content="配布用に書き出す..." Click="ExportFolder_Click" Margin="0" AutomationProperties.AutomationId="ExportButton"/>

@@ -1164,6 +1164,17 @@ public partial class EditorWindow : Window
         Process.Start(new ProcessStartInfo(System.IO.Path.Combine(dir, Export.HtmlFile)) { UseShellExecute = true });
     }
 
+    /// <summary>「続けて記録」で閉じたか。開いた側が開始画面を続けて記録の状態で出す。</summary>
+    internal bool ContinueRequested { get; private set; }
+
+    /// <summary>保存して閉じる(保存できなければ閉じない)。続きは開始画面で対象を選び直して記録する。</summary>
+    void Continue_Click(object sender, RoutedEventArgs e)
+    {
+        if (dirty && !Save()) return;
+        ContinueRequested = true;
+        Close();
+    }
+
     void OpenFolder_Click(object sender, RoutedEventArgs e) =>
         Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true });
 

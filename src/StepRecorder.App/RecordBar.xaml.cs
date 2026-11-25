@@ -64,6 +64,7 @@ public partial class RecordBar : Window
             State.Text = "● 記録中(録画)";
         }
         recordingLabel = State.Text;
+        Count.Text = $"{engine.StepCount} 枚"; // 続けて記録なら前の分から
         Loaded += (_, _) => CenterPanel();
         ContentRendered += (_, _) =>
         {
