@@ -78,7 +78,7 @@ public partial class EditorWindow : Window
         loading = false;
         if (session.Videos.Count > 0)
         {
-            FullVideoBox.ItemsSource = session.Videos.Select((_, i) => $"全編 {i + 1}").ToList();
+            FullVideoBox.ItemsSource = session.Videos.Select((_, i) => $"録画 {i + 1}").ToList();
             FullVideoBox.Visibility = session.Videos.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
             SelectFullVideo(session.Videos[0]);
         }

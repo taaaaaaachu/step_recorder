@@ -432,7 +432,7 @@ public sealed class EditorSmokeTests : IDisposable
         }
 
         // 最初のステップ(1 本目)が選ばれている
-        Assert.Equal("全編 1", Shown());
+        Assert.Equal("録画 1", Shown());
         Assert.InRange(slider.Current.Maximum, 1.8, 2.2);
         Assert.InRange(slider.Current.Value, 0.4, 0.6);
 
@@ -440,7 +440,7 @@ public sealed class EditorSmokeTests : IDisposable
         ((SelectionItemPattern)Find(editor, "Steps").FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))[1]
             .GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
         Wait(500);
-        Assert.Equal("全編 2", Shown());
+        Assert.Equal("録画 2", Shown());
         Assert.InRange(slider.Current.Maximum, 2.8, 3.2);
         Assert.InRange(slider.Current.Value, 1.4, 1.6);
 
@@ -448,12 +448,12 @@ public sealed class EditorSmokeTests : IDisposable
         var expand = (ExpandCollapsePattern)box.GetCurrentPattern(ExpandCollapsePattern.Pattern);
         expand.Expand();
         Wait(300);
-        Select(box, "全編 1");
+        Select(box, "録画 1");
         expand.Collapse();
         Assert.InRange(slider.Current.Maximum, 1.8, 2.2);
         expand.Expand();
         Wait(300);
-        Select(box, "全編 2");
+        Select(box, "録画 2");
         expand.Collapse();
 
         slider.SetValue(2.5);
