@@ -7,7 +7,7 @@ namespace StepRecorder.App;
 /// <summary>GitHub Releases からの自動更新。</summary>
 static class Updater
 {
-    const string Repo = "https://github.com/taaaaaaachu/step_recorder";
+    public const string Repo ="https://github.com/taaaaaaachu/step_recorder";
 
     static readonly UpdateManager Manager = new(new GithubSource(Repo, null, false));
 

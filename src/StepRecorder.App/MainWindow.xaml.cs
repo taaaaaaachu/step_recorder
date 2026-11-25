@@ -32,6 +32,9 @@ public partial class MainWindow : Window
         };
     }
 
+    void Version_Click(object sender, MouseButtonEventArgs e) =>
+        Process.Start(new ProcessStartInfo(Updater.Repo) { UseShellExecute = true });
+
     void ShowSettings()
     {
         (settings.DefaultMode switch { RecordMode.Manual => ModeManual, RecordMode.Video => ModeRecord, _ => ModeClick }).IsChecked = true;
