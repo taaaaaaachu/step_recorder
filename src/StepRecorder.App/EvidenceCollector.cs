@@ -42,10 +42,12 @@ static class EvidenceCollector
 
         var hwnd = target.MainWindowHandle;
         var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
-        if (hwnd != 0 && GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), ref info))
+        var monitor = hwnd != 0 ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) : 0;
+        if (monitor != 0 && GetMonitorInfo(monitor, ref info))
         {
             e.Screen = $"{info.rcMonitor.Width}×{info.rcMonitor.Height}";
-            e.ScalePercent = (int)Math.Round(GetDpiForWindow(hwnd) * 100 / 96.0);
+            // GetDpiForWindow は DPI 非対応・システム DPI 対応のアプリだとメイン画面の DPI を返すので、モニターから取る
+            e.ScalePercent = Monitors.ScalePercent(monitor);
         }
         return e;
     }

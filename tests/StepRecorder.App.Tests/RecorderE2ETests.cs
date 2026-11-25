@@ -57,7 +57,7 @@ public sealed class RecorderE2ETests : IDisposable
         Assert.Equal("SampleTarget.exe", session.Evidence.AppFile);
         Assert.NotEqual("", session.Evidence.AppVersion);
         Assert.Matches(@"^\d+×\d+$", session.Evidence.Screen);
-        Assert.True(session.Evidence.ScalePercent >= 100);
+        Assert.Equal(Monitors.ScalePercent(Native.MonitorFromWindow(main, Native.MONITOR_DEFAULTTONEAREST)), session.Evidence.ScalePercent);
         Assert.Equal(Environment.MachineName, session.Evidence.MachineName);
         Assert.Equal(3, session.Steps.Count);
 
