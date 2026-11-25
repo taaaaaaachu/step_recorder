@@ -26,7 +26,7 @@
         <!-- 編集画面の「続けて記録」から来たときだけ出す。保存先はその記録のフォルダに決まる -->
         <Border x:Name="AppendPanel" Visibility="Collapsed" Background="#FFE8EEF7" CornerRadius="4" Padding="10,6" Margin="0,0,0,10">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Content="やめて編集に戻る" Click="CancelAppend_Click"/>
+                <Button DockPanel.Dock="Right" Content="編集に戻る" Click="CancelAppend_Click"/>
                 <TextBlock x:Name="AppendLabel" VerticalAlignment="Center" TextWrapping="Wrap" AutomationProperties.AutomationId="AppendLabel"/>
             </DockPanel>
         </Border>

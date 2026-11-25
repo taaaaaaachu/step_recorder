@@ -62,7 +62,7 @@ public sealed class ContinueRecordingTests : IDisposable
         Press(Window(IsEditor), "続けて記録");
         var main = Window(t => t == "step_recorder");
         Assert.Contains("「Demo」の記録に続けて記録します", main.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, "AppendLabel")).Current.Name);
-        Press(main, "やめて編集に戻る");
+        Press(main, "編集に戻る");
         Press(Window(IsEditor), "続けて記録");
 
         // テスト用アプリを選んで始め、何も撮らずに止める
