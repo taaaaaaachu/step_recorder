@@ -12,7 +12,18 @@
     <!-- 自前の Main(Velopack 用)を使うため、自動生成の Main を作らせない -->
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
+    <!-- 配布物にライセンスと他者のソフトウェアの著作権表示を入れる -->
+    <None Include="..\..\LICENSE;..\..\THIRD-PARTY-NOTICES.txt" CopyToPublishDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
   </ItemGroup>
+
+  <!-- 自己完結で配る .NET ランタイムのライセンスと通知(ランタイムパックに入っている) -->
+  <Target Name="CopyRuntimeNotices" AfterTargets="Publish" Condition="'$(SelfContained)' == 'true'">
+    <ItemGroup>
+      <_RuntimeNotice Include="%(ResolvedRuntimePack.PackageDirectory)\LICENSE.TXT;%(ResolvedRuntimePack.PackageDirectory)\THIRD-PARTY-NOTICES.TXT"
+                      Condition="'%(ResolvedRuntimePack.Identity)' == 'Microsoft.NETCore.App.Runtime.$(RuntimeIdentifier)'" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_RuntimeNotice)" DestinationFolder="$(PublishDir)dotnet-runtime" />
+  </Target>
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
