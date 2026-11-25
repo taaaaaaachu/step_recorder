@@ -251,7 +251,8 @@ sealed class VideoRecorder
         profile.Video.Height = (uint)height;
         profile.Video.FrameRate.Numerator = (uint)fps;
         profile.Video.FrameRate.Denominator = 1;
-        profile.Video.Bitrate = (uint)Math.Clamp(width * height * fps / 8, 1_000_000, 12_000_000); // 画面の録画は動きが少ないので控えめ
+        // 足りないと、激しく動いたときに B フレームが前後のコマを混ぜた絵になる(残像)。動きの少ない間はこれより小さく収まる
+        profile.Video.Bitrate = (uint)Math.Clamp((long)width * height * fps / 2, 1_000_000, 50_000_000);
 
         // 色の情報。書かないとブラウザーが高さだけで推測して、720 未満の動画の色がずれる(純赤が 248,36,0 になる)
         profile.Video.Properties[MediaTypeAttributeKeys.YuvMatrix] = Nv12.IsBt709(width, height) ? 1u : 2u; // MFVideoTransferMatrix

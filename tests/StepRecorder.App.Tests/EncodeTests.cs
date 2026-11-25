@@ -83,6 +83,39 @@ public sealed class EncodeTests : IDisposable
         }
     }
 
+    /// <summary>スクロールのように画面全体が大きく動いても、前のコマの絵が残像のように残らない。</summary>
+    [DesktopFact]
+    public async Task 激しく動く画面でも前のコマが残らない()
+    {
+        const int w = 1280, h = 720, fps = 15, count = 45;
+        var rand = new Random(1);
+        var page = new byte[w * h * 4]; // 白地に黒い文字のような細かい四角を並べた縦 4 画面分の模様(1 画素 1 バイト)
+        Array.Fill(page, (byte)255);
+        for (var n = 0; n < 8000; n++)
+        {
+            var (x, y, bw, bh) = (rand.Next(w - 40), rand.Next(h * 4 - 20), rand.Next(3, 40), rand.Next(3, 14));
+            for (var yy = y; yy < y + bh; yy++) page.AsSpan(yy * w + x, bw).Fill(0);
+        }
+        byte[] Bgra(int i) // i 枚目。1 コマで 40 画素スクロールする
+        {
+            var px = new byte[w * h * 4];
+            for (var y = 0; y < h; y++)
+                for (var x = 0; x < w; x++) px.AsSpan((y * w + x) * 4, 3).Fill(page[(y + i * 40) * w + x]);
+            return px;
+        }
+        var path = Path.Combine(dir, "motion.mp4");
+        await VideoRecorder.Encode(path, w, h, Enumerable.Range(0, count).Select(i => (Nv12.FromBgra(Bgra(i), w, h), TimeSpan.FromSeconds((double)i / fps))), fps: fps);
+
+        for (var i = 20; i < count - 1; i++) // 足りないと 20 枚目あたりから、1 枚おきに前後のコマを混ぜた絵になる
+        {
+            var read = new byte[w * h * 4];
+            VideoClips.Frame(path, TimeSpan.FromSeconds((i + 1.0) / fps)).CopyPixels(read, w * 4, 0); // 1 コマうしろにずれる(上のテストを参照)
+            var expected = Bgra(i);
+            var error = Enumerable.Range(0, w * h).Average(p => Math.Abs(read[p * 4 + 1] - expected[p * 4 + 1]));
+            Assert.True(error < 8, $"{i} 枚目の平均の誤差が {error:F1}");
+        }
+    }
+
     /// <summary>単発の取り出しと、続きから読む切り出しの両方で、時刻に最も近いフレーム(同じ近さなら前)が返る。</summary>
     [DesktopFact]
     public async Task 時刻に合ったフレームを取り出し_切り出しでも順序が保たれる()
