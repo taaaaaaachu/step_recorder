@@ -20,6 +20,9 @@ abstract class CaptureTarget
     /// <summary>記録を始めたときに操作しているとみなすウィンドウ。</summary>
     public virtual nint InitialWindow => 0;
 
+    /// <summary>対象がある(アプリならそのウィンドウがある)モニター。記録中のバーを出す。</summary>
+    public virtual nint MonitorHandle => MonitorFromWindow(InitialWindow, MONITOR_DEFAULTTOPRIMARY);
+
     public abstract EvidenceInfo CollectEvidence();
 
     /// <summary>このクリックを記録するか。フックのスレッドから呼ぶのですぐ返す。</summary>
@@ -113,6 +116,8 @@ sealed class MonitorTarget(DisplayMonitor monitor) : CaptureTarget
     public override string Name => monitor.Name;
 
     public override bool CapturesScreen => true;
+
+    public override nint MonitorHandle => monitor.Handle;
 
     /// <summary>一覧に出したときと同じ位置・大きさでつながっているか。</summary>
     public override bool IsAvailable => Monitors.Info(monitor.Handle) is { } info && info.rcMonitor.ToPixelRect() == monitor.Bounds;

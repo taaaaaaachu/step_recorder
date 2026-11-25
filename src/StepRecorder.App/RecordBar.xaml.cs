@@ -64,9 +64,6 @@ public partial class RecordBar : Window
             State.Text = "● 記録中(録画)";
         }
         recordingLabel = State.Text;
-        var area = SystemParameters.WorkArea;
-        Left = area.Left + (area.Width - Width) / 2;
-        Top = area.Top; // タブが画面の端にくっつくように
         Loaded += (_, _) => CenterPanel();
         ContentRendered += (_, _) =>
         {
@@ -84,6 +81,7 @@ public partial class RecordBar : Window
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)((long)GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW));
         HwndSource.FromHwnd(hwnd).AddHook(WndProc);
         if (engine.CapturesScreen) ExcludeFromCapture(hwnd);
+        PlaceOnTargetMonitor(hwnd);
 
         var failed = new List<string>();
         var hotkeys = new List<(int, string)> { (HkCapture, settings.HotkeyCapture), (HkPause, settings.HotkeyPause), (HkStop, settings.HotkeyStop) };
@@ -97,6 +95,19 @@ public partial class RecordBar : Window
             MessageBox.Show($"ホットキーを登録できませんでした(他のアプリが使用中か、キー名が不正です): {string.Join(", ", failed)}\nバーのボタンは使えます。",
                 "step_recorder", MessageBoxButton.OK, MessageBoxImage.Warning);
         engine.Start();
+    }
+
+    /// <summary>
+    /// 対象があるモニターの上端中央に置く(タブが画面の端にくっつくように)。見える前に物理ピクセルで置く。
+    /// Left/Top は拡大率の違うモニターの間でずれる。移ると拡大率に合わせて大きさが変わるので、移してから幅を見て中央へ寄せる。
+    /// </summary>
+    void PlaceOnTargetMonitor(nint hwnd)
+    {
+        if (Monitors.Info(engine.MonitorHandle) is not { } info) return;
+        var work = info.rcWork;
+        SetWindowPos(hwnd, 0, work.Left, work.Top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        if (!GetWindowRect(hwnd, out var r)) return;
+        SetWindowPos(hwnd, 0, work.Left + (work.Width - r.Width) / 2, work.Top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     nint WndProc(nint hwnd, int msg, nint w, nint l, ref bool handled)

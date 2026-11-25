@@ -92,6 +92,21 @@ public sealed class RecordBarTests : IDisposable
     }
 
     [DesktopFact]
+    public void 対象のアプリがあるモニターの上端中央に出る()
+    {
+        // サブ画面があればそちらへ(メイン画面に出す誤りを見分けられるように)
+        var m = Monitors.All().OrderBy(m => m.Primary).First();
+        var work = Monitors.Info(m.Handle)!.Value.rcWork;
+        Native.SetWindowPos(sample.MainWindowHandle, 0, work.Left + 50, work.Top + 100, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+        Show();
+
+        Assert.Equal(m.Handle, Native.MonitorFromWindow(hwnd, Native.MONITOR_DEFAULTTONULL));
+        Assert.True(Native.GetWindowRect(hwnd, out var r));
+        Assert.Equal(work.Top, r.Top);
+        Assert.InRange((r.Left + r.Right) - (work.Left + work.Right), -2, 2);
+    }
+
+    [DesktopFact]
     public void 少しすると画面の端の小さなタブになり_押すと元の所に出る()
     {
         Show();

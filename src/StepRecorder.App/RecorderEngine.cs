@@ -92,6 +92,9 @@ sealed class RecorderEngine
     /// <summary>画面に見えているものを撮るか(自分のウィンドウを写らないようにする必要がある)。</summary>
     public bool CapturesScreen => target.CapturesScreen;
 
+    /// <summary>対象があるモニター。</summary>
+    public nint MonitorHandle => target.MonitorHandle;
+
     public void Start()
     {
         worker.Start();
