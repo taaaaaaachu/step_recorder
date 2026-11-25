@@ -38,14 +38,15 @@ public static class KeyOverlay
     /// 動画のステップで押したキー(そのステップの動画ファイルの時刻)。動画のステップでなければ空。
     /// 全編から切り出した区間は、全編のキーのうち区間の中のもの。
     /// </summary>
-    public static IReadOnlyList<KeyStroke> Recorded(Session session, Step step) => InStep(session, step, session.Keys, step.Keys, k => k.Time);
+    public static IReadOnlyList<KeyStroke> Recorded(Session session, Step step) => InStep(session, step, v => v.Keys, step.Keys, k => k.Time);
 
-    /// <summary>動画のステップの分の記録。録画ボタンの動画はそのステップの own、全編から切り出した区間は whole の、どちらも区間の中のもの。</summary>
-    internal static IReadOnlyList<T> InStep<T>(Session session, Step step, List<T>? whole, List<T>? own, Func<T, TimeSpan> time)
+    /// <summary>動画のステップの分の記録。録画ボタンの動画はそのステップの own、全編から切り出した区間はその全編の whole の、どちらも区間の中のもの。</summary>
+    internal static IReadOnlyList<T> InStep<T>(Session session, Step step, Func<FullVideo, List<T>?> whole, List<T>? own, Func<T, TimeSpan> time)
     {
         if (step.VideoFile == null) return [];
         var (start, end) = (step.VideoStart ?? TimeSpan.Zero, step.VideoEnd ?? TimeSpan.MaxValue);
-        return ((step.VideoFile == session.VideoFile ? whole : own) ?? []).Where(x => time(x) >= start && time(x) < end).ToList();
+        var list = session.FullVideo(step.VideoFile) is { } full ? whole(full) : own;
+        return (list ?? []).Where(x => time(x) >= start && time(x) < end).ToList();
     }
 
     public static IReadOnlyList<KeyChip> Chips(IReadOnlyList<KeyStroke> strokes)

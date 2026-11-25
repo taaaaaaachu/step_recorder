@@ -46,7 +46,7 @@ public class KeyOverlayTests
     [Fact]
     public void ステップに重ねるキーは_区間の中だけ_出さない設定なら無し()
     {
-        var session = new Session { VideoFile = "video.mp4", Keys = [Key(1, "A"), Key(5, "B"), Key(9, "C")] };
+        var session = new Session { Videos = [new() { File = "video.mp4", Keys = [Key(1, "A"), Key(5, "B"), Key(9, "C")] }] };
         var range = new Step { VideoFile = "video.mp4", VideoStart = S(4), VideoEnd = S(9) };
         var clip = new Step { VideoFile = "videos/0002.mp4", Keys = [Key(0.5, "Z")] };
 
@@ -63,13 +63,13 @@ public class KeyOverlayTests
     [Fact]
     public void キーと表示の設定は読み書きでき_出すときは書かない()
     {
-        var session = new Session { VideoFile = "video.mp4", Keys = [Char(1.25, "あ")] };
+        var session = new Session { Videos = [new() { File = "video.mp4", Keys = [Char(1.25, "あ")] }] };
         session.Steps.Add(new Step { VideoFile = "video.mp4" });
         session.Steps.Add(new Step { VideoFile = "video.mp4", HideKeys = true });
         var json = JsonSerializer.Serialize(session, SessionStore.Options);
         var back = SessionStore.Clone(session);
 
-        Assert.Equal(session.Keys, back.Keys);
+        Assert.Equal(session.Videos[0].Keys, back.Videos[0].Keys);
         Assert.Equal([false, true], back.Steps.Select(s => s.HideKeys));
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(json, "\"hideKeys\"")); // 既定の false は書かない
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(json, "\"keys\"")); // キーの無いステップには書かない
@@ -123,7 +123,7 @@ public class KeyOverlayHtmlTests
 {
     static Session WithKeys()
     {
-        var s = new Session { TargetName = "App", VideoFile = "video.mp4", Keys = [new(TimeSpan.FromSeconds(2), "Ctrl+S", false), new(TimeSpan.FromSeconds(9), "<b>", true)] };
+        var s = new Session { TargetName = "App", Videos = [new() { File = "video.mp4", Keys = [new(TimeSpan.FromSeconds(2), "Ctrl+S", false), new(TimeSpan.FromSeconds(9), "<b>", true)] }] };
         s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", VideoStart = TimeSpan.FromSeconds(1), VideoEnd = TimeSpan.FromSeconds(5) });
         return s;
     }

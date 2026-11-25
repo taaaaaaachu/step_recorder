@@ -158,7 +158,7 @@ public sealed class MultiProcessAppTests : IDisposable
         var step = Assert.Single(session.Steps);
         var png = BitmapFrame.Create(new Uri(Path.Combine(dir, step.ImageFile)), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
         Assert.Equal(Shown.Lime, What(png));
-        Assert.Equal("video.mp4", session.VideoFile);
+        Assert.Equal(["video.mp4"], session.Videos.Select(v => v.File));
     }
 
     [E2EFact]
@@ -186,7 +186,7 @@ public sealed class MultiProcessAppTests : IDisposable
         Assert.False(File.Exists(Path.Combine(dir, "error.log")));
         Assert.Equal(2, session.Steps.Count);
         Assert.Equal("『氏名』欄をクリック\n『氏名』欄に「xyz」と入力", session.Steps[1].Description);
-        var video = Path.Combine(dir, session.VideoFile!);
+        var video = Path.Combine(dir, session.Videos[0].File);
         Assert.Equal(Shown.Lime, What(VideoClips.Frame(video, VideoClips.Info(video).Duration - TimeSpan.FromSeconds(0.2))));
     }
 

@@ -74,8 +74,10 @@ public sealed class Step
     public int? VideoFps { get; set; }
     /// <summary>実際に使うフレームレート。recorded は動画ファイルのフレームレート。</summary>
     public int FpsFor(int recorded) => VideoFps is { } f && f > 0 && f < recorded ? f : recorded;
-    /// <summary>録画モードで、このステップを撮ったときの全編の動画上の時刻。</summary>
+    /// <summary>録画モードで、このステップを撮ったときの全編の動画上の時刻。どの全編の時刻かは TimelineVideo。</summary>
     public TimeSpan? VideoTime { get; set; }
+    /// <summary>VideoTime がどの全編の動画(Session.Videos の File)の時刻か。</summary>
+    public string? TimelineVideo { get; set; }
     /// <summary>録画ボタンで録った動画のステップで押したキー(この動画の時刻)。全編から切り出した区間は Session.Keys を使う。無ければ null。</summary>
     public List<KeyStroke>? Keys { get; set; }
     /// <summary>動画にキーを重ねない。既定(false)は重ねる(false は書かない)。</summary>
@@ -91,23 +93,49 @@ public sealed class Step
     public bool HideAudio { get; set; }
 }
 
+/// <summary>録画モードで録った全編の動画と、その間の操作。</summary>
+public sealed class FullVideo
+{
+    /// <summary>例: "video.mp4"。続けて記録した分は "video-2.mp4" など。</summary>
+    public string File { get; set; } = "";
+    /// <summary>全編の動画の間に押したキー(この動画の時刻)。無ければ null。</summary>
+    public List<KeyStroke>? Keys { get; set; }
+    /// <summary>全編の動画の間のクリック・ホイール(この動画の時刻と位置)。無ければ null。</summary>
+    public List<MouseStroke>? Mouse { get; set; }
+}
+
 public sealed class Session
 {
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
     public DateTimeOffset CreatedAt { get; set; }
     /// <summary>記録した対象(アプリのプロセス名か、モニターの名前)。</summary>
     public string TargetName { get; set; } = "";
     public EvidenceInfo Evidence { get; set; } = new();
     public List<Step> Steps { get; set; } = [];
-    /// <summary>録画モードで録った全編の動画(例: "video.mp4")。録画モードでなければ null。</summary>
-    public string? VideoFile { get; set; }
-    /// <summary>録画モードで、全編の動画の間に押したキー(全編の動画の時刻)。無ければ null。</summary>
-    public List<KeyStroke>? Keys { get; set; }
-    /// <summary>録画モードで、全編の動画の間のクリック・ホイール(全編の動画の時刻と位置)。無ければ null。</summary>
-    public List<MouseStroke>? Mouse { get; set; }
+    /// <summary>録画モードで録った全編の動画(録った順)。続けて記録すると増える。</summary>
+    public List<FullVideo> Videos { get; set; } = [];
     /// <summary>残すものがあるか。録画モードでは、ステップが無くても全編の動画がある。</summary>
     [JsonIgnore]
-    public bool HasContent => Steps.Count > 0 || VideoFile != null;
+    public bool HasContent => Steps.Count > 0 || Videos.Count > 0;
+
+    /// <summary>file が全編の動画ならそれ。録画ボタンの動画や静止画(null)なら null。</summary>
+    public FullVideo? FullVideo(string? file) => file == null ? null : Videos.Find(v => v.File == file);
+
+    // バージョン 1 の形式(全編の動画は 1 本で、session 直下に持っていた)。読むだけで、Upgrade で Videos へ移す
+    [JsonInclude, JsonPropertyName("videoFile")] internal string? LegacyVideoFile { get; set; }
+    [JsonInclude, JsonPropertyName("keys")] internal List<KeyStroke>? LegacyKeys { get; set; }
+    [JsonInclude, JsonPropertyName("mouse")] internal List<MouseStroke>? LegacyMouse { get; set; }
+
+    internal void Upgrade()
+    {
+        if (LegacyVideoFile is { } file)
+        {
+            Videos.Insert(0, new FullVideo { File = file, Keys = LegacyKeys, Mouse = LegacyMouse });
+            foreach (var s in Steps.Where(s => s.VideoTime != null)) s.TimelineVideo ??= file;
+        }
+        (LegacyVideoFile, LegacyKeys, LegacyMouse) = (null, null, null);
+        Version = 2;
+    }
 }
 
 /// <summary>動画のステップの再生の速さ。</summary>

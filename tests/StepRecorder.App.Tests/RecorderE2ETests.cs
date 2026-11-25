@@ -161,7 +161,7 @@ public sealed class RecorderE2ETests : IDisposable
         var stages = new List<string>();
         var session = Stop(engine, stages);
         Assert.Equal(["撮った画像を保存しています(残り 0 件)", "動画を書き終えています"], stages); // 停止中に出す進み具合
-        Assert.Equal("video.mp4", session.VideoFile);
+        Assert.Equal(["video.mp4"], session.Videos.Select(v => v.File));
         Assert.All(session.Steps, s => Assert.Null(s.VideoFile));
         var times = session.Steps.Select(s => s.VideoTime!.Value.TotalSeconds).ToList();
         Assert.Equal(2, times.Count);
@@ -180,7 +180,7 @@ public sealed class RecorderE2ETests : IDisposable
         Wait(500);
 
         var session = engine.Stop();
-        Assert.Null(session.VideoFile);
+        Assert.Empty(session.Videos);
         Assert.True(File.Exists(Path.Combine(dir, "error.log")));
     }
 
@@ -197,7 +197,7 @@ public sealed class RecorderE2ETests : IDisposable
         Wait(800);
 
         var session = Stop(engine);
-        Assert.InRange(VideoE2ETests.VideoInfo(Path.Combine(dir, session.VideoFile!)).Duration.TotalSeconds, 1.2, 2.4);
+        Assert.InRange(VideoE2ETests.VideoInfo(Path.Combine(dir, session.Videos[0].File)).Duration.TotalSeconds, 1.2, 2.4);
     }
 
     [DesktopFact]
@@ -230,7 +230,7 @@ public sealed class RecorderE2ETests : IDisposable
         Wait(500);
 
         var session = Stop(engine);
-        var keys = session.Keys!;
+        var keys = session.Videos[0].Keys!;
         Assert.Equal(["a", "B", "c", "Ctrl+A", "←"], keys.Select(k => k.Text));
         Assert.Equal([true, true, true, false, false], keys.Select(k => k.IsChar));
         Assert.All(keys.Zip(keys.Skip(1)), p => Assert.True(p.First.Time <= p.Second.Time));
@@ -257,7 +257,7 @@ public sealed class RecorderE2ETests : IDisposable
         Wait(500);
 
         var session = Stop(engine);
-        var mouse = session.Mouse!;
+        var mouse = session.Videos[0].Mouse!;
         Assert.Equal([MouseAction.Left, MouseAction.WheelDown, MouseAction.Back], mouse.Select(m => m.Action));
         Assert.Contains("マウスの戻るボタン を押す", session.Steps[^1].Description); // 説明文にも残す
         Assert.All(mouse, m => Assert.Equal((x - frame.Left, y - frame.Top), (m.X, m.Y))); // 動画上の位置(ウィンドウの左上から)
@@ -282,7 +282,7 @@ public sealed class RecorderE2ETests : IDisposable
         Click(main, x, y); // ただのクリックはドラッグにしない
         Wait(500);
 
-        var mouse = Stop(engine).Mouse!;
+        var mouse = Stop(engine).Videos[0].Mouse!;
         Assert.Equal(2, mouse.Count);
         var drag = mouse[0].Drag!;
         Assert.True(drag.Count >= 2, $"動かした位置が {drag.Count} 個");
@@ -308,11 +308,11 @@ public sealed class RecorderE2ETests : IDisposable
         Wait(300);
 
         var session = Stop(engine);
-        Assert.Null(session.Keys);
+        Assert.Empty(session.Videos);
         Assert.Null(session.Steps[0].Keys);
         var key = Assert.Single(session.Steps[1].Keys!);
         Assert.Equal("Enter", key.Text);
-        Assert.Null(session.Mouse); // 動画を録っていない間のクリックは残さない
+        Assert.Null(session.Steps[0].Mouse); // 動画を録っていない間のクリックは残さない
         Assert.InRange(key.Time.TotalSeconds, 0.5, 1.6); // 録画ボタンの動画の時刻
     }
 

@@ -29,9 +29,13 @@ public static class SessionStore
         File.Move(tmp, path, overwrite: true); // 書きかけで壊さない
     }
 
-    public static Session Load(string dir) =>
-        JsonSerializer.Deserialize<Session>(File.ReadAllText(Path.Combine(dir, FileName)), Options)
-        ?? throw new InvalidDataException($"{FileName} が空です");
+    public static Session Load(string dir)
+    {
+        var s = JsonSerializer.Deserialize<Session>(File.ReadAllText(Path.Combine(dir, FileName)), Options)
+            ?? throw new InvalidDataException($"{FileName} が空です");
+        s.Upgrade();
+        return s;
+    }
 
     /// <summary>セッションの深い写し。</summary>
     public static Session Clone(Session s) =>

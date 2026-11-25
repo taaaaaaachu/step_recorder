@@ -67,7 +67,7 @@ public sealed class MonitorRecorderE2ETests : IDisposable
         Wait(1000);
 
         var session = Stop();
-        Assert.Equal((m.Name, "video.mp4"), (session.TargetName, session.VideoFile));
+        Assert.Equal((m.Name, "video.mp4"), (session.TargetName, session.Videos.Single().File));
         Assert.Equal("", session.Evidence.AppFile);
         var step = Assert.Single(session.Steps);
         Assert.Equal((m.Bounds.Width, m.Bounds.Height), (step.ImageWidth, step.ImageHeight));
@@ -78,7 +78,7 @@ public sealed class MonitorRecorderE2ETests : IDisposable
         Assert.True(Geometry.Contains(step.Crop!, mark.X, mark.Y) && Geometry.Contains(step.Crop!, mark.X + mark.Width, mark.Y + mark.Height));
         Assert.InRange(step.VideoTime!.Value.TotalSeconds, 0.5, 1.8);
 
-        var video = Path.Combine(dir, session.VideoFile!);
+        var video = Path.Combine(dir, session.Videos[0].File);
         var (duration, w, h) = VideoE2ETests.VideoInfo(video);
         Assert.Equal((m.Bounds.Width & ~1, m.Bounds.Height & ~1), (w, h));
 
@@ -87,7 +87,7 @@ public sealed class MonitorRecorderE2ETests : IDisposable
         var file = rec.NextImageFile;
         WindowCapture.SavePng(VideoClips.Frame(video, TimeSpan.FromSeconds(0.5)), Path.Combine(dir, file));
         var clip = rec.AddStep(CaptureTrigger.Video, step.Window, file, w, h, DateTimeOffset.Now);
-        (clip.VideoFile, clip.VideoStart, clip.VideoEnd) = (session.VideoFile, TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(Math.Min(2, duration.TotalSeconds)));
+        (clip.VideoFile, clip.VideoStart, clip.VideoEnd) = (session.Videos[0].File, TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(Math.Min(2, duration.TotalSeconds)));
         foreach (var format in new[] { ClipFormat.Mp4, ClipFormat.Gif })
         {
             var outDir = Path.Combine(dir, $"out-{format}");
@@ -125,7 +125,7 @@ public sealed class MonitorRecorderE2ETests : IDisposable
         Assert.All(session.Steps, s => Assert.Equal((m.Bounds.Width & ~1, m.Bounds.Height & ~1), (s.ImageWidth & ~1, s.ImageHeight & ~1)));
         Assert.Equal("『氏名』欄をクリック", session.Steps[1].Description);
         Assert.NotNull(session.Steps[2].Crop);
-        Assert.Null(session.VideoFile);
+        Assert.Empty(session.Videos);
     }
 
     [E2EFact]

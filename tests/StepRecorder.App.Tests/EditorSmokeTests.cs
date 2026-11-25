@@ -278,7 +278,7 @@ public sealed class EditorSmokeTests : IDisposable
         Array.Fill(px, (byte)120);
         var nv12 = Nv12.FromBgra(px, 320, 240);
         await VideoRecorder.Encode(Path.Combine(dir, "video.mp4"), 320, 240, Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))));
-        SessionStore.Save(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" }, dir);
+        SessionStore.Save(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, Videos = [new() { File = "video.mp4" }] }, dir);
 
         app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
@@ -296,7 +296,7 @@ public sealed class EditorSmokeTests : IDisposable
     {
         var nv12 = Nv12.FromBgra(new byte[320 * 240 * 4], 320, 240);
         await VideoRecorder.Encode(Path.Combine(dir, "video.mp4"), 320, 240, Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))));
-        SessionStore.Save(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" }, dir);
+        SessionStore.Save(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, Videos = [new() { File = "video.mp4" }] }, dir);
 
         app = Launch(AppExe, $"\"{dir}\"");
         var editor = app.MainWindowHandle;
@@ -381,6 +381,78 @@ public sealed class EditorSmokeTests : IDisposable
         }
     }
 
+    /// <summary>続けて記録して全編が 2 本ある記録は、タイムラインに出す全編を選べる。ステップを選ぶとその全編に移り、足したステップはその全編を指す。</summary>
+    [DesktopFact]
+    public async Task 全編が2本ある記録はタイムラインの全編を切り替えられる()
+    {
+        foreach (var (file, seconds) in new[] { ("video.mp4", 2), ("video-2.mp4", 3) })
+        {
+            var px = new byte[320 * 240 * 4];
+            Array.Fill(px, (byte)120);
+            var nv12 = Nv12.FromBgra(px, 320, 240);
+            await VideoRecorder.Encode(Path.Combine(dir, file), 320, 240, Enumerable.Range(0, seconds * 15).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))));
+        }
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, Videos = [new() { File = "video.mp4" }, new() { File = "video-2.mp4" }] });
+        foreach (var (video, at) in new[] { ("video.mp4", 0.5), ("video-2.mp4", 1.5) })
+        {
+            var file = rec.NextImageFile;
+            WindowCapture.SavePng(Solid(320, 240, Colors.Gray), Path.Combine(dir, file));
+            var st = rec.AddStep(CaptureTrigger.Click, new($"画面{rec.NextId}", "W", "Demo"), file, 320, 240, DateTimeOffset.Now);
+            (st.VideoTime, st.TimelineVideo) = (TimeSpan.FromSeconds(at), video);
+        }
+        SessionStore.Save(rec.Session, dir);
+
+        app = Open(AppExe, $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        var slider = (RangeValuePattern)Find(editor, "TimeSlider").GetCurrentPattern(RangeValuePattern.Pattern);
+        var box = Find(editor, "FullVideoBox");
+        string Shown() => ((SelectionPattern)box.GetCurrentPattern(SelectionPattern.Pattern)).Current.GetSelection()[0].Current.Name;
+        void Select(AutomationElement parent, string name)
+        {
+            ((SelectionItemPattern)parent.FindFirst(TreeScope.Descendants, new AndCondition(
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
+                new PropertyCondition(AutomationElement.NameProperty, name))).GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+            Wait(500);
+        }
+
+        // 最初のステップ(1 本目)が選ばれている
+        Assert.Equal("全編 1", Shown());
+        Assert.InRange(slider.Current.Maximum, 1.8, 2.2);
+        Assert.InRange(slider.Current.Value, 0.4, 0.6);
+
+        // 2 本目のステップを選ぶと、タイムラインも 2 本目のその時刻へ
+        ((SelectionItemPattern)Find(editor, "Steps").FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))[1]
+            .GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        Wait(500);
+        Assert.Equal("全編 2", Shown());
+        Assert.InRange(slider.Current.Maximum, 2.8, 3.2);
+        Assert.InRange(slider.Current.Value, 1.4, 1.6);
+
+        // ドロップダウンでも切り替えられる
+        var expand = (ExpandCollapsePattern)box.GetCurrentPattern(ExpandCollapsePattern.Pattern);
+        expand.Expand();
+        Wait(300);
+        Select(box, "全編 1");
+        expand.Collapse();
+        Assert.InRange(slider.Current.Maximum, 1.8, 2.2);
+        expand.Expand();
+        Wait(300);
+        Select(box, "全編 2");
+        expand.Collapse();
+
+        slider.SetValue(2.5);
+        Wait(300);
+        ((InvokePattern)Find(editor, new PropertyCondition(AutomationElement.NameProperty, "このフレームをステップに追加")).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+        Wait(800);
+        ((InvokePattern)Find(editor, new PropertyCondition(AutomationElement.NameProperty, "保存")).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+        Wait(500);
+
+        var saved = SessionStore.Load(dir);
+        Assert.Equal(["video.mp4", "video-2.mp4", "video-2.mp4"], saved.Steps.Select(s => s.TimelineVideo)); // 2 本目の 1.5 秒のあと
+        Assert.InRange(saved.Steps[2].VideoTime!.Value.TotalSeconds, 2.4, 2.6);
+        Assert.Equal(["video.mp4", "video-2.mp4"], saved.Videos.Select(v => v.File));
+    }
+
     /// <summary>音の入った動画のステップは「音声」を外せて、保存・元に戻すの対象になる。音の無い動画では押せない。再生はしない(音を鳴らさない)。</summary>
     [DesktopFact]
     public async Task 動画のステップの音声はONOFFでき_音が無ければ押せない()
@@ -451,10 +523,10 @@ public sealed class EditorSmokeTests : IDisposable
         }
         finally { sample.Kill(); }
         var poster = VideoClips.Frame(Path.Combine(dir, "video.mp4"), TimeSpan.FromSeconds(0.5));
-        var recording = new Recording(new Session { TargetName = "SampleTarget", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" });
+        var recording = new Recording(new Session { TargetName = "SampleTarget", CreatedAt = DateTimeOffset.Now, Videos = [new() { File = "video.mp4" }] });
         WindowCapture.SavePng(poster, Path.Combine(dir, recording.NextImageFile));
         var first = recording.AddStep(CaptureTrigger.Click, new("サンプル画面", "W", "SampleTarget"), recording.NextImageFile, poster.PixelWidth, poster.PixelHeight, DateTimeOffset.Now);
-        first.VideoTime = TimeSpan.FromSeconds(0.5);
+        (first.VideoTime, first.TimelineVideo) = (TimeSpan.FromSeconds(0.5), "video.mp4");
         SessionStore.Save(recording.Session, dir);
 
         app = Launch(AppExe, $"\"{dir}\"");

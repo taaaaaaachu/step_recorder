@@ -11,15 +11,29 @@ public sealed class Recording(Session session)
 
     public string NextVideoFile => $"videos/{NextId:D4}.mp4";
 
+    /// <summary>次に録る全編の動画。1 本目は video.mp4、続けて記録した分は video-2.mp4 から。</summary>
+    public string NextFullVideoFile
+    {
+        get
+        {
+            var n = 1;
+            string Name() => n == 1 ? "video.mp4" : $"video-{n}.mp4";
+            while (Session.FullVideo(Name()) != null) n++;
+            return Name();
+        }
+    }
+
     /// <summary>
-    /// 全編の動画の time から足したステップを入れる位置。動画上の時刻が time 以前の最後のステップの直後
-    /// (時刻を持たないステップは見ない)。
+    /// 全編の動画 file の time から足したステップを入れる位置。その動画上の時刻が time 以前の最後のステップの直後
+    /// (その動画の時刻を持たないステップは見ない)。どれも無ければ、その動画の最初のステップの前、それも無ければ末尾。
     /// </summary>
-    public static int IndexByVideoTime(IReadOnlyList<Step> steps, TimeSpan time)
+    public static int IndexByVideoTime(IReadOnlyList<Step> steps, string file, TimeSpan time)
     {
         var i = steps.Count - 1;
-        while (i >= 0 && !(steps[i].VideoTime <= time)) i--;
-        return i + 1;
+        while (i >= 0 && !(steps[i].TimelineVideo == file && steps[i].VideoTime <= time)) i--;
+        if (i >= 0) return i + 1;
+        var first = steps.ToList().FindIndex(s => s.TimelineVideo == file);
+        return first >= 0 ? first : steps.Count;
     }
 
     /// <summary>

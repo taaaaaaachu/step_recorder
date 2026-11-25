@@ -148,6 +148,9 @@
                         </StackPanel>
                         <!-- 幅が足りないときは折り返す -->
                         <WrapPanel>
+                            <!-- 続けて記録した記録は全編が何本かある。2 本以上のときだけ出す -->
+                            <ComboBox x:Name="FullVideoBox" MinWidth="90" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed"
+                                      SelectionChanged="FullVideo_SelectionChanged" AutomationProperties.AutomationId="FullVideoBox" AutomationProperties.Name="全編の動画"/>
                             <Button x:Name="FullPlayButton" Content="&#xF5B0;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" MinWidth="36" VerticalAlignment="Stretch" Click="FullPlay_Click"
                                     AutomationProperties.Name="再生"/>
                             <Button Content="このフレームをステップに追加" Click="AddFrame_Click"/>

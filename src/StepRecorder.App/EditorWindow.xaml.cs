@@ -57,9 +57,14 @@ public partial class EditorWindow : Window
         foreach (var speed in PlaybackSpeed.Choices) SpeedBox.Items.Add(PlaybackSpeed.Label(speed));
         ClipFormatBox.SelectedIndex = (int)Settings.Load(Settings.DefaultPath).ClipFormat;
         loading = false;
-        if (session.VideoFile != null) OpenFullVideo();
+        if (session.Videos.Count > 0)
+        {
+            FullVideoBox.ItemsSource = session.Videos.Select((_, i) => $"全編 {i + 1}").ToList();
+            FullVideoBox.Visibility = session.Videos.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            SelectFullVideo(session.Videos[0]);
+        }
         RefreshList(0);
-        if (session.Steps.Count == 0 && session.VideoFile != null) ShowVideoView(); // 動画だけの記録
+        if (session.Steps.Count == 0 && full != null) ShowVideoView(); // 動画だけの記録
     }
 
     // ---- 一覧 ----
@@ -128,7 +133,11 @@ public partial class EditorWindow : Window
         if (s?.VideoFile != null) ShowOverlayBoxes(s);
         ToolAdd.IsEnabled = s?.VideoFile == null; // 動画には強調枠を付けない
         if (s?.VideoFile != null && ToolAdd.IsChecked == true) ToolSelect.IsChecked = true;
-        if (s?.VideoTime is { } t && session.VideoFile != null) MoveSlider(t); // タイムラインもその時刻へ
+        if (s?.VideoTime is { } t && session.FullVideo(s.TimelineVideo) is { } v) // タイムラインもその全編のその時刻へ
+        {
+            SelectFullVideo(v);
+            MoveSlider(t);
+        }
         Picture.Source = s == null ? null : Load(s);
         // 画像は撮影時のピクセル寸法で置き、ズームは拡大縮小の変換だけで行う。座標はそのまま画像内のピクセル
         if (s != null) SetStageSize(s.ImageWidth, s.ImageHeight);
@@ -626,13 +635,31 @@ public partial class EditorWindow : Window
         if (KeysLayer.IsVisible) KeysView.Time = MouseView.Time = Player.Position;
     }
 
-    void OpenFullVideo()
+    /// <summary>タイムラインに出している全編の動画。全編が無い記録なら null。</summary>
+    FullVideo? full;
+
+    /// <summary>タイムラインに出す全編を v にする(続けて記録した記録は全編が何本かある)。区間の指定は取り消す。</summary>
+    void SelectFullVideo(FullVideo v)
     {
+        if (v == full) return;
+        LeaveVideoView();
+        full = v;
         TimelinePanel.Visibility = Visibility.Visible;
-        var (duration, width, height) = VideoClips.Info(FullPath(session.VideoFile!));
+        var (duration, width, height) = VideoClips.Info(FullPath(v.File));
         TimeSlider.Maximum = duration.TotalSeconds;
         fullSize = (width, height);
+        MoveSlider(TimeSpan.Zero);
+        (rangeStart, rangeEnd) = (null, null);
+        RangeLabel.Text = "";
+        loading = true;
+        FullVideoBox.SelectedIndex = session.Videos.IndexOf(v);
+        loading = false;
         UpdateTicks();
+    }
+
+    void FullVideo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!loading && FullVideoBox.SelectedIndex >= 0) SelectFullVideo(session.Videos[FullVideoBox.SelectedIndex]);
     }
 
     /// <summary>表示欄に全編の動画を出す(ステップの画像と強調枠の編集は隠す)。</summary>
@@ -643,13 +670,13 @@ public partial class EditorWindow : Window
         videoView = true;
         Picture.Visibility = Overlay.Visibility = PlayButton.Visibility = SpeedBox.Visibility = FpsBox.Visibility = Visibility.Collapsed;
         SetStageSize(fullSize.Width, fullSize.Height);
-        Player.Open(FullPath(session.VideoFile!), SliderTime); // 開くだけ。シークバーの位置で止まっている
+        Player.Open(FullPath(full!.File), SliderTime); // 開くだけ。シークバーの位置で止まっている
         Player.Visibility = Visibility.Visible;
         KeysBox.Visibility = MouseBox.Visibility = AudioBox.Visibility = Visibility.Visible;
         loading = true;
-        SetBox(KeysBox, session.Keys is { Count: > 0 }, fullHideKeys, "キー操作の記録がありません");
-        SetBox(MouseBox, session.Mouse is { Count: > 0 }, fullHideMouse, "マウス操作の記録がありません");
-        SetBox(AudioBox, HasAudio(session.VideoFile!), fullHideAudio, "音声の記録がありません");
+        SetBox(KeysBox, full.Keys is { Count: > 0 }, fullHideKeys, "キー操作の記録がありません");
+        SetBox(MouseBox, full.Mouse is { Count: > 0 }, fullHideMouse, "マウス操作の記録がありません");
+        SetBox(AudioBox, HasAudio(full.File), fullHideAudio, "音声の記録がありません");
         Player.Muted = fullHideAudio;
         loading = false;
         ShowFullOverlays();
@@ -659,7 +686,7 @@ public partial class EditorWindow : Window
     /// <summary>全編では、記録したものをすべて重ねる(区間を選ぶ目安)。チェックを外したものは出さない。</summary>
     void ShowFullOverlays()
     {
-        ShowOverlays(fullHideKeys ? [] : session.Keys ?? [], fullHideMouse ? [] : session.Mouse ?? [], null);
+        ShowOverlays(fullHideKeys ? [] : full!.Keys ?? [], fullHideMouse ? [] : full!.Mouse ?? [], null);
         KeysView.Time = MouseView.Time = SliderTime;
     }
 
@@ -685,7 +712,7 @@ public partial class EditorWindow : Window
 
     /// <summary>タイムラインの目盛り(ステップを撮った時刻)を付け直す。</summary>
     void UpdateTicks() =>
-        TimeSlider.Ticks = new DoubleCollection(session.Steps.Where(s => s.VideoTime != null).Select(s => s.VideoTime!.Value.TotalSeconds));
+        TimeSlider.Ticks = new DoubleCollection(session.Steps.Where(s => s.VideoTime != null && s.TimelineVideo == full?.File).Select(s => s.VideoTime!.Value.TotalSeconds));
 
     TimeSpan SliderTime => TimeSpan.FromSeconds(TimeSlider.Value);
 
@@ -713,7 +740,7 @@ public partial class EditorWindow : Window
         if (e.Key is not (Key.Left or Key.Right) || Keyboard.Modifiers != ModifierKeys.None) return;
         e.Handled = true;
         SetFullPlaying(false);
-        TimeSlider.Value = Geometry.StepFrame(TimeSlider.Value, e.Key == Key.Right ? 1 : -1, RecordedFps(session.VideoFile!) ?? FrameRate.Default, TimeSlider.Maximum);
+        TimeSlider.Value = Geometry.StepFrame(TimeSlider.Value, e.Key == Key.Right ? 1 : -1, RecordedFps(full!.File) ?? FrameRate.Default, TimeSlider.Maximum);
     }
 
     // ---- タイムラインのズーム ----
@@ -778,7 +805,7 @@ public partial class EditorWindow : Window
     void AddFrame_Click(object sender, RoutedEventArgs e)
     {
         var time = SliderTime;
-        InsertFromVideo(CaptureTrigger.Manual, VideoClips.Frame(FullPath(session.VideoFile!), time), time, _ => { });
+        InsertFromVideo(CaptureTrigger.Manual, VideoClips.Frame(FullPath(full!.File), time), time, _ => { });
     }
 
     void RangeStart_Click(object sender, RoutedEventArgs e) { rangeStart = SliderTime; ShowRange(); }
@@ -794,8 +821,8 @@ public partial class EditorWindow : Window
             MessageBox.Show(this, "「区間の開始」と「区間の終了」で、開始より後に終了を指定してください。", "step_recorder", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        InsertFromVideo(CaptureTrigger.Video, VideoClips.Frame(FullPath(session.VideoFile!), start), start,
-            st => (st.VideoFile, st.VideoStart, st.VideoEnd, st.HideKeys, st.HideMouse, st.HideAudio) = (session.VideoFile, start, end, fullHideKeys, fullHideMouse, fullHideAudio));
+        InsertFromVideo(CaptureTrigger.Video, VideoClips.Frame(FullPath(full!.File), start), start,
+            st => (st.VideoFile, st.VideoStart, st.VideoEnd, st.HideKeys, st.HideMouse, st.HideAudio) = (full.File, start, end, fullHideKeys, fullHideMouse, fullHideAudio));
         (rangeStart, rangeEnd) = (null, null);
         RangeLabel.Text = "";
     }
@@ -806,11 +833,11 @@ public partial class EditorWindow : Window
         Checkpoint();
         var rec = new Recording(session);
         var file = SaveImage(image);
-        var index = Recording.IndexByVideoTime(session.Steps, time);
+        var index = Recording.IndexByVideoTime(session.Steps, full!.File, time);
         var near = index > 0 ? session.Steps[index - 1] : session.Steps.FirstOrDefault();
         var st = rec.AddStep(trigger, near?.Window ?? new("", "", session.TargetName), file, image.PixelWidth, image.PixelHeight, DateTimeOffset.Now);
         st.ScreenName = near?.ScreenName ?? "";
-        st.VideoTime = time;
+        (st.VideoTime, st.TimelineVideo) = (time, full.File);
         setup(st);
         session.Steps.Remove(st);
         session.Steps.Insert(index, st);
@@ -836,7 +863,7 @@ public partial class EditorWindow : Window
     TimeSpan OneFrame => TimeSpan.FromSeconds(1.0 / ClipFps); // 区間はこれより短くできない
 
     /// <summary>録画ボタンで録った動画のステップか(全編から切り出した区間は全編のシークバーで扱う)。</summary>
-    bool IsOwnVideo(Step? s) => s?.VideoFile != null && s.VideoFile != session.VideoFile;
+    bool IsOwnVideo(Step? s) => s?.VideoFile != null && session.FullVideo(s.VideoFile) == null;
 
     TimeSpan ClipTime => TimeSpan.FromSeconds(ClipSlider.Value);
 
@@ -1116,7 +1143,7 @@ public partial class EditorWindow : Window
         try
         {
             Export.SaveAll(session, dir, (GroupMode)Group.SelectedIndex);
-            foreach (var f in maybeUnused.Distinct().Where(f => f != session.VideoFile && session.Steps.All(s => s.ImageFile != f && s.VideoFile != f)))
+            foreach (var f in maybeUnused.Distinct().Where(f => session.FullVideo(f) == null && session.Steps.All(s => s.ImageFile != f && s.VideoFile != f)))
                 File.Delete(System.IO.Path.Combine(dir, f));
             maybeUnused.Clear();
             dirty = false;

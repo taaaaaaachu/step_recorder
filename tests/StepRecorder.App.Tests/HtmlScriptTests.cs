@@ -45,8 +45,8 @@ public sealed class HtmlScriptTests : IDisposable
     {
         var s = new Session
         {
-            TargetName = "Demo", VideoFile = "video.mp4",
-            Keys = [new(TimeSpan.FromSeconds(1), "Ctrl+S", false), new(TimeSpan.FromSeconds(1.2), "a", true), new(TimeSpan.FromSeconds(1.3), "b", true)],
+            TargetName = "Demo",
+            Videos = [new() { File = "video.mp4", Keys = [new(TimeSpan.FromSeconds(1), "Ctrl+S", false), new(TimeSpan.FromSeconds(1.2), "a", true), new(TimeSpan.FromSeconds(1.3), "b", true)] }],
         };
         s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", VideoStart = TimeSpan.Zero, VideoEnd = TimeSpan.FromSeconds(5) });
 
@@ -66,7 +66,7 @@ public sealed class HtmlScriptTests : IDisposable
     [DesktopFact]
     public void クリックは再生の時刻に合わせて_トリミングした範囲の位置に描かれる()
     {
-        var s = new Session { TargetName = "Demo", VideoFile = "video.mp4", Mouse = [new(TimeSpan.FromSeconds(1), 300, 200, MouseAction.Left)] };
+        var s = new Session { TargetName = "Demo", Videos = [new() { File = "video.mp4", Mouse = [new(TimeSpan.FromSeconds(1), 300, 200, MouseAction.Left)] }] };
         s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", Crop = new(100, 50, 400, 300) });
 
         // 描いた所(輪の中心)と、離れた所の不透明さ
@@ -86,8 +86,8 @@ public sealed class HtmlScriptTests : IDisposable
     [DesktopFact]
     public void ドラッグ中のマウスの絵は動いた所に描かれる()
     {
-        var s = new Session { TargetName = "Demo", VideoFile = "video.mp4" };
-        s.Mouse = [new(TimeSpan.FromSeconds(1), 100, 100, MouseAction.Left) { Drag = [new(TimeSpan.FromSeconds(1.2), 400, 250), new(TimeSpan.FromSeconds(2), 400, 250)] }];
+        var s = new Session { TargetName = "Demo", Videos = [new() { File = "video.mp4" }] };
+        s.Videos[0].Mouse = [new(TimeSpan.FromSeconds(1), 100, 100, MouseAction.Left) { Drag = [new(TimeSpan.FromSeconds(1.2), 400, 250), new(TimeSpan.FromSeconds(2), 400, 250)] }];
         s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", Crop = new(0, 0, 640, 360) });
         var r = MouseOverlay.Radius(360);
         var (dx, dy) = (r * (MouseOverlay.PicOffset + MouseOverlay.PicWidth * 0.5), r * (MouseOverlay.PicOffset + MouseOverlay.PicHeight * 0.7)); // 絵の胴の中ほど
@@ -117,7 +117,7 @@ public sealed class HtmlScriptTests : IDisposable
         Array.Fill(px, (byte)255);
         var nv12 = Nv12.FromBgra(px, 320, 180);
         Task.Run(() => VideoRecorder.Encode(Path.Combine(work, "video.mp4"), 320, 180, Enumerable.Range(0, 30).Select(i => (nv12, TimeSpan.FromSeconds(i / 15.0))))).Wait();
-        var s = new Session { TargetName = "Demo", VideoFile = "video.mp4" };
+        var s = new Session { TargetName = "Demo", Videos = [new() { File = "video.mp4" }] };
         s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 320, ImageHeight = 180, VideoFile = "video.mp4" });
         var html = Path.Combine(dir, "single.html");
         Export.ExportSingleHtml(s, work, html, GroupMode.Sequence, ClipFormat.Mp4, (st, clip, poster) => VideoClips.ExportClip(work, st, ClipFormat.Mp4, clip, poster, [], []));
@@ -140,7 +140,7 @@ public sealed class HtmlScriptTests : IDisposable
     [DesktopFact]
     public void 右クリックはマウスの絵の右ボタンを塗る()
     {
-        var s = new Session { TargetName = "Demo", VideoFile = "video.mp4", Mouse = [new(TimeSpan.FromSeconds(1), 200, 100, MouseAction.Right)] };
+        var s = new Session { TargetName = "Demo", Videos = [new() { File = "video.mp4", Mouse = [new(TimeSpan.FromSeconds(1), 200, 100, MouseAction.Right)] }] };
         // トリミングしていないと、動画ファイルの無いこのテストでは高さが決まらない(実際は読み込んだ動画の大きさ)ので、全体をトリミングにする
         s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", Crop = new(0, 0, 640, 360) });
         var r = MouseOverlay.Radius(360);
@@ -162,7 +162,7 @@ public sealed class HtmlScriptTests : IDisposable
     [DesktopFact]
     public void キーの無い動画と静止画だけでもスクリプトは止まらない()
     {
-        var s = new Session { TargetName = "Demo", VideoFile = "video.mp4" };
+        var s = new Session { TargetName = "Demo", Videos = [new() { File = "video.mp4" }] };
         s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4" });
         s.Steps.Add(new Step { Id = 2, ImageFile = "images/0002.png", ImageWidth = 640, ImageHeight = 360 });
 

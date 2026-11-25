@@ -206,7 +206,7 @@ public partial class MainWindow : Window
                 Show();
             }
             bar.Progress?.Finish();
-            if (recordVideo && bar.Result?.VideoFile == null) Fail($"録画できませんでした。理由はこのファイルに書いてあります:\n{log}");
+            if (recordVideo && bar.Result?.Videos.Count is not > 0) Fail($"録画できませんでした。理由はこのファイルに書いてあります:\n{log}");
             else if (!kept && failed) Fail($"記録できませんでした。理由はこのファイルに書いてあります:\n{log}");
         };
         Hide();

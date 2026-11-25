@@ -434,7 +434,7 @@ public static class Export
     {
         // 書き出し用に、動画のステップを書き出したファイルに差し替えた写しで出力する
         var copy = SessionStore.Clone(s);
-        copy.VideoFile = null;
+        copy.Videos = [];
         foreach (var st in Sections(copy, mode).SelectMany(sec => sec.Steps)) // 画面一覧モードの HTML は同じ画面の全ステップを切り替えて見せる
         {
             if (st.VideoFile != null)

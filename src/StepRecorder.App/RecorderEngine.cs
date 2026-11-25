@@ -45,9 +45,10 @@ sealed class RecorderEngine
     static readonly TimeSpan DragInterval = TimeSpan.FromSeconds(1.0 / 60);
     const int DragThreshold = 4; // これより動かなければドラッグにしない(押したときの手ぶれ)
 
-    // 動画(ワーカー専用)。clip はホットキーで録っている途中の動画のステップ、full は録画モードの全編
+    // 動画(ワーカー専用)。clip はホットキーで録っている途中の動画のステップ、full は録画モードの全編(書き終えたら記録に載せる)
     (VideoRecorder Recorder, Step Step)? clip;
     VideoRecorder? full;
+    FullVideo? fullVideo;
 
     public volatile RecordMode Mode;
     volatile bool paused;
@@ -171,11 +172,11 @@ sealed class RecorderEngine
         finally { ClipChanged?.Invoke(false); }
     }
 
-    const string FullVideoFile = "video.mp4";
-
     void StartFullVideo()
     {
-        full = StartVideo(lastTargetRoot, FullVideoFile);
+        var file = rec.NextFullVideoFile;
+        full = StartVideo(lastTargetRoot, file);
+        fullVideo = new FullVideo { File = file };
     }
 
     /// <summary>録画を始める。音を録れなければ映像だけにし、理由を error.log に残す。</summary>
@@ -199,7 +200,7 @@ sealed class RecorderEngine
         if (full is not { } recorder) return;
         full = null;
         recorder.Stop();
-        rec.Session.VideoFile = FullVideoFile; // 書き終えられたときだけ記録に載せる
+        rec.Session.Videos.Add(fullVideo!); // 書き終えられたときだけ記録に載せる
     }
 
     void Enqueue(Action a)
@@ -382,7 +383,7 @@ sealed class RecorderEngine
             if (passwordField.Password) text = "●";
         }
         var at = recorder.CurrentTime - Stopwatch.GetElapsedTime(pressed);
-        var keys = clip is var (_, step) ? step.Keys ??= [] : rec.Session.Keys ??= [];
+        var keys = clip is var (_, step) ? step.Keys ??= [] : fullVideo!.Keys ??= [];
         keys.Add(new KeyStroke(at < TimeSpan.Zero ? TimeSpan.Zero : at, text, label.IsChar));
     }
 
@@ -395,7 +396,7 @@ sealed class RecorderEngine
         var recorder = clip?.Recorder ?? full;
         if (recorder?.ToVideo(point) is not { } p) return null;
         var at = recorder.CurrentTime - Stopwatch.GetElapsedTime(pressed);
-        var list = clip is var (_, step) ? step.Mouse ??= [] : rec.Session.Mouse ??= [];
+        var list = clip is var (_, step) ? step.Mouse ??= [] : fullVideo!.Mouse ??= [];
         var stroke = new MouseStroke(at < TimeSpan.Zero ? TimeSpan.Zero : at, p.X, p.Y, action);
         list.Add(stroke);
         return (stroke, recorder);
@@ -441,7 +442,7 @@ sealed class RecorderEngine
         var step = rec.AddStep(trigger, target.Describe(root), file,
             shot.Image.PixelWidth, shot.Image.PixelHeight, DateTimeOffset.Now, op);
         step.Crop = shot.Crop; // 画像はアプリ全体。ダイアログなどを操作したときは、そのウィンドウだけが見えるようにトリミングしておく
-        step.VideoTime = full?.CurrentTime; // 録画モードなら、編集画面のタイムラインに目盛りを付ける
+        (step.VideoTime, step.TimelineVideo) = (full?.CurrentTime, fullVideo?.File); // 録画モードなら、編集画面のタイムラインに目盛りを付ける
         StepCountChanged?.Invoke(rec.Session.Steps.Count);
         return step;
     }

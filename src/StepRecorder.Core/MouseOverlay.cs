@@ -61,7 +61,7 @@ public static class MouseOverlay
 
     /// <summary>動画のステップでのマウスの操作(そのステップの動画ファイルの時刻)。区間の扱いはキーと同じ。</summary>
     public static IReadOnlyList<MouseStroke> Recorded(Session session, Step step) =>
-        KeyOverlay.InStep(session, step, session.Mouse, step.Mouse, m => m.Time);
+        KeyOverlay.InStep(session, step, v => v.Mouse, step.Mouse, m => m.Time);
 
     public static IReadOnlyList<MouseMark> Marks(IReadOnlyList<MouseStroke> strokes)
     {

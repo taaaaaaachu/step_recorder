@@ -71,7 +71,7 @@ public class MouseOverlayTests
     [Fact]
     public void ステップに重ねるのは区間の中だけで_キーとは別に出さない設定にできる()
     {
-        var session = new Session { VideoFile = "video.mp4", Mouse = [M(1, MouseAction.Left), M(5, MouseAction.Middle)], Keys = [new(S(5), "a", true)] };
+        var session = new Session { Videos = [new() { File = "video.mp4", Mouse = [M(1, MouseAction.Left), M(5, MouseAction.Middle)], Keys = [new(S(5), "a", true)] }] };
         var range = new Step { VideoFile = "video.mp4", VideoStart = S(4), VideoEnd = S(9) };
         var clip = new Step { VideoFile = "videos/0002.mp4", Mouse = [M(0.5, MouseAction.WheelUp)] };
 
@@ -86,13 +86,13 @@ public class MouseOverlayTests
     [Fact]
     public void マウスと表示の設定は読み書きでき_出すときは書かない()
     {
-        var session = new Session { VideoFile = "video.mp4", Mouse = [M(1.25, MouseAction.WheelRight, 3, 4)] };
+        var session = new Session { Videos = [new() { File = "video.mp4", Mouse = [M(1.25, MouseAction.WheelRight, 3, 4)] }] };
         session.Steps.Add(new Step { VideoFile = "video.mp4" });
         session.Steps.Add(new Step { VideoFile = "video.mp4", HideMouse = true });
         var json = JsonSerializer.Serialize(session, SessionStore.Options);
         var back = SessionStore.Clone(session);
 
-        Assert.Equal(session.Mouse, back.Mouse);
+        Assert.Equal(session.Videos[0].Mouse, back.Videos[0].Mouse);
         Assert.Equal([false, true], back.Steps.Select(s => s.HideMouse));
         Assert.Contains("\"wheelRight\"", json);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(json, "\"hideMouse\""));
@@ -101,12 +101,12 @@ public class MouseOverlayTests
     [Fact]
     public void ドラッグの位置は読み書きでき_ドラッグしていなければ書かない()
     {
-        var session = new Session { VideoFile = "video.mp4", Mouse = [Dragged((1.5, 90, 40)), M(3, MouseAction.Left)] };
+        var session = new Session { Videos = [new() { File = "video.mp4", Mouse = [Dragged((1.5, 90, 40)), M(3, MouseAction.Left)] }] };
         var json = JsonSerializer.Serialize(session, SessionStore.Options);
         var back = SessionStore.Clone(session);
 
-        Assert.Equal([new MousePoint(S(1.5), 90, 40)], back.Mouse![0].Drag);
-        Assert.Null(back.Mouse[1].Drag);
+        Assert.Equal([new MousePoint(S(1.5), 90, 40)], back.Videos[0].Mouse![0].Drag);
+        Assert.Null(back.Videos[0].Mouse[1].Drag);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(json, "\"drag\""));
     }
 }
@@ -115,7 +115,7 @@ public class MouseOverlayHtmlTests
 {
     static Session WithMouse()
     {
-        var s = new Session { TargetName = "App", VideoFile = "video.mp4", Mouse = [new(TimeSpan.FromSeconds(2), 300, 200, MouseAction.Right), new(TimeSpan.FromSeconds(9), 1, 1, MouseAction.Left)] };
+        var s = new Session { TargetName = "App", Videos = [new() { File = "video.mp4", Mouse = [new(TimeSpan.FromSeconds(2), 300, 200, MouseAction.Right), new(TimeSpan.FromSeconds(9), 1, 1, MouseAction.Left)] }] };
         s.Steps.Add(new Step { Id = 1, ImageFile = "images/0001.png", ImageWidth = 640, ImageHeight = 360, VideoFile = "video.mp4", VideoStart = TimeSpan.FromSeconds(1), VideoEnd = TimeSpan.FromSeconds(5), Crop = new(100, 50, 400, 300) });
         return s;
     }
@@ -136,7 +136,7 @@ public class MouseOverlayHtmlTests
     public void ドラッグは秒と位置を並べて渡す()
     {
         var s = WithMouse();
-        s.Mouse![0].Drag = [new(TimeSpan.FromSeconds(2.5), 320, 210), new(TimeSpan.FromSeconds(3), 340, 220)];
+        s.Videos[0].Mouse![0].Drag = [new(TimeSpan.FromSeconds(2.5), 320, 210), new(TimeSpan.FromSeconds(3), 340, 220)];
         var clip = Export.ToHtml(s, GroupMode.Sequence).Split('\n').Single(l => l.Contains("<video"));
         Assert.Contains("data-mouse=\"[[2,3,300,200,1,[2.5,320,210,3,340,220]]]\"", clip); // 離すまで出す
     }

@@ -275,7 +275,7 @@ public class VideoExportTests
     /// <summary>静止画1枚と、録画モードの全編から区間を切り出した動画のステップ1つ。</summary>
     static Session Sample()
     {
-        var rec = new Recording(new Session { TargetName = "App", CreatedAt = DateTimeOffset.Now, VideoFile = "video.mp4" });
+        var rec = new Recording(new Session { TargetName = "App", CreatedAt = DateTimeOffset.Now, Videos = [new() { File = "video.mp4" }] });
         var win = new WindowInfo("メイン", "W", "App");
         rec.AddStep(CaptureTrigger.Click, win, "images/0001.png", 200, 100, DateTimeOffset.Now);
         var clip = rec.AddStep(CaptureTrigger.Video, win, "images/0002.png", 200, 100, DateTimeOffset.Now);
@@ -446,7 +446,7 @@ public class VideoExportTests
                 Assert.Contains("<option value=\"2\" selected>2 倍速</option>", html);
             }
             Assert.Equal(2, s.Steps[1].Speed);
-            Assert.Equal("video.mp4", s.VideoFile); // 元のセッションは変えない
+            Assert.Equal("video.mp4", s.Videos[0].File); // 元のセッションは変えない
         }
         finally
         {
@@ -465,7 +465,7 @@ public class VideoExportTests
             s.Steps[0].VideoTime = TimeSpan.FromSeconds(0.8);
             SessionStore.Save(s, dir);
             var back = SessionStore.Load(dir);
-            Assert.Equal("video.mp4", back.VideoFile);
+            Assert.Equal("video.mp4", back.Videos[0].File);
             Assert.Equal(TimeSpan.FromSeconds(0.8), back.Steps[0].VideoTime);
             Assert.Equal((TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(4)), (back.Steps[1].VideoStart!.Value, back.Steps[1].VideoEnd!.Value));
             Assert.Equal(CaptureTrigger.Video, back.Steps[1].Trigger);
@@ -476,7 +476,8 @@ public class VideoExportTests
 
 public class TimelineTests
 {
-    static Step At(double? sec) => new() { VideoTime = sec is { } s ? TimeSpan.FromSeconds(s) : null };
+    static Step At(double? sec, string video = "video.mp4") =>
+        new() { VideoTime = sec is { } s ? TimeSpan.FromSeconds(s) : null, TimelineVideo = sec == null ? null : video };
 
     [Theory]
     [InlineData(0.5, 0)] // どれよりも前
@@ -484,5 +485,14 @@ public class TimelineTests
     [InlineData(2.5, 2)] // 2.0 の直後(時刻の無いステップより前)
     [InlineData(9.0, 4)] // 最後
     public void 足したステップは動画上の時刻の順に入れる(double time, int expected) =>
-        Assert.Equal(expected, Recording.IndexByVideoTime([At(1), At(2), At(null), At(3)], TimeSpan.FromSeconds(time)));
+        Assert.Equal(expected, Recording.IndexByVideoTime([At(1), At(2), At(null), At(3)], "video.mp4", TimeSpan.FromSeconds(time)));
+
+    [Theory]
+    [InlineData("video.mp4", 0.5, 0)]
+    [InlineData("video.mp4", 9.0, 2)] // 1 本目の最後の直後(2 本目のステップより前)
+    [InlineData("video-2.mp4", 0.5, 2)] // 2 本目の最初のステップの前(1 本目の時刻とは比べない)
+    [InlineData("video-2.mp4", 1.5, 3)]
+    [InlineData("video-3.mp4", 1.0, 4)] // その動画のステップが無ければ末尾
+    public void 全編が何本かあれば_同じ全編のステップの中で時刻の順に入れる(string video, double time, int expected) =>
+        Assert.Equal(expected, Recording.IndexByVideoTime([At(1), At(5), At(1, "video-2.mp4"), At(2, "video-2.mp4")], video, TimeSpan.FromSeconds(time)));
 }
