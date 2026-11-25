@@ -59,3 +59,31 @@ public sealed class MainWindowTests : IDisposable
     }
 }
 
+
+/// <summary>開始画面の設定のうち、記録を始めなくても残すもの。入力は送らない。</summary>
+public sealed class StartSettingsTests : IDisposable
+{
+    readonly string root = Path.Combine(Path.GetTempPath(), "sr-start-" + Guid.NewGuid());
+
+    public void Dispose()
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, true);
+    }
+
+    [DesktopFact]
+    public void 出力先は記録を始めずに閉じても残る()
+    {
+        MakeProfile(root, new StepRecorder.Core.Settings { AutoUpdate = false, OutputDir = Path.Combine(root, "before") });
+        var app = Open(AppExe, "", root);
+        try
+        {
+            var after = Path.Combine(root, "after");
+            var box = Find(app.MainWindowHandle, "OutputDir");
+            ((ValuePattern)box.GetCurrentPattern(ValuePattern.Pattern)).SetValue(after);
+            ((WindowPattern)AutomationElement.FromHandle(app.MainWindowHandle).GetCurrentPattern(WindowPattern.Pattern)).Close();
+            Assert.True(app.WaitForExit(5000), "閉じない");
+            Assert.Equal(after, StepRecorder.Core.Settings.Load(Path.Combine(root, @"AppData\Roaming\step_recorder\settings.json")).OutputDir);
+        }
+        finally { Close(app); }
+    }
+}

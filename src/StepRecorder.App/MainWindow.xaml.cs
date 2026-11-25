@@ -115,6 +115,9 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         CloseBadge();
+        // 出力先は記録を始めなくても残す(他の欄は記録開始で確かめてから保存する)
+        if (OutputDir.Text.Trim() is { Length: > 0 } dir && dir != settings.OutputDir)
+            settings = Settings.Update(Settings.DefaultPath, s => s.OutputDir = dir);
         base.OnClosed(e);
     }
 
