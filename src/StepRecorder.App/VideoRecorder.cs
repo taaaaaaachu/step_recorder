@@ -139,7 +139,7 @@ sealed class VideoRecorder
             // 録り始めは WGC のフレームがまだ届いておらず真っ白になるので、全部のウィンドウの最初のフレームを待ってから時計を動かす
             foreach (var (h, _) in input.Items())
                 if (CaptureSource.TryCreate(gpu, h, input.CreateItem, cursor) is { } s) sources[h] = s;
-            var deadline = DateTime.Now.AddSeconds(1);
+            var deadline = DateTime.Now.AddSeconds(3); // 重いときは 1 秒では届かないことがある
             while (!sources.Values.All(s => s.Ready()) && DateTime.Now < deadline) Thread.Sleep(10);
             clock.Start();
             started.Set();
@@ -167,17 +167,17 @@ sealed class VideoRecorder
                 clock.Start();
                 // 遅れたらその分のフレームは飛ばす(タイムスタンプは経過時間どおり)
                 var index = (long)(clock.Elapsed.TotalSeconds * fps);
-                // タブの切り替え直後は、新しいウィンドウの絵が届くまで(長くても 1 秒)待つ。白いコマを挟まない
-                var arriving = next > 0 && items.Count > 0 && index - next < fps
-                    && !items.Any(i => sources.TryGetValue(i.Handle, out var s) && s.Ready());
-                if (arriving) Thread.Sleep(10);
-                else if (index >= next)
+                if (index >= next)
                 {
                     var at = input.Origin();
                     origin = at;
-                    Array.Fill(canvas, (byte)0xFF); // ウィンドウ同士の隙間は白
-                    foreach (var (h, r) in items)
-                        if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - at.Left, r.Top - at.Top, input.Blend);
+                    // タブの切り替え直後などで、どのウィンドウの絵もまだ届いていなければ前のコマのままにする。白いコマを挟まない
+                    if (next == 0 || items.Any(i => sources.TryGetValue(i.Handle, out var s) && s.Ready()))
+                    {
+                        Array.Fill(canvas, (byte)0xFF); // ウィンドウ同士の隙間は白
+                        foreach (var (h, r) in items)
+                            if (sources.TryGetValue(h, out var s)) s.DrawTo(canvas, width, height, r.Left - at.Left, r.Top - at.Top, input.Blend);
+                    }
                     if (Resting()) continue; // 合成している間に止められたら、その絵は使わない
                     var frame = (Nv12.FromBgra(canvas, width, height), TimeSpan.FromSeconds((double)index / fps));
                     while (!frames.TryAdd(frame, 100))

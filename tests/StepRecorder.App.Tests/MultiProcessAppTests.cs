@@ -87,13 +87,13 @@ public sealed class MultiProcessAppTests : IDisposable
     [DesktopFact]
     public void 録画中にタブが切り替わったら_見えている方を追う()
     {
+        Tab("Lime"); // 先に開いておく(切り替えるまでは a の下)。録画中に起動すると、描き終わる前の空のウィンドウが写る
         var a = Tab("Red");
         var target = new AppTarget(a.Process);
         var path = Path.Combine(dir, "switch.mp4");
 
         var rec = target.StartVideo(target.InitialWindow, path, false, () => false, FrameRate.Default);
         Wait(1000);
-        var b = Tab("Lime");
         SwitchTab(a.Window);
         Wait(1000);
         rec.Stop();
