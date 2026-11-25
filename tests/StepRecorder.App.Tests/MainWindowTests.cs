@@ -5,7 +5,7 @@ using static StepRecorder.App.Tests.Desktop;
 
 namespace StepRecorder.App.Tests;
 
-/// <summary>開始画面を実際に操作する。設定は記録開始などをしない限り保存されないので、利用者の設定は変わらない。</summary>
+/// <summary>開始画面を実際に操作する。設定はテスト用のプロファイルに保存されるので、利用者の設定は変わらない。</summary>
 public sealed class MainWindowTests : IDisposable
 {
     readonly Process app = Launch(AppExe);
@@ -70,20 +70,58 @@ public sealed class StartSettingsTests : IDisposable
         if (Directory.Exists(root)) Directory.Delete(root, true);
     }
 
-    [DesktopFact]
-    public void 出力先は記録を始めずに閉じても残る()
+    string SettingsPath => Path.Combine(root, @"AppData\Roaming\step_recorder\settings.json");
+
+    /// <summary>テスト用のプロファイルで開始画面を開き、change で欄を変えてから閉じる。閉じたあとの設定を返す。</summary>
+    StepRecorder.Core.Settings CloseAfter(Action<nint> change)
     {
         MakeProfile(root, new StepRecorder.Core.Settings { AutoUpdate = false, OutputDir = Path.Combine(root, "before") });
         var app = Open(AppExe, "", root);
         try
         {
-            var after = Path.Combine(root, "after");
-            var box = Find(app.MainWindowHandle, "OutputDir");
-            ((ValuePattern)box.GetCurrentPattern(ValuePattern.Pattern)).SetValue(after);
-            ((WindowPattern)AutomationElement.FromHandle(app.MainWindowHandle).GetCurrentPattern(WindowPattern.Pattern)).Close();
-            Assert.True(app.WaitForExit(5000), "閉じない");
-            Assert.Equal(after, StepRecorder.Core.Settings.Load(Path.Combine(root, @"AppData\Roaming\step_recorder\settings.json")).OutputDir);
+            change(app.MainWindowHandle);
+            app.CloseMainWindow(); // ドロップダウンを開閉したあとは、UI Automation の Close が効かないことがある
+            Assert.True(app.WaitForExit(5000), "閉じない: " + string.Join(" | ", AutomationElement.RootElement.FindAll(TreeScope.Children,
+                new PropertyCondition(AutomationElement.ProcessIdProperty, app.Id)).Cast<AutomationElement>().Select(w => $"{w.Current.ClassName}「{w.Current.Name}」")));
+            return StepRecorder.Core.Settings.Load(SettingsPath);
         }
         finally { Close(app); }
+    }
+
+    static void Choose(nint main, string combo, string item)
+    {
+        var box = Find(main, combo);
+        ((ExpandCollapsePattern)box.GetCurrentPattern(ExpandCollapsePattern.Pattern)).Expand();
+        Wait(300);
+        ((SelectionItemPattern)box.FindFirst(TreeScope.Descendants, new AndCondition(
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem),
+            new PropertyCondition(AutomationElement.NameProperty, item))).GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        ((ExpandCollapsePattern)box.GetCurrentPattern(ExpandCollapsePattern.Pattern)).Collapse();
+        Wait(300);
+    }
+
+    [DesktopFact]
+    public void 設定は記録を始めずに閉じても残る()
+    {
+        var after = Path.Combine(root, "after");
+        var defaults = new StepRecorder.Core.Settings();
+        var s = CloseAfter(main =>
+        {
+            ((ValuePattern)Find(main, "OutputDir").GetCurrentPattern(ValuePattern.Pattern)).SetValue(after);
+            ((SelectionItemPattern)Find(main, "ModeRecord").GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+            ((TogglePattern)Find(main, "CaptureCursor").GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+            Choose(main, "Fps", "30fps");
+            Choose(main, "Group", "画面一覧モード(画面ごとにまとめる)");
+        });
+        Assert.Equal((after, StepRecorder.Core.RecordMode.Video, !defaults.CaptureCursor, 30, StepRecorder.Core.GroupMode.ByScreen),
+            (s.OutputDir, s.DefaultMode, s.CaptureCursor, s.Fps, s.GroupMode));
+        Assert.Equal(defaults.HotkeyCapture, s.HotkeyCapture);
+    }
+
+    [DesktopFact]
+    public void 出力先を空にして閉じても_前の出力先のまま()
+    {
+        var s = CloseAfter(main => ((ValuePattern)Find(main, "OutputDir").GetCurrentPattern(ValuePattern.Pattern)).SetValue("  "));
+        Assert.Equal(Path.Combine(root, "before"), s.OutputDir);
     }
 }

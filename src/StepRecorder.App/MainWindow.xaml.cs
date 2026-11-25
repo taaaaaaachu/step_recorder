@@ -50,26 +50,38 @@ public partial class MainWindow : Window
     /// <summary>画面の入力を設定に反映して保存する。不正な値があればメッセージを出して false。</summary>
     bool ReadSettings()
     {
-        foreach (var (box, label) in new[] { (HkCapture, "手動撮影"), (HkPause, "一時停止"), (HkStop, "停止"), (HkClip, "録画") })
-            if (!Hotkey.TryParse(box.Text, out _)) return Fail($"{label}キーを設定してください(欄をクリックしてキーを押す)");
-        if (new[] { HkCapture.Text, HkPause.Text, HkStop.Text, HkClip.Text }.Distinct().Count() < 4) return Fail("手動撮影・一時停止・停止・録画には別々のキーを設定してください");
+        if (HotkeyError() is { } message) return Fail(message);
         if (string.IsNullOrWhiteSpace(OutputDir.Text)) return Fail("出力先を入力してください");
+        WriteSettings(hotkeys: true);
+        return true;
+    }
 
-        settings = Settings.Update(Settings.DefaultPath, s =>
+    /// <summary>ショートカットキー欄がおかしければ、その知らせ。</summary>
+    string? HotkeyError()
+    {
+        foreach (var (box, label) in new[] { (HkCapture, "手動撮影"), (HkPause, "一時停止"), (HkStop, "停止"), (HkClip, "録画") })
+            if (!Hotkey.TryParse(box.Text, out _)) return $"{label}キーを設定してください(欄をクリックしてキーを押す)";
+        if (new[] { HkCapture.Text, HkPause.Text, HkStop.Text, HkClip.Text }.Distinct().Count() < 4) return "手動撮影・一時停止・停止・録画には別々のキーを設定してください";
+        return null;
+    }
+
+    /// <summary>画面の入力を設定に保存する。hotkeys が false ならショートカットキーは前のまま。出力先が空なら前のまま。</summary>
+    void WriteSettings(bool hotkeys) => settings = Settings.Update(Settings.DefaultPath, s =>
+    {
+        s.DefaultMode = ModeManual.IsChecked == true ? RecordMode.Manual
+            : ModeRecord.IsChecked == true ? RecordMode.Video : RecordMode.Click;
+        if (OutputDir.Text.Trim() is { Length: > 0 } dir) s.OutputDir = dir;
+        if (hotkeys)
         {
-            s.DefaultMode = ModeManual.IsChecked == true ? RecordMode.Manual
-                : ModeRecord.IsChecked == true ? RecordMode.Video : RecordMode.Click;
-            s.OutputDir = OutputDir.Text.Trim();
             s.HotkeyCapture = HkCapture.Text.Trim();
             s.HotkeyPause = HkPause.Text.Trim();
             s.HotkeyStop = HkStop.Text.Trim();
             s.HotkeyClip = HkClip.Text.Trim();
-            s.GroupMode = (GroupMode)Group.SelectedIndex;
-            s.CaptureCursor = CaptureCursor.IsChecked == true;
-            s.Fps = FrameRate.Choices[Math.Max(0, Fps.SelectedIndex)];
-        });
-        return true;
-    }
+        }
+        s.GroupMode = (GroupMode)Group.SelectedIndex;
+        s.CaptureCursor = CaptureCursor.IsChecked == true;
+        s.Fps = FrameRate.Choices[Math.Max(0, Fps.SelectedIndex)];
+    });
 
     bool Fail(string message)
     {
@@ -115,9 +127,8 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         CloseBadge();
-        // 出力先は記録を始めなくても残す(他の欄は記録開始で確かめてから保存する)
-        if (OutputDir.Text.Trim() is { Length: > 0 } dir && dir != settings.OutputDir)
-            settings = Settings.Update(Settings.DefaultPath, s => s.OutputDir = dir);
+        // 記録を始めなくても残す。閉じるときは知らせを出さず、使えないショートカットキーと空の出力先は前のままにする
+        WriteSettings(hotkeys: HotkeyError() == null);
         base.OnClosed(e);
     }
 
