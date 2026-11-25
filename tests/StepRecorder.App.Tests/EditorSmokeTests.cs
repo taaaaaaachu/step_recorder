@@ -558,7 +558,7 @@ public sealed class EditorSmokeTests : IDisposable
         var timeline = Find(editor, "TimeScroller");
         var timeScroll = (ScrollPattern)timeline.GetCurrentPattern(ScrollPattern.Pattern);
         double Shown() => timeScroll.Current.HorizontallyScrollable ? timeScroll.Current.HorizontalViewSize : 100;
-        double Scrolled() => timeScroll.Current.HorizontalScrollPercent;
+        double Scrolled() => Math.Round(timeScroll.Current.HorizontalScrollPercent, 6); // 末尾で 100.00000000000001 になることがある
         void Shot(string name)
         {
             if (Environment.GetEnvironmentVariable("STEP_RECORDER_E2E_OUT") is { Length: > 0 } o)
