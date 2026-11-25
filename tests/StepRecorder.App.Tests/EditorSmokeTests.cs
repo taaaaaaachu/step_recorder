@@ -20,6 +20,22 @@ public sealed class EditorSmokeTests : IDisposable
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
+    /// <summary>マウスカーソルのあるモニターの作業領域に収まって、真ん中に開く(拡大率の小さいサブ画面でもタイトルバーが外に出ない)。</summary>
+    [DesktopFact]
+    public void 編集画面はカーソルのあるモニターの作業領域に収まって開く()
+    {
+        SessionStore.Save(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now }, dir);
+        app = Open(AppExe, $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        Wait(500);
+
+        Native.GetCursorPos(out var cursor);
+        var work = Monitors.Info(Native.MonitorFromPoint(cursor, Native.MONITOR_DEFAULTTONEAREST))!.Value.rcWork;
+        Assert.True(Native.GetWindowRect(editor, out var r));
+        Assert.True(r.Left >= work.Left && r.Top >= work.Top && r.Right <= work.Right && r.Bottom <= work.Bottom, $"{r.ToPixelRect()} が {work.ToPixelRect()} からはみ出した");
+        Assert.True(Math.Abs((r.Left + r.Right) - (work.Left + work.Right)) <= 2 && Math.Abs((r.Top + r.Bottom) - (work.Top + work.Bottom)) <= 2, "真ん中にない");
+    }
+
     /// <summary>記録フォルダを渡して起動すると、開始画面を出さずに編集画面が開く。</summary>
     [E2EFact]
     public void 記録フォルダを渡すと編集画面が開く()

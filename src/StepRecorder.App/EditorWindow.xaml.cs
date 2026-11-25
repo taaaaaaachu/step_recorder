@@ -41,6 +41,25 @@ public partial class EditorWindow : Window
 
     Step? Current => (Steps.SelectedItem as StepView)?.Step;
 
+    /// <summary>
+    /// マウスカーソルのあるモニター(記録を止めたバーのある画面)の真ん中に、作業領域に収めて置く。見える前に物理ピクセルで置く。
+    /// CenterScreen は作った時点(メイン画面)の拡大率で大きさを決めるので、拡大率の小さいモニターではタイトルバーが画面の外に出る。
+    /// 移ると拡大率に合わせて大きさが変わるので、移してから大きさを見る(RecordBar と同じ)。
+    /// </summary>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        Native.GetCursorPos(out var cursor);
+        if (Monitors.Info(Native.MonitorFromPoint(cursor, Native.MONITOR_DEFAULTTONEAREST)) is not { } info) return;
+        var work = info.rcWork;
+        const uint flags = Native.SWP_NOZORDER | Native.SWP_NOACTIVATE;
+        Native.SetWindowPos(hwnd, 0, work.Left, work.Top, 0, 0, flags | Native.SWP_NOSIZE);
+        if (!Native.GetWindowRect(hwnd, out var r)) return;
+        var to = Geometry.CenterIn(work.ToPixelRect(), r.Width, r.Height);
+        Native.SetWindowPos(hwnd, 0, to.X, to.Y, to.Width, to.Height, flags);
+    }
+
     public EditorWindow(Session session, string dir, GroupMode mode)
     {
         InitializeComponent();

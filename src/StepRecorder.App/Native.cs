@@ -50,6 +50,7 @@ static class Native
     [DllImport("user32.dll")] public static extern bool IsIconic(nint hwnd);
     [DllImport("user32.dll")] public static extern bool IsWindow(nint hwnd);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(nint hwnd, out RECT r);
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
     [DllImport("user32.dll")] public static extern nint GetWindow(nint hwnd, uint cmd);
     [DllImport("user32.dll")] public static extern nint GetTopWindow(nint hwnd);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern nint GetWindowLongPtr(nint hwnd, int index);

@@ -51,6 +51,13 @@ public static class Geometry
         return crop == new PixelRect(0, 0, all.Width, all.Height) || !IsUsable(crop) ? null : crop;
     }
 
+    /// <summary>幅 width・高さ height のウィンドウを、作業領域 work に収まる大きさにして真ん中に置く矩形。</summary>
+    public static PixelRect CenterIn(PixelRect work, int width, int height)
+    {
+        var (w, h) = (Math.Min(width, work.Width), Math.Min(height, work.Height));
+        return new(work.X + (work.Width - w) / 2, work.Y + (work.Height - h) / 2, w, h);
+    }
+
     /// <summary>幅 width のシークバーで、割合 ratio(0〜1)の位置の X。inset は両端の、つまみの中心が届かない幅。</summary>
     public static double TrackX(double ratio, double width, double inset) => inset + ratio * (width - 2 * inset);
 

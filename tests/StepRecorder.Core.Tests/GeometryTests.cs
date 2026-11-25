@@ -87,3 +87,14 @@ public class CropForTests
         Assert.Equal(new PixelRect(0, 0, 50, 50), Geometry.CropFor(all, new PixelRect(50, 0, 100, 100))); // はみ出す分は削る
     }
 }
+
+public class CenterInTests
+{
+    [Fact]
+    public void 収まるなら大きさはそのままで真ん中に置く() =>
+        Assert.Equal(new PixelRect(-1920 + 320, 130, 1280, 820), Geometry.CenterIn(new PixelRect(-1920, 0, 1920, 1080), 1280, 820));
+
+    [Fact]
+    public void はみ出す向きは作業領域の大きさまで縮める() => // 150% の 1280x820 を、100% のサブ画面(タスクバーを除く)に出すとき
+        Assert.Equal(new PixelRect(-1920, 0, 1920, 1032), Geometry.CenterIn(new PixelRect(-1920, 0, 1920, 1032), 1920, 1230));
+}
