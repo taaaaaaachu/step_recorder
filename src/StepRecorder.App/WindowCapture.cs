@@ -141,7 +141,7 @@ static class WindowCapture
         var old = SelectObject(dc, bmp);
         try
         {
-            if (!PrintWindow(hwnd, dc, PW_RENDERFULLCONTENT))
+            if (!PrintWindowScaled(hwnd, dc, wr, screen))
                 BitBlt(dc, 0, 0, wr.Width, wr.Height, screen, wr.Left, wr.Top, SRCCOPY); // 描けないウィンドウは画面から
             else visible = WithoutBlackEdges(dc, visible, wr);
             BitBlt(dst, visible.Left - u.Left, visible.Top - u.Top, visible.Width, visible.Height,
@@ -152,6 +152,32 @@ static class WindowCapture
             SelectObject(dc, old);
             DeleteObject(bmp);
             DeleteDC(dc);
+        }
+    }
+
+    /// <summary>
+    /// hwnd を、画面に見えている大きさ wr で dc に描かせる。PrintWindow はアプリが描いた大きさのまま返すので、
+    /// モニターの拡大率と違う DPI で描くアプリ(DPI 非対応・システム DPI 対応)は、一度その大きさで描かせてから伸び縮みさせる。
+    /// </summary>
+    static bool PrintWindowScaled(nint hwnd, nint dc, RECT wr, nint screen)
+    {
+        var drawn = DrawnWindowRect(hwnd);
+        if (drawn.Width <= 0 || drawn.Height <= 0 || (drawn.Width, drawn.Height) == (wr.Width, wr.Height))
+            return PrintWindow(hwnd, dc, PW_RENDERFULLCONTENT);
+        var src = CreateCompatibleDC(screen);
+        var bmp = CreateCompatibleBitmap(screen, drawn.Width, drawn.Height);
+        var old = SelectObject(src, bmp);
+        try
+        {
+            if (!PrintWindow(hwnd, src, PW_RENDERFULLCONTENT)) return false;
+            SetStretchBltMode(dc, HALFTONE);
+            return StretchBlt(dc, 0, 0, wr.Width, wr.Height, src, 0, 0, drawn.Width, drawn.Height, SRCCOPY);
+        }
+        finally
+        {
+            SelectObject(src, old);
+            DeleteObject(bmp);
+            DeleteDC(src);
         }
     }
 

@@ -88,6 +88,22 @@ static class Native
     [DllImport("gdi32.dll")] public static extern bool DeleteObject(nint obj);
     [DllImport("gdi32.dll")] public static extern bool DeleteDC(nint hdc);
     [DllImport("gdi32.dll")] public static extern bool BitBlt(nint dst, int x, int y, int w, int h, nint src, int sx, int sy, uint rop);
+    public const int HALFTONE = 4;
+    [DllImport("gdi32.dll")] public static extern bool StretchBlt(nint dst, int x, int y, int w, int h, nint src, int sx, int sy, int sw, int sh, uint rop);
+    [DllImport("gdi32.dll")] public static extern int SetStretchBltMode(nint hdc, int mode);
+    [DllImport("user32.dll")] static extern nint GetWindowDpiAwarenessContext(nint hwnd);
+    [DllImport("user32.dll")] static extern nint SetThreadDpiAwarenessContext(nint context);
+
+    /// <summary>
+    /// hwnd が自分で描いている大きさでのウィンドウ矩形。DPI 非対応・システム DPI 対応のアプリは、
+    /// 置かれたモニターの拡大率と違う DPI で描き、それを DWM が伸び縮みさせて見せているので、GetWindowRect とは大きさが違う。
+    /// </summary>
+    public static RECT DrawnWindowRect(nint hwnd)
+    {
+        var old = SetThreadDpiAwarenessContext(GetWindowDpiAwarenessContext(hwnd));
+        try { return GetWindowRect(hwnd, out var r) ? r : default; }
+        finally { if (old != 0) SetThreadDpiAwarenessContext(old); }
+    }
 
     public static bool KeyDown(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
 

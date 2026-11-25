@@ -6,6 +6,8 @@ static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        // 描く DPI とモニターの DPI が違うアプリの撮影を確かめるため。先に決めると Initialize の SystemAware は効かない
+        if (Environment.GetEnvironmentVariable("SAMPLE_DPI_UNAWARE") == "1") Application.SetHighDpiMode(HighDpiMode.DpiUnaware);
         ApplicationConfiguration.Initialize();
         var form = new Form { Text = "サンプル画面", ClientSize = new(380, 200), StartPosition = FormStartPosition.CenterScreen };
         var tabs = new TabControl { Dock = DockStyle.Fill };
