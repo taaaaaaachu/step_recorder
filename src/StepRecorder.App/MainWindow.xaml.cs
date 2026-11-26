@@ -99,7 +99,7 @@ public partial class MainWindow : Window
         var monitors = Monitors.All().Select(m => new TargetItem(new MonitorTarget(m), m.Label));
         var self = Environment.ProcessId;
         var apps = Process.GetProcesses()
-            .Where(p => p.Id != self && p.MainWindowHandle != 0 && p.MainWindowTitle != "")
+            .Where(p => p.Id != self && p.MainWindowTitle != "" && AppProcesses.IsAppWindow(p.MainWindowHandle))
             .OrderBy(p => p.ProcessName, StringComparer.OrdinalIgnoreCase)
             .Select(p => new TargetItem(new AppTarget(p), $"{p.ProcessName} — {p.MainWindowTitle}"));
         var items = monitors.Concat(apps).ToList();

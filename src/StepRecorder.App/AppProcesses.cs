@@ -45,7 +45,7 @@ sealed class AppProcesses
         var (best, bestRank) = ((nint)0, -1);
         for (var h = GetTopWindow(0); h != 0; h = GetWindow(h, GW_HWNDNEXT))
         {
-            if (!IsShown(h) || ((long)GetWindowLongPtr(h, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) != 0 || Text(h) == "") continue;
+            if (!IsAppWindow(h) || Text(h) == "") continue;
             if (!GetWindowRect(h, out var r) || r.Width <= 0 || r.Height <= 0 || !Contains(h)) continue; // 大きさの無い窓(隠れた持ち主役)は除く
             var rank = (ClassName(h) == className ? 4 : 0) + (GetWindow(h, GW_OWNER) == 0 ? 2 : 0) + (IsIconic(h) ? 0 : 1);
             if (rank > bestRank) (best, bestRank) = (h, rank);
@@ -68,4 +68,10 @@ sealed class AppProcesses
     }
 
     static bool IsShown(nint window) => window != 0 && IsWindowVisible(window) && !IsCloaked(window);
+
+    /// <summary>
+    /// 利用者がアプリとして相手にするウィンドウか。見えていて(cloak もされていない)、ツールウィンドウでない。
+    /// 常駐の隠れた窓(TextInputHost・PowerToys.QuickAccess など)や、透明なオーバーレイを除く。
+    /// </summary>
+    public static bool IsAppWindow(nint window) => IsShown(window) && ((long)GetWindowLongPtr(window, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0;
 }
