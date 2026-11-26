@@ -21,7 +21,8 @@ public sealed class Settings
     /// <summary>録画のフレームレート(FrameRate.Choices のどれか)。</summary>
     public int Fps { get; set; } = FrameRate.Default;
 
-    public static string DefaultPath =>
+    /// <summary>設定ファイルの場所。portable 版では起動時に展開フォルダのものへ差し替える。</summary>
+    public static string DefaultPath { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "step_recorder", "settings.json");
 
     /// <summary>無い・壊れている場合は既定値。</summary>
