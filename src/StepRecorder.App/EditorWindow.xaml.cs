@@ -130,7 +130,8 @@ public partial class EditorWindow : Window
 
     BitmapSource? Thumb(Step s)
     {
-        if (!thumbs.TryGetValue(s.ImageFile, out var t)) thumbs[s.ImageFile] = t = Load(s, 220);
+        // ponytail: 読む幅は固定。一覧をとても広げる(サムネイルが 240 を超える)と、拡大率 200% ではぼやける。困ったら幅に応じて読み直す
+        if (!thumbs.TryGetValue(s.ImageFile, out var t)) thumbs[s.ImageFile] = t = Load(s, 480);
         return t;
     }
 
@@ -151,6 +152,9 @@ public partial class EditorWindow : Window
     }
 
     void Steps_SelectionChanged(object sender, SelectionChangedEventArgs e) => ShowStep(Current);
+
+    /// <summary>サムネイルを一覧の幅に合わせて大きくする。既定の幅(約 320)で 110。</summary>
+    void Steps_SizeChanged(object sender, SizeChangedEventArgs e) => Steps.Resources["ThumbWidth"] = Math.Max(110, e.NewSize.Width * 0.34);
 
     void ShowStep(Step? s)
     {
