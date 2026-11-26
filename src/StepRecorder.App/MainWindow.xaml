@@ -84,7 +84,7 @@
             <Button Content="記録を開く..." Click="Open_Click"/>
             <Button Content="記録開始" Click="Start_Click" IsDefault="True" Style="{StaticResource AccentButtonStyle}" Padding="12,4" Margin="4,0,0,0"/>
         </StackPanel>
-        <TextBlock x:Name="Version" Foreground="Gray" FontSize="11" Margin="0,8,0,0" Cursor="Hand"
+        <TextBlock x:Name="Version" Foreground="Gray" FontSize="11" Margin="0,8,0,0" Cursor="Hand" HorizontalAlignment="Left"
                    MouseLeftButtonUp="Version_Click" ToolTip="GitHub のページを開く"/>
     </StackPanel>
 </Window>

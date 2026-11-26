@@ -52,6 +52,15 @@ public sealed class TargetListTests : IDisposable
         }
     }
 
+    [DesktopFact]
+    public void バージョン表示のクリックできる範囲は文字の上だけ()
+    {
+        app = Open(AppExe);
+        var version = Find(app.MainWindowHandle, "Version").Current.BoundingRectangle;
+        var window = AutomationElement.FromHandle(app.MainWindowHandle).Current.BoundingRectangle;
+        Assert.True(version.Width > 0 && version.Width < window.Width / 2, $"幅 {version.Width}(ウィンドウ {window.Width})");
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern nint FindWindow(string? className, string? title);
     [DllImport("user32.dll")] static extern bool GetWindowDisplayAffinity(nint hwnd, out uint affinity);
 }
