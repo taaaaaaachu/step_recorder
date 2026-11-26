@@ -75,6 +75,10 @@ public partial class EditorWindow : Window
         Group.SelectedIndex = (int)mode;
         foreach (var speed in PlaybackSpeed.Choices) SpeedBox.Items.Add(PlaybackSpeed.Label(speed));
         var settings = Settings.Load(Settings.DefaultPath);
+        // 前回の大きさ。小さい画面へ移ったときに、はみ出さないようにする
+        Width = Math.Min(settings.EditorWidth, SystemParameters.WorkArea.Width);
+        Height = Math.Min(settings.EditorHeight, SystemParameters.WorkArea.Height);
+        if (settings.EditorMaximized) WindowState = WindowState.Maximized;
         ClipFormatBox.SelectedIndex = (int)settings.ClipFormat;
         var ratio = Math.Clamp(settings.StepListRatio, 0.05, 0.95);
         StepListColumn.Width = new GridLength(ratio, GridUnitType.Star);
@@ -1216,7 +1220,23 @@ public partial class EditorWindow : Window
             var r = MessageBox.Show(this, "変更を保存しますか?", "step_recorder", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (r == MessageBoxResult.Cancel || (r == MessageBoxResult.Yes && !Save())) e.Cancel = true;
         }
+        if (!e.Cancel) RememberSize();
         base.OnClosing(e);
+    }
+
+    /// <summary>大きさを覚える。閉じたあと(OnClosed)では RestoreBounds が取れないので閉じる前に呼ぶ。覚えられなくても閉じるのは止めない。</summary>
+    void RememberSize()
+    {
+        var bounds = RestoreBounds;
+        try
+        {
+            Settings.Update(Settings.DefaultPath, s =>
+            {
+                if (!bounds.IsEmpty) (s.EditorWidth, s.EditorHeight) = (bounds.Width, bounds.Height);
+                s.EditorMaximized = WindowState == WindowState.Maximized;
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     protected override void OnClosed(EventArgs e)

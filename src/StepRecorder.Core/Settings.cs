@@ -20,6 +20,10 @@ public sealed class Settings
     public bool CaptureCursor { get; set; }
     /// <summary>編集画面で、ステップ一覧が一覧と編集欄の幅の合計に占める割合。</summary>
     public double StepListRatio { get; set; } = 0.25;
+    /// <summary>編集画面の大きさ(最大化する前の大きさ)と、最大化していたか。</summary>
+    public double EditorWidth { get; set; } = 1280;
+    public double EditorHeight { get; set; } = 820;
+    public bool EditorMaximized { get; set; }
     /// <summary>録画のフレームレート(FrameRate.Choices のどれか)。</summary>
     public int Fps { get; set; } = FrameRate.Default;
 
