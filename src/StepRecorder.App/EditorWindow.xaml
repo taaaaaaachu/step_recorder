@@ -11,7 +11,7 @@
     </Window.Resources>
     <Grid Margin="8">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="320"/><ColumnDefinition Width="8"/><ColumnDefinition/>
+            <ColumnDefinition x:Name="StepListColumn" Width="320" MinWidth="180"/><ColumnDefinition Width="8"/><ColumnDefinition MinWidth="400"/>
         </Grid.ColumnDefinitions>
 
         <DockPanel>
@@ -51,12 +51,17 @@
             </ListBox>
         </DockPanel>
 
+        <!-- ステップ一覧と編集欄の境目。ドラッグで一覧の幅を変え、その幅を覚える -->
+        <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent" DragCompleted="Splitter_DragCompleted"
+                      AutomationProperties.Name="ステップ一覧の幅"/>
+
         <DockPanel Grid.Column="2">
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                <StackPanel.Resources>
+            <!-- 幅が足りないときは折り返す -->
+            <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                <WrapPanel.Resources>
                     <!-- ボタンをドロップダウンと同じ高さに伸ばす(Fluent のボタンは文字の高さで止まり、ドロップダウンより低い) -->
                     <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="VerticalAlignment" Value="Stretch"/></Style>
-                </StackPanel.Resources>
+                </WrapPanel.Resources>
                 <Label Content="出力の並べ方" VerticalAlignment="Center"/>
                 <ComboBox x:Name="Group" Width="230" Margin="0,0,10,0" VerticalContentAlignment="Center" SelectionChanged="Group_SelectionChanged">
                     <ComboBoxItem Content="手順モード(撮った順)"/>
@@ -92,7 +97,7 @@
                     <ComboBoxItem Content="MP4"/>
                     <ComboBoxItem Content="GIF"/>
                 </ComboBox>
-            </StackPanel>
+            </WrapPanel>
 
             <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>

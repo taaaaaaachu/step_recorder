@@ -74,7 +74,9 @@ public partial class EditorWindow : Window
         loading = true;
         Group.SelectedIndex = (int)mode;
         foreach (var speed in PlaybackSpeed.Choices) SpeedBox.Items.Add(PlaybackSpeed.Label(speed));
-        ClipFormatBox.SelectedIndex = (int)Settings.Load(Settings.DefaultPath).ClipFormat;
+        var settings = Settings.Load(Settings.DefaultPath);
+        ClipFormatBox.SelectedIndex = (int)settings.ClipFormat;
+        StepListColumn.Width = new GridLength(settings.StepListWidth);
         loading = false;
         if (session.Videos.Count > 0)
         {
@@ -985,6 +987,13 @@ public partial class EditorWindow : Window
     {
         maybeUnused.Add(s.ImageFile);
         s.ImageFile = SaveImage(VideoClips.Frame(FullPath(s.VideoFile!), s.VideoStart ?? TimeSpan.Zero));
+    }
+
+    /// <summary>ステップ一覧の幅を覚える。覚えられなくても編集には差し支えないので黙って続ける。</summary>
+    void Splitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        try { Settings.Update(Settings.DefaultPath, s => s.StepListWidth = StepListColumn.ActualWidth); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     /// <summary>選んだらすぐ覚える(書き出さずに閉じても、次はその形式)。</summary>
