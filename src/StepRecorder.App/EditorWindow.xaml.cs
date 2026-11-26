@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -50,6 +51,16 @@ public partial class EditorWindow : Window
     {
         base.OnSourceInitialized(e);
         var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (savedBounds is [var left, var top, var right, var bottom])
+        {
+            // 前回閉じたときの位置と大きさ。どのモニターにも入らなくなっていれば、Windows が画面の中へ直す
+            var wp = new Native.WINDOWPLACEMENT { length = Marshal.SizeOf<Native.WINDOWPLACEMENT>() };
+            Native.GetWindowPlacement(hwnd, ref wp);
+            wp.showCmd = 0; // SW_HIDE: まだ見せない(最大化は WindowState で WPF がする)
+            wp.rcNormalPosition = new() { Left = left, Top = top, Right = right, Bottom = bottom };
+            Native.SetWindowPlacement(hwnd, ref wp);
+            return;
+        }
         Native.GetCursorPos(out var cursor);
         if (Monitors.Info(Native.MonitorFromPoint(cursor, Native.MONITOR_DEFAULTTONEAREST)) is not { } info) return;
         var work = info.rcWork;
@@ -75,9 +86,7 @@ public partial class EditorWindow : Window
         Group.SelectedIndex = (int)mode;
         foreach (var speed in PlaybackSpeed.Choices) SpeedBox.Items.Add(PlaybackSpeed.Label(speed));
         var settings = Settings.Load(Settings.DefaultPath);
-        // 前回の大きさ。小さい画面へ移ったときに、はみ出さないようにする
-        Width = Math.Min(settings.EditorWidth, SystemParameters.WorkArea.Width);
-        Height = Math.Min(settings.EditorHeight, SystemParameters.WorkArea.Height);
+        savedBounds = settings.EditorBounds;
         if (settings.EditorMaximized) WindowState = WindowState.Maximized;
         ClipFormatBox.SelectedIndex = (int)settings.ClipFormat;
         var ratio = Math.Clamp(settings.StepListRatio, 0.05, 0.95);
@@ -1220,19 +1229,23 @@ public partial class EditorWindow : Window
             var r = MessageBox.Show(this, "変更を保存しますか?", "step_recorder", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (r == MessageBoxResult.Cancel || (r == MessageBoxResult.Yes && !Save())) e.Cancel = true;
         }
-        if (!e.Cancel) RememberSize();
+        if (!e.Cancel) RememberPlacement();
         base.OnClosing(e);
     }
 
-    /// <summary>大きさを覚える。閉じたあと(OnClosed)では RestoreBounds が取れないので閉じる前に呼ぶ。覚えられなくても閉じるのは止めない。</summary>
-    void RememberSize()
+    int[]? savedBounds;
+
+    /// <summary>位置と大きさを覚える。ウィンドウがあるうち(閉じる前)に呼ぶ。覚えられなくても閉じるのは止めない。</summary>
+    void RememberPlacement()
     {
-        var bounds = RestoreBounds;
+        var wp = new Native.WINDOWPLACEMENT { length = Marshal.SizeOf<Native.WINDOWPLACEMENT>() };
+        if (!Native.GetWindowPlacement(new System.Windows.Interop.WindowInteropHelper(this).Handle, ref wp)) return;
+        var r = wp.rcNormalPosition;
         try
         {
             Settings.Update(Settings.DefaultPath, s =>
             {
-                if (!bounds.IsEmpty) (s.EditorWidth, s.EditorHeight) = (bounds.Width, bounds.Height);
+                s.EditorBounds = [r.Left, r.Top, r.Right, r.Bottom];
                 s.EditorMaximized = WindowState == WindowState.Maximized;
             });
         }

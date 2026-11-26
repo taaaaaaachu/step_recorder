@@ -50,6 +50,9 @@ static class Native
     [DllImport("user32.dll")] public static extern bool IsIconic(nint hwnd);
     [DllImport("user32.dll")] public static extern bool IsWindow(nint hwnd);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(nint hwnd, out RECT r);
+    [StructLayout(LayoutKind.Sequential)] public struct WINDOWPLACEMENT { public int length; public int flags; public int showCmd; public POINT ptMinPosition, ptMaxPosition; public RECT rcNormalPosition; }
+    [DllImport("user32.dll")] public static extern bool GetWindowPlacement(nint hwnd, ref WINDOWPLACEMENT wp);
+    [DllImport("user32.dll")] public static extern bool SetWindowPlacement(nint hwnd, ref WINDOWPLACEMENT wp);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
     [DllImport("user32.dll")] public static extern nint GetWindow(nint hwnd, uint cmd);
     [DllImport("user32.dll")] public static extern nint GetTopWindow(nint hwnd);
