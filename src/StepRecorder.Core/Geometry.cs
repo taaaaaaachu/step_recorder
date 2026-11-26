@@ -58,6 +58,16 @@ public static class Geometry
         return new(work.X + (work.Width - w) / 2, work.Y + (work.Height - h) / 2, w, h);
     }
 
+    /// <summary>
+    /// 覚えていたウィンドウの位置 saved を今のモニター構成で開く位置。work は saved が重なるモニターの作業領域(どれとも重ならなければ null)。
+    /// 重なるモニターが無ければメインモニター(primaryWork)の真ん中に、はみ出す大きさならそのモニターに収めて真ん中に置く。
+    /// </summary>
+    public static PixelRect RestoreIn(PixelRect saved, PixelRect? work, PixelRect primaryWork)
+    {
+        if (work == null) return CenterIn(primaryWork, saved.Width, saved.Height);
+        return saved.Width <= work.Width && saved.Height <= work.Height ? saved : CenterIn(work, saved.Width, saved.Height);
+    }
+
     /// <summary>幅 width のシークバーで、割合 ratio(0〜1)の位置の X。inset は両端の、つまみの中心が届かない幅。</summary>
     public static double TrackX(double ratio, double width, double inset) => inset + ratio * (width - 2 * inset);
 

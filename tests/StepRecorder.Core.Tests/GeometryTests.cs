@@ -98,3 +98,24 @@ public class CenterInTests
     public void はみ出す向きは作業領域の大きさまで縮める() => // 150% の 1280x820 を、100% のサブ画面(タスクバーを除く)に出すとき
         Assert.Equal(new PixelRect(-1920, 0, 1920, 1032), Geometry.CenterIn(new PixelRect(-1920, 0, 1920, 1032), 1920, 1230));
 }
+
+public class RestoreInTests
+{
+    static readonly PixelRect Primary = new(0, 0, 1920, 1032);
+
+    [Fact]
+    public void 収まっていればそのまま() =>
+        Assert.Equal(new PixelRect(200, 150, 900, 600), Geometry.RestoreIn(new(200, 150, 900, 600), Primary, Primary));
+
+    [Fact]
+    public void どのモニターにも重ならなければメインモニターの真ん中() =>
+        Assert.Equal(new PixelRect(510, 216, 900, 600), Geometry.RestoreIn(new(4000, 0, 900, 600), null, Primary));
+
+    [Fact]
+    public void 外したモニターで覚えた大きさがメインモニターより大きければ収める() => // 4K で覚えて、4K を外した
+        Assert.Equal(Primary, Geometry.RestoreIn(new(1920, 0, 3000, 2000), null, Primary));
+
+    [Fact]
+    public void 重なるモニターより大きければそのモニターに収めて真ん中() => // 4K を同じ位置の HD に替えた
+        Assert.Equal(new PixelRect(1920, 0, 1920, 1032), Geometry.RestoreIn(new(1920, 0, 3000, 2000), new(1920, 0, 1920, 1032), Primary));
+}
