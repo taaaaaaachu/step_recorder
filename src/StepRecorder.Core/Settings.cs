@@ -18,8 +18,8 @@ public sealed class Settings
     public bool AutoUpdate { get; set; } = true;
     /// <summary>スクリーンショットにマウスカーソルを写すか。</summary>
     public bool CaptureCursor { get; set; }
-    /// <summary>編集画面のステップ一覧の幅。</summary>
-    public double StepListWidth { get; set; } = 320;
+    /// <summary>編集画面で、ステップ一覧が一覧と編集欄の幅の合計に占める割合。</summary>
+    public double StepListRatio { get; set; } = 0.25;
     /// <summary>録画のフレームレート(FrameRate.Choices のどれか)。</summary>
     public int Fps { get; set; } = FrameRate.Default;
 

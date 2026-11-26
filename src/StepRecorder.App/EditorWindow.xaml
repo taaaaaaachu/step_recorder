@@ -11,7 +11,8 @@
     </Window.Resources>
     <Grid Margin="8">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="StepListColumn" Width="320" MinWidth="180"/><ColumnDefinition Width="8"/><ColumnDefinition MinWidth="400"/>
+            <!-- 一覧と編集欄は比率で分ける(幅で持つと、ウィンドウより広くなったときに編集欄と境目が外に出て戻せない) -->
+            <ColumnDefinition x:Name="StepListColumn" Width="1*" MinWidth="180"/><ColumnDefinition Width="8"/><ColumnDefinition x:Name="EditColumn" Width="3*" MinWidth="400"/>
         </Grid.ColumnDefinitions>
 
         <DockPanel>

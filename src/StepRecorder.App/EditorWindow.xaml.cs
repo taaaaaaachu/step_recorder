@@ -76,7 +76,9 @@ public partial class EditorWindow : Window
         foreach (var speed in PlaybackSpeed.Choices) SpeedBox.Items.Add(PlaybackSpeed.Label(speed));
         var settings = Settings.Load(Settings.DefaultPath);
         ClipFormatBox.SelectedIndex = (int)settings.ClipFormat;
-        StepListColumn.Width = new GridLength(settings.StepListWidth);
+        var ratio = Math.Clamp(settings.StepListRatio, 0.05, 0.95);
+        StepListColumn.Width = new GridLength(ratio, GridUnitType.Star);
+        EditColumn.Width = new GridLength(1 - ratio, GridUnitType.Star);
         loading = false;
         if (session.Videos.Count > 0)
         {
@@ -992,7 +994,8 @@ public partial class EditorWindow : Window
     /// <summary>ステップ一覧の幅を覚える。覚えられなくても編集には差し支えないので黙って続ける。</summary>
     void Splitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {
-        try { Settings.Update(Settings.DefaultPath, s => s.StepListWidth = StepListColumn.ActualWidth); }
+        var ratio = StepListColumn.ActualWidth / (StepListColumn.ActualWidth + EditColumn.ActualWidth);
+        try { Settings.Update(Settings.DefaultPath, s => s.StepListRatio = ratio); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
