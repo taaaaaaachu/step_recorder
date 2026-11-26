@@ -15,8 +15,12 @@ public partial class App : Application
     public static void Main(string[] args)
     {
         VelopackApp.Build().Run(); // インストール・更新時のフック。通常起動ならすぐ戻る
-        // portable 版は設定も展開フォルダに置く(本体のある current フォルダは更新で入れ替わる)
-        if (VelopackLocator.Current is { IsPortable: true, RootAppDir: { } root }) Settings.DefaultPath = Path.Combine(root, "settings.json");
+        // portable 版は設定と書き出しの作業フォルダも展開フォルダに置く(本体のある current フォルダは更新で入れ替わる)
+        if (VelopackLocator.Current is { IsPortable: true, RootAppDir: { } root })
+        {
+            Settings.DefaultPath = Path.Combine(root, "settings.json");
+            Export.WorkRoot = root;
+        }
         var app = new App();
         app.InitializeComponent();
         ComponentDispatcher.ThreadPreprocessMessage += SwitchImeByLangKey;

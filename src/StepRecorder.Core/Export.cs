@@ -16,6 +16,9 @@ public sealed record Screen(string ProcessName, string ClassName, string Name);
 
 public static class Export
 {
+    /// <summary>書き出しの作業フォルダを作る場所。portable 版では起動時に展開フォルダへ差し替える。</summary>
+    public static string WorkRoot { get; set; } = Path.GetTempPath();
+
     public const string HtmlFile = "index.html";
 
     public static IReadOnlyList<Section> Sections(Session s, GroupMode mode)
@@ -411,7 +414,7 @@ public static class Export
     public static void ExportSingleHtml(Session s, string srcDir, string htmlPath, GroupMode mode, ClipFormat format,
         Action<Step, string, string?> makeClip)
     {
-        var work = Path.Combine(Path.GetTempPath(), "sr-single-" + Guid.NewGuid());
+        var work = Path.Combine(WorkRoot, "sr-single-" + Guid.NewGuid());
         try
         {
             var copy = Distribute(s, srcDir, work, mode, format, makeClip);
