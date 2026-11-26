@@ -75,7 +75,7 @@
                 <Button Content="続けて記録" Click="Continue_Click" ToolTip="保存して開始画面に戻り、この記録の続きを記録する"/>
                 <!-- 本体はフォルダに書き出す。右の矢印で、HTML 1 ファイルなどの書き出し方を選ぶ -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,6,0">
-                    <Button Content="配布用に書き出す..." Click="ExportFolder_Click" Margin="0" AutomationProperties.AutomationId="ExportButton"/>
+                    <Button Content="書き出し..." Click="ExportFolder_Click" Margin="0" AutomationProperties.AutomationId="ExportButton"/>
                     <Button x:Name="ExportMenuButton" Click="ExportMenuButton_Click" Margin="1,0,0,0" Padding="6,3"
                             AutomationProperties.AutomationId="ExportMenuButton" AutomationProperties.Name="ほかの書き出し方">
                         <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" VerticalAlignment="Center"/>

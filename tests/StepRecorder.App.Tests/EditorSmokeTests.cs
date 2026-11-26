@@ -169,9 +169,9 @@ public sealed class EditorSmokeTests : IDisposable
 
 
 
-    /// <summary>配布用に書き出すボタンの本体はそのままフォルダを選ぶ画面を出し、横の矢印は書き出し方のメニューを出す。</summary>
+    /// <summary>書き出しボタンの本体はそのままフォルダを選ぶ画面を出し、横の矢印は書き出し方のメニューを出す。</summary>
     [E2EFact]
-    public void 配布用に書き出すの本体はフォルダに書き出し_矢印でHTML1ファイルを選べる()
+    public void 書き出しの本体はフォルダに書き出し_矢印でHTML1ファイルを選べる()
     {
         var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now });
         WindowCapture.SavePng(Solid(400, 300, Colors.SteelBlue), Path.Combine(dir, rec.NextImageFile));
@@ -186,15 +186,15 @@ public sealed class EditorSmokeTests : IDisposable
             new PropertyCondition(AutomationElement.ControlTypeProperty, type), new PropertyCondition(AutomationElement.NameProperty, name)));
         void Invoke(string id) => ((InvokePattern)Find(editor, id).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
 
-        expectedDialogs = ["配布用に書き出すフォルダ"];
+        expectedDialogs = ["書き出すフォルダ"];
         Invoke("ExportButton");
         AutomationElement? dialog = null;
-        Assert.True(Until(() => (dialog = Top(ControlType.Window, "配布用に書き出すフォルダ")) != null), "本体を押してもフォルダを選ぶ画面が出ない");
+        Assert.True(Until(() => (dialog = Top(ControlType.Window, "書き出すフォルダ")) != null), "本体を押してもフォルダを選ぶ画面が出ない");
         Assert.Null(Top(ControlType.MenuItem, "HTML 1 ファイルに書き出す...")); // メニューは出さない
         var cancel = dialog!.FindFirst(TreeScope.Children, new AndCondition(
             new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button), new PropertyCondition(AutomationElement.NameProperty, "キャンセル")));
         ((InvokePattern)cancel.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
-        Assert.True(Until(() => Top(ControlType.Window, "配布用に書き出すフォルダ") == null), "フォルダを選ぶ画面が閉じない");
+        Assert.True(Until(() => Top(ControlType.Window, "書き出すフォルダ") == null), "フォルダを選ぶ画面が閉じない");
 
         Invoke("ExportMenuButton");
         Assert.True(Until(() => Top(ControlType.MenuItem, "HTML 1 ファイルに書き出す...") != null), "矢印を押しても書き出し方のメニューが出ない");

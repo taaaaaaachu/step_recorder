@@ -1009,7 +1009,7 @@ public partial class EditorWindow : Window
 
     void ExportFolder_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "配布用に書き出すフォルダ", InitialDirectory = System.IO.Path.GetDirectoryName(dir) };
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "書き出すフォルダ", InitialDirectory = System.IO.Path.GetDirectoryName(dir) };
         if (dialog.ShowDialog(this) != true) return;
         var outDir = dialog.FolderName;
         ExportForDistribution(System.IO.Path.Combine(outDir, Export.HtmlFile),
