@@ -1051,7 +1051,7 @@ public partial class EditorWindow : Window
     {
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
-            Title = "HTML 1 ファイルに書き出す", Filter = "HTML ファイル (*.html)|*.html",
+            Title = "HTML 1 ファイルに書き出す", Filter = "HTML ファイル|*.html",
             FileName = $"{System.IO.Path.GetFileName(dir)}.html", InitialDirectory = System.IO.Path.GetDirectoryName(dir),
         };
         if (dialog.ShowDialog(this) != true) return;

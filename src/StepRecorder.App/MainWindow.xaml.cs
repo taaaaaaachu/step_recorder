@@ -294,7 +294,8 @@ public partial class MainWindow : Window
     void Open_Click(object sender, RoutedEventArgs e)
     {
         if (!ReadSettings()) return;
-        var dlg = new OpenFileDialog { Filter = $"記録 ({SessionStore.FileName})|{SessionStore.FileName}", InitialDirectory = settings.OutputDir };
+        // 名前にパターンは書かない(拡張子を表示する設定だと、ダイアログが自分で付け足して2つになる)
+        var dlg = new OpenFileDialog { Filter = $"記録|{SessionStore.FileName}", InitialDirectory = settings.OutputDir };
         if (dlg.ShowDialog(this) == true) OpenSession(Path.GetDirectoryName(dlg.FileName)!);
     }
 
