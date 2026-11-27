@@ -397,6 +397,49 @@ public sealed class EditorSmokeTests : IDisposable
         }
     }
 
+    /// <summary>全編から切り出した動画のステップも、区間を縮めて分割できる。シークバーは今の区間だけ。</summary>
+    [DesktopFact]
+    public async Task 全編から切り出した動画のステップも区間を縮めて分割できる()
+    {
+        Directory.CreateDirectory(Path.Combine(dir, "videos"));
+        var video = Path.Combine(dir, "videos", "full.mp4");
+        await VideoRecorder.Encode(video, 320, 240, Enumerable.Range(0, 45).Select(i =>
+        {
+            var px = new byte[320 * 240 * 4];
+            Array.Fill(px, (byte)(20 + i * 4));
+            return (Nv12.FromBgra(px, 320, 240), TimeSpan.FromSeconds(i / 15.0));
+        }));
+        var rec = new Recording(new Session { TargetName = "Demo", CreatedAt = DateTimeOffset.Now, Videos = [new() { File = "videos/full.mp4" }] });
+        WindowCapture.SavePng(VideoClips.Frame(video, TimeSpan.FromSeconds(0.6)), Path.Combine(dir, rec.NextImageFile));
+        var st = rec.AddStep(CaptureTrigger.Video, new("画面", "W", "Demo"), rec.NextImageFile, 320, 240, DateTimeOffset.Now);
+        (st.VideoFile, st.VideoStart, st.VideoEnd) = ("videos/full.mp4", TimeSpan.FromSeconds(0.6), TimeSpan.FromSeconds(2.4));
+        (st.VideoTime, st.TimelineVideo) = (TimeSpan.FromSeconds(0.6), "videos/full.mp4");
+        SessionStore.Save(rec.Session, dir);
+
+        app = Open(AppExe, $"\"{dir}\"");
+        var editor = app.MainWindowHandle;
+        var slider = (RangeValuePattern)Find(editor, "ClipSlider").GetCurrentPattern(RangeValuePattern.Pattern);
+        Assert.Equal((0.6, 2.4), (Math.Round(slider.Current.Minimum, 1), Math.Round(slider.Current.Maximum, 1)));
+        void Press(string name)
+        {
+            ((InvokePattern)Find(editor, new PropertyCondition(AutomationElement.NameProperty, name)).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            Wait(500);
+        }
+        void At(double sec) { slider.SetValue(sec); Wait(300); }
+
+        At(1.0);
+        Press("開始位置");
+        Assert.Equal((1.0, 2.4), (Math.Round(slider.Current.Minimum, 1), Math.Round(slider.Current.Maximum, 1))); // 今の区間に張り直す
+        At(1.6);
+        Press("分割");
+        Press("保存");
+
+        var saved = SessionStore.Load(dir);
+        double R(TimeSpan? t) => Math.Round(t!.Value.TotalSeconds, 1);
+        Assert.Equal([(1.0, 1.6, 1.0), (1.6, 2.4, 1.6)], saved.Steps.Select(s => (R(s.VideoStart), R(s.VideoEnd), R(s.VideoTime))));
+        Assert.All(saved.Steps, s => Assert.Equal("videos/full.mp4", s.TimelineVideo));
+    }
+
     /// <summary>続けて記録して全編が 2 本ある記録は、タイムラインに出す全編を選べる。ステップを選ぶとその全編に移り、足したステップはその全編を指す。</summary>
     [DesktopFact]
     public async Task 全編が2本ある記録はタイムラインの全編を切り替えられる()

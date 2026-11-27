@@ -885,15 +885,16 @@ public partial class EditorWindow : Window
         return file;
     }
 
-    // ---- 録画ボタンの動画のステップの区間 ----
-    // シークバーは動画ファイル全体で、使う区間を塗る。動かすと表示欄にそのフレームを出す(clipSeeking)
+    // ---- 動画のステップの区間 ----
+    // 録画ボタンの動画は、シークバーが動画ファイル全体で、使う区間を塗る。全編から切り出したものは、今の区間がシークバー全体(縮められるが広げられない。
+    // 広げるなら全編から切り出し直す)。値はどちらも動画ファイルの時刻。動かすと表示欄にそのフレームを出す(clipSeeking)
 
     bool clipSeeking, clipQuiet;
     TimeSpan clipDuration;
     TimeSpan OneFrame => TimeSpan.FromSeconds(1.0 / ClipFps); // 区間はこれより短くできない
 
-    /// <summary>録画ボタンで録った動画のステップか(全編から切り出した区間は全編のシークバーで扱う)。</summary>
-    bool IsOwnVideo(Step? s) => s?.VideoFile != null && session.FullVideo(s.VideoFile) == null;
+    /// <summary>全編から切り出した動画のステップか。</summary>
+    bool IsFromFull(Step s) => session.FullVideo(s.VideoFile) != null;
 
     TimeSpan ClipTime => TimeSpan.FromSeconds(ClipSlider.Value);
 
@@ -903,12 +904,14 @@ public partial class EditorWindow : Window
     void ShowClipBar(Step? s)
     {
         ClipPanel.Visibility = Visibility.Collapsed;
-        if (!IsOwnVideo(s)) return;
-        try { clipDuration = VideoClips.Info(FullPath(s!.VideoFile!)).Duration; }
+        if (s?.VideoFile == null) return;
+        try { clipDuration = VideoClips.Info(FullPath(s.VideoFile)).Duration; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; } // 消された動画。再生しようとしたときに知らせる
         ClipPanel.Visibility = Visibility.Visible;
         clipQuiet = true; // Maximum を変えると値が丸められて ValueChanged が来る。MoveClipSlider で戻す
-        ClipSlider.Maximum = clipDuration.TotalSeconds;
+        ClipSlider.Minimum = 0; // 前のステップの範囲が残っていても、次の Maximum が丸められないように
+        ClipSlider.Maximum = (IsFromFull(s) ? s.VideoEnd ?? clipDuration : clipDuration).TotalSeconds;
+        ClipSlider.Minimum = IsFromFull(s) ? (s.VideoStart ?? TimeSpan.Zero).TotalSeconds : 0;
         MoveClipSlider(s.VideoStart ?? TimeSpan.Zero);
         ShowClipRange(s);
     }
@@ -933,6 +936,7 @@ public partial class EditorWindow : Window
     {
         ClipTimeLabel.Text = TimeText.Position(ClipTime);
         if (clipQuiet || Current is not { VideoFile: { } video } s) return;
+        LeaveVideoView(); // 全編の表示と同じ Player を使う
         if (clipPlaying) StopClip(); // 再生中に動かしたら止めて、動かした所を出す
         if (!clipSeeking)
         {
@@ -958,7 +962,7 @@ public partial class EditorWindow : Window
     /// <summary>区間の開始か終了を変える。端なら null(最初から・最後まで)。開始を変えたらポスターもそのフレームにする。</summary>
     void SetClipRange(TimeSpan? newStart, TimeSpan? newEnd)
     {
-        if (Current is not { } s || !IsOwnVideo(s)) return;
+        if (Current is not { VideoFile: not null } s) return;
         var (start, end) = (newStart ?? s.VideoStart ?? TimeSpan.Zero, newEnd ?? s.VideoEnd ?? clipDuration);
         if (end - start < OneFrame)
         {
@@ -969,14 +973,19 @@ public partial class EditorWindow : Window
         s.VideoStart = start < OneFrame ? null : start;
         s.VideoEnd = clipDuration - end < OneFrame ? null : end;
         if (newStart != null) SetPoster(s);
+        if (IsFromFull(s))
+        {
+            s.VideoTime = start; // タイムラインの目盛りと、選んだときに飛ぶ位置
+            UpdateTicks();
+        }
         RefreshList(CurrentIndex);
-        ShowClipRange(s); // 一覧の行(record)が前と同じ値だと選び直しにならず、ShowStep が呼ばれない
+        ShowClipBar(s); // 一覧の行(record)が前と同じ値だと選び直しにならず、ShowStep が呼ばれない。全編からのものは範囲も張り直す
     }
 
     /// <summary>今の位置で2つのステップに分け、後ろを選ぶ。</summary>
     void ClipSplit_Click(object sender, RoutedEventArgs e)
     {
-        if (Current is not { } s || !IsOwnVideo(s)) return;
+        if (Current is not { VideoFile: not null } s) return;
         var at = ClipTime;
         if (at - (s.VideoStart ?? TimeSpan.Zero) < OneFrame || (s.VideoEnd ?? clipDuration) - at < OneFrame)
         {
@@ -987,7 +996,9 @@ public partial class EditorWindow : Window
         var i = CurrentIndex;
         var after = Recording.SplitVideo(s, at, new Recording(session).NextId);
         SetPoster(after);
+        if (IsFromFull(s)) after.VideoTime = at;
         session.Steps.Insert(i + 1, after);
+        UpdateTicks();
         RefreshList(i + 1);
     }
 
