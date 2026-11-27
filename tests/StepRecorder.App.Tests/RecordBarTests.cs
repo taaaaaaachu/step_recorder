@@ -240,6 +240,25 @@ public sealed class RecordBarTests : IDisposable
     }
 
     [DesktopFact]
+    public void 上端から離すと印だけの丸に縮み_乗せると広がる()
+    {
+        Show(animated: false);
+        var (width, height) = On(b => (b.Panel.ActualWidth, b.Panel.ActualHeight));
+        On(b => { b.SetDocked(false); return true; });
+        Assert.True(Until(() => !IsOpen(), 5000), "縮まない");
+        Wait(200);
+        Assert.Equal(height, On(b => b.Panel.ActualWidth), 1);
+        Assert.Equal(1, On(b => b.BarMark.Opacity));
+        Assert.Equal(Visibility.Hidden, On(b => b.BarTab.Visibility)); // 上端のタブは出さない
+
+        On(b => { b.IsPointerOver = () => true; return true; });
+        Assert.True(Until(IsOpen, 2000), "広がらない");
+        Wait(200);
+        Assert.Equal(width, On(b => b.Panel.ActualWidth), 1);
+        Assert.Equal(0, On(b => b.BarMark.Opacity));
+    }
+
+    [DesktopFact]
     public void 滑って引っ込み_滑って出る()
     {
         Show();

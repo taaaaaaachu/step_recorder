@@ -12,7 +12,7 @@ namespace StepRecorder.App;
 
 /// <summary>
 /// 記録中に最前面へ出す小さなバー。クリックしても前面を奪わない(対象アプリのフォーカスを保つ)。
-/// 使っていない間は小さなタブに引っ込み、マウスを乗せると滑り出る。ピンで留めると引っ込まない。
+/// 使っていない間は小さなタブ(上端から離していれば印だけの丸)に引っ込み、マウスを乗せると出る。ピンで留めると引っ込まない。
 /// </summary>
 public partial class RecordBar : Window
 {
@@ -133,7 +133,7 @@ public partial class RecordBar : Window
     /// </summary>
     void UpdateAutoHide()
     {
-        autoHide.Update(IsPointerOver() || !docked, Native.KeyDown(VK_LBUTTON) || Native.KeyDown(VK_RBUTTON), shownClock.Elapsed);
+        autoHide.Update(IsPointerOver(), Native.KeyDown(VK_LBUTTON) || Native.KeyDown(VK_RBUTTON), shownClock.Elapsed);
         ShowOpen(autoHide.IsOpen);
     }
 
@@ -141,10 +141,16 @@ public partial class RecordBar : Window
     {
         var cursor = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
         if (!IsVisible || !GetCursorInfo(ref cursor)) return false;
-        // 滑っている途中の位置ではなく、行き先の範囲で見る(動く端にカーソルがあっても行ったり来たりしない)
-        var area = IsBarOpen
-            ? new Rect(Panel.Margin.Left, 0, Panel.ActualWidth, Panel.ActualHeight)
-            : new Rect((ActualWidth - BarTab.ActualWidth) / 2, 0, BarTab.ActualWidth, BarTab.ActualHeight);
+        // 動いている途中の範囲ではなく、行き先の範囲で見る(動く端にカーソルがあっても行ったり来たりしない)
+        var h = Panel.ActualHeight;
+        Rect area;
+        if (!docked)
+        {
+            var w = IsBarOpen ? FullWidth() : h; // バーはウィンドウの真ん中
+            area = new Rect((ActualWidth - w) / 2, 0, w, h);
+        }
+        else if (IsBarOpen) area = new Rect(Panel.Margin.Left, 0, Panel.ActualWidth, h);
+        else area = new Rect((ActualWidth - BarTab.ActualWidth) / 2, 0, BarTab.ActualWidth, BarTab.ActualHeight);
         return area.Contains(PointFromScreen(new Point(cursor.ptScreenPos.X, cursor.ptScreenPos.Y)));
     }
 
@@ -156,26 +162,61 @@ public partial class RecordBar : Window
 
     void Pin_Changed(object sender, RoutedEventArgs e) => autoHide.IsPinned = PinButton.IsChecked == true;
 
-    /// <summary>引っ込むときはバーが上へ消えてからタブが下りる。出るときはタブが上がりながらバーが下りる。途中で逆にもなれる。</summary>
+    /// <summary>
+    /// 上端にくっついているときは、引っ込むときはバーが上へ消えてからタブが下りる。出るときはタブが上がりながらバーが下りる。
+    /// 離しているときは、引っ込むと幅が縮んで印だけの丸になり、出るとまた広がる。どちらも途中で逆にもなれる。
+    /// </summary>
     void ShowOpen(bool open)
     {
         if (open == IsBarOpen) return;
         IsBarOpen = open;
-        Panel.IsHitTestVisible = open; // 消えていく途中のボタンは押せない
+        BarContent.IsHitTestVisible = open; // 消えていく途中のボタンは押せない
+        if (!docked)
+        {
+            Morph(open);
+            return;
+        }
+        Panel.IsHitTestVisible = open;
         if (open)
         {
             if (!Panel.IsVisible) CenterPanel(); // 見えている間は横に動かさない
             Panel.Visibility = Visibility.Visible;
-            Slide(PanelSlide, 0, OpenTime, EasingMode.EaseOut);
-            Slide(TabSlide, -BarTab.ActualHeight, TabTime, EasingMode.EaseIn, done: () => { if (IsBarOpen) BarTab.Visibility = Visibility.Hidden; });
+            Animate(PanelSlide, TranslateTransform.YProperty, 0, OpenTime, EasingMode.EaseOut);
+            Animate(TabSlide, TranslateTransform.YProperty, -BarTab.ActualHeight, TabTime, EasingMode.EaseIn, done: () => { if (IsBarOpen) BarTab.Visibility = Visibility.Hidden; });
         }
         else
         {
             BarTab.Visibility = Visibility.Visible;
-            Slide(PanelSlide, -Panel.ActualHeight, CloseTime, EasingMode.EaseIn, done: () => { if (!IsBarOpen) Panel.Visibility = Visibility.Hidden; });
-            Slide(TabSlide, 0, TabTime, EasingMode.EaseOut, delay: CloseTime);
+            Animate(PanelSlide, TranslateTransform.YProperty, -Panel.ActualHeight, CloseTime, EasingMode.EaseIn, done: () => { if (!IsBarOpen) Panel.Visibility = Visibility.Hidden; });
+            Animate(TabSlide, TranslateTransform.YProperty, 0, TabTime, EasingMode.EaseOut, delay: CloseTime);
         }
     }
+
+    /// <summary>離しているときの開け閉め。真ん中を据え置いて幅を伸び縮みさせ、中身と印を入れ替える。</summary>
+    void Morph(bool open)
+    {
+        var half = TimeSpan.FromTicks((open ? OpenTime : CloseTime).Ticks / 2);
+        var from = Panel.ActualWidth;
+        if (open)
+        {
+            // 広がりきったら幅を決めない(録画の秒数などで中身の幅が変わっても合わせて伸びる)
+            Animate(Panel, WidthProperty, FullWidth(), OpenTime, EasingMode.EaseOut, from: from,
+                done: () => { if (IsBarOpen) { Panel.BeginAnimation(WidthProperty, null); Panel.Width = double.NaN; } });
+            Animate(BarMark, OpacityProperty, 0, half, EasingMode.EaseOut);
+            Animate(BarContent, OpacityProperty, 1, half, EasingMode.EaseOut, delay: half);
+        }
+        else
+        {
+            Animate(Panel, WidthProperty, Panel.ActualHeight, CloseTime, EasingMode.EaseIn, from: from);
+            Animate(BarContent, OpacityProperty, 0, half, EasingMode.EaseIn);
+            Animate(BarMark, OpacityProperty, 1, half, EasingMode.EaseIn, delay: half);
+        }
+    }
+
+    /// <summary>出ているときのバーの幅。縮んでいる間も測れるように、並びの中身を足す(横の StackPanel は中身を幅の制限なしで測る)。</summary>
+    double FullWidth() =>
+        BarContent.Children.Cast<UIElement>().Sum(c => c.DesiredSize.Width) + BarContent.Margin.Left + BarContent.Margin.Right
+        + Panel.BorderThickness.Left + Panel.BorderThickness.Right;
 
     /// <summary>
     /// バーを中央に置く。開く直前にだけ呼ぶ(出ている間に文言で幅が変わっても、押しているボタンが動かないように左端は据え置く)。
@@ -186,27 +227,36 @@ public partial class RecordBar : Window
         Panel.Margin = new Thickness(Math.Max(0, Math.Round((ActualWidth - Panel.ActualWidth) / 2)), 0, 0, 0);
     }
 
-    /// <summary>今の位置から to へ滑らせる。</summary>
-    void Slide(TranslateTransform slide, double to, TimeSpan time, EasingMode easing, TimeSpan delay = default, Action? done = null)
+    /// <summary>今の値(from があればそこ)から to へ動かす。アニメーション効果が切ってあれば、すぐに to にする。</summary>
+    void Animate<T>(T target, DependencyProperty property, double to, TimeSpan time, EasingMode easing,
+        TimeSpan delay = default, double? from = null, Action? done = null) where T : DependencyObject, IAnimatable
     {
         if (!Animated)
         {
-            slide.BeginAnimation(TranslateTransform.YProperty, null);
-            slide.Y = to;
+            Stop(target, property, to);
             done?.Invoke();
             return;
         }
-        var animation = new DoubleAnimation(to, time) { BeginTime = delay, EasingFunction = new CubicEase { EasingMode = easing } };
+        var animation = new DoubleAnimation(to, time) { From = from, BeginTime = delay, EasingFunction = new CubicEase { EasingMode = easing } };
         if (done != null) animation.Completed += (_, _) => done();
-        slide.BeginAnimation(TranslateTransform.YProperty, animation);
+        target.BeginAnimation(property, animation);
     }
 
-    /// <summary>引っ込んでいても状態が分かるように、タブの色と印を変える。</summary>
+    static void Stop<T>(T target, DependencyProperty property, double value) where T : DependencyObject, IAnimatable
+    {
+        target.BeginAnimation(property, null);
+        target.SetValue(property, value);
+    }
+
+    /// <summary>引っ込んでいても状態が分かるように、タブと丸の色と印を変える。</summary>
     void ShowTabState()
     {
         BarTab.Background = engine.Paused ? Brushes.DimGray : recordingTab;
-        BarTab.Content = engine.Paused ? "❚❚" : clipTimer.IsEnabled ? "■" : "●";
+        BarTab.Content = BarMark.Text = engine.Paused ? "❚❚" : clipTimer.IsEnabled ? "■" : "●";
+        BarMark.Foreground = engine.Paused ? Brushes.Silver : recordingMark;
     }
+
+    readonly Brush recordingMark = new SolidColorBrush(Color.FromRgb(0xFF, 0x50, 0x50));
 
     void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -214,21 +264,55 @@ public partial class RecordBar : Window
         KeepOnScreen();
     }
 
-    /// <summary>上端にくっついているか。離して置いたバーは引っ込めない(引っ込むと端にタブが無く、出せなくなる)。</summary>
+    /// <summary>上端にくっついているか。くっついていればタブに、離していれば丸に引っ込む。</summary>
     bool docked = true;
 
-    /// <summary>動かしたバーを作業領域の内側へ戻す(めり込んだまま引っ込むとマウスが届かない)。上端の近くなら上端にくっつける。</summary>
+    /// <summary>
+    /// 動かしたバーを作業領域の内側へ戻す(めり込んだまま引っ込むとマウスが届かない)。上端の近くなら上端にくっつける。
+    /// 丸に縮んでいても、広がったときの幅で収める(広がって画面からはみ出さないように)。バーはウィンドウの真ん中にある。
+    /// </summary>
     void KeepOnScreen()
     {
         var hwnd = new WindowInteropHelper(this).Handle;
         if (!GetWindowRect(hwnd, out var win)) return;
-        var (tl, br) = (Panel.PointToScreen(new Point(0, 0)), Panel.PointToScreen(new Point(Panel.ActualWidth, Panel.ActualHeight)));
-        var bar = new RECT { Left = (int)tl.X, Top = (int)tl.Y, Right = (int)br.X, Bottom = (int)br.Y };
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var width = (int)Math.Round(FullWidth() * dpi.DpiScaleX);
+        var left = (win.Left + win.Right - width) / 2;
+        var bar = new RECT { Left = left, Top = win.Top, Right = left + width, Bottom = win.Top + (int)Math.Round(Panel.ActualHeight * dpi.DpiScaleY) };
         if (Monitors.Info(MonitorFromRect(ref bar, MONITOR_DEFAULTTONEAREST)) is not { } info) return;
         var from = bar.ToPixelRect();
-        var to = Core.Geometry.KeepIn(from, info.rcWork.ToPixelRect(), (int)(16 * VisualTreeHelper.GetDpi(this).DpiScaleY));
-        docked = to.Y == info.rcWork.Top;
+        var to = Core.Geometry.KeepIn(from, info.rcWork.ToPixelRect(), (int)(16 * dpi.DpiScaleY));
         if (to != from) SetWindowPos(hwnd, 0, win.Left + to.X - from.X, win.Top + to.Y - from.Y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        SetDocked(to.Y == info.rcWork.Top);
+    }
+
+    /// <summary>くっつけた・離したときに形を切り替える。出した状態から始めて、しばらくしたら新しい形で引っ込む。</summary>
+    internal void SetDocked(bool value)
+    {
+        if (value == docked) return;
+        docked = value;
+        Stop(PanelSlide, TranslateTransform.YProperty, 0);
+        Stop(TabSlide, TranslateTransform.YProperty, -BarTab.ActualHeight);
+        Stop(Panel, WidthProperty, double.NaN);
+        Stop(BarContent, OpacityProperty, 1);
+        Stop(BarMark, OpacityProperty, 0);
+        BarTab.Visibility = Visibility.Hidden;
+        Panel.Visibility = Visibility.Visible;
+        Panel.IsHitTestVisible = BarContent.IsHitTestVisible = true;
+        if (docked)
+        {
+            Panel.HorizontalAlignment = HorizontalAlignment.Left;
+            Panel.CornerRadius = new CornerRadius(0, 0, 10, 10);
+            CenterPanel();
+        }
+        else
+        {
+            Panel.HorizontalAlignment = HorizontalAlignment.Center;
+            Panel.Margin = default;
+            Panel.CornerRadius = new CornerRadius(Panel.ActualHeight / 2);
+        }
+        IsBarOpen = true;
+        autoHide.Open(shownClock.Elapsed);
     }
 
     void Mode_Checked(object sender, RoutedEventArgs e) =>
