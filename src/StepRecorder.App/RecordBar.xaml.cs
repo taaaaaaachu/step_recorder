@@ -258,10 +258,36 @@ public partial class RecordBar : Window
 
     readonly Brush recordingMark = new SolidColorBrush(Color.FromRgb(0xFF, 0x50, 0x50));
 
-    void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => StartDrag();
+
+    void StartDrag()
     {
         DragMove();
         KeepOnScreen();
+    }
+
+    /// <summary>ボタンの上で押したところ。ボタンは押したときのイベントを止めるので、少し動いたらドラッグに切り替える。</summary>
+    Point? pressedAt;
+
+    protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
+    {
+        base.OnPreviewMouseLeftButtonDown(e);
+        pressedAt = e.GetPosition(this);
+    }
+
+    protected override void OnPreviewMouseMove(MouseEventArgs e)
+    {
+        base.OnPreviewMouseMove(e);
+        if (pressedAt is not { } at || e.LeftButton != MouseButtonState.Pressed)
+        {
+            pressedAt = null;
+            return;
+        }
+        var moved = e.GetPosition(this) - at;
+        if (Math.Abs(moved.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(moved.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        pressedAt = null;
+        Mouse.Capture(null); // ボタンを押していない状態に戻す(離してもクリックにならない)
+        StartDrag();
     }
 
     /// <summary>上端にくっついているか。くっついていればタブに、離していれば丸に引っ込む。</summary>
