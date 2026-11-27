@@ -28,7 +28,7 @@ public partial class App : Application
         app.MainWindow = main;
         // StepRecorder.exe <記録フォルダ> なら開始画面を出さずに編集画面を開く
         if (args is [var dir, ..] && File.Exists(Path.Combine(dir, SessionStore.FileName)))
-            main.OpenSession(Path.GetFullPath(dir));
+            app.Dispatcher.BeginInvoke(() => main.OpenSession(Path.GetFullPath(dir))); // 開くのは非同期なので、Dispatcher が動き出してから
         else
             main.Show();
         app.Run();

@@ -282,19 +282,26 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog(this) == true) OpenSession(Path.GetDirectoryName(dlg.FileName)!);
     }
 
-    internal void OpenSession(string dir)
+    /// <summary>記録を開く。記録を止めたときと同じく、編集画面が出るまで進み具合を出す(画像の多い記録は開くのに時間がかかる)。</summary>
+    internal async void OpenSession(string dir)
     {
         EndAppend(); // 別の記録を開いたら、続けて記録はやめる
+        var progress = new ProgressWindow("記録を開いています", "記録を読み込んでいます...", null);
+        progress.Show();
         Session session;
-        try { session = SessionStore.Load(dir); }
+        try { session = await Task.Run(() => SessionStore.Load(dir)); }
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidDataException)
         {
+            progress.Finish();
             Fail($"開けませんでした: {ex.Message}");
             Show(); // 引数で開こうとして失敗したときも開始画面は出す
             return;
         }
+        progress.Report("編集画面を開いています");
+        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ContextIdle); // 編集画面を作る間は描けないので、先に文言を描かせる
         Hide();
         OpenEditor(session, dir);
+        progress.Finish();
     }
 
     void OpenEditor(Session session, string dir)
