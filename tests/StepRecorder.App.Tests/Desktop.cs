@@ -102,7 +102,8 @@ static class Desktop
         start.Environment["USERPROFILE"] = profile ?? Profile;
         var p = Process.Start(start)!;
         if (exe == AppExe) watches.Add(p, new DialogWatch(p));
-        for (var i = 0; i < 100 && p.MainWindowHandle == 0; i++) { Wait(100); p.Refresh(); }
+        // 記録を開くときは、編集画面より先に進み具合のウィンドウが出る。それが閉じるまで待つ
+        for (var i = 0; i < 100 && (p.MainWindowHandle == 0 || p.MainWindowTitle == "記録を開いています"); i++) { Wait(100); p.Refresh(); }
         Assert.NotEqual(0, p.MainWindowHandle);
         return p;
     }
