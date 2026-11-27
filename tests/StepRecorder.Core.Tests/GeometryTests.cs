@@ -119,3 +119,24 @@ public class RestoreInTests
     public void 重なるモニターより大きければそのモニターに収めて真ん中() => // 4K を同じ位置の HD に替えた
         Assert.Equal(new PixelRect(1920, 0, 1920, 1032), Geometry.RestoreIn(new(1920, 0, 3000, 2000), new(1920, 0, 1920, 1032), Primary));
 }
+
+public class KeepInTests
+{
+    static readonly PixelRect Work = new(0, 0, 1920, 1032);
+
+    [Fact]
+    public void 上や横にはみ出したら作業領域に戻して上端にくっつける() =>
+        Assert.Equal(new PixelRect(1320, 0, 600, 40), Geometry.KeepIn(new(1500, -30, 600, 40), Work, 16));
+
+    [Fact]
+    public void 上端の近くなら上端にくっつける() =>
+        Assert.Equal(new PixelRect(100, 0, 600, 40), Geometry.KeepIn(new(100, 12, 600, 40), Work, 16));
+
+    [Fact]
+    public void 上端から離れていればそのまま() =>
+        Assert.Equal(new PixelRect(100, 300, 600, 40), Geometry.KeepIn(new(100, 300, 600, 40), Work, 16));
+
+    [Fact]
+    public void 下にはみ出したら下端に収める() =>
+        Assert.Equal(new PixelRect(100, 992, 600, 40), Geometry.KeepIn(new(100, 1020, 600, 40), Work, 16));
+}

@@ -68,6 +68,16 @@ public static class Geometry
         return saved.Width <= work.Width && saved.Height <= work.Height ? saved : CenterIn(work, saved.Width, saved.Height);
     }
 
+    /// <summary>
+    /// 動かした記録バー(bar)を作業領域 work の内側に収めた位置。上端から snap 以内なら上端にくっつける(上端にあるときだけ引っ込む)。
+    /// </summary>
+    public static PixelRect KeepIn(PixelRect bar, PixelRect work, int snap)
+    {
+        var x = Math.Clamp(bar.X, work.X, Math.Max(work.X, work.X + work.Width - bar.Width));
+        var y = Math.Clamp(bar.Y, work.Y, Math.Max(work.Y, work.Y + work.Height - bar.Height));
+        return bar with { X = x, Y = y - work.Y <= snap ? work.Y : y };
+    }
+
     /// <summary>幅 width のシークバーで、割合 ratio(0〜1)の位置の X。inset は両端の、つまみの中心が届かない幅。</summary>
     public static double TrackX(double ratio, double width, double inset) => inset + ratio * (width - 2 * inset);
 

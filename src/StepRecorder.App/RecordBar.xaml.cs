@@ -133,7 +133,7 @@ public partial class RecordBar : Window
     /// </summary>
     void UpdateAutoHide()
     {
-        autoHide.Update(IsPointerOver(), Native.KeyDown(VK_LBUTTON) || Native.KeyDown(VK_RBUTTON), shownClock.Elapsed);
+        autoHide.Update(IsPointerOver() || !docked, Native.KeyDown(VK_LBUTTON) || Native.KeyDown(VK_RBUTTON), shownClock.Elapsed);
         ShowOpen(autoHide.IsOpen);
     }
 
@@ -208,7 +208,28 @@ public partial class RecordBar : Window
         BarTab.Content = engine.Paused ? "❚❚" : clipTimer.IsEnabled ? "■" : "●";
     }
 
-    void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
+    void Bar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        DragMove();
+        KeepOnScreen();
+    }
+
+    /// <summary>上端にくっついているか。離して置いたバーは引っ込めない(引っ込むと端にタブが無く、出せなくなる)。</summary>
+    bool docked = true;
+
+    /// <summary>動かしたバーを作業領域の内側へ戻す(めり込んだまま引っ込むとマウスが届かない)。上端の近くなら上端にくっつける。</summary>
+    void KeepOnScreen()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (!GetWindowRect(hwnd, out var win)) return;
+        var (tl, br) = (Panel.PointToScreen(new Point(0, 0)), Panel.PointToScreen(new Point(Panel.ActualWidth, Panel.ActualHeight)));
+        var bar = new RECT { Left = (int)tl.X, Top = (int)tl.Y, Right = (int)br.X, Bottom = (int)br.Y };
+        if (Monitors.Info(MonitorFromRect(ref bar, MONITOR_DEFAULTTONEAREST)) is not { } info) return;
+        var from = bar.ToPixelRect();
+        var to = Core.Geometry.KeepIn(from, info.rcWork.ToPixelRect(), (int)(16 * VisualTreeHelper.GetDpi(this).DpiScaleY));
+        docked = to.Y == info.rcWork.Top;
+        if (to != from) SetWindowPos(hwnd, 0, win.Left + to.X - from.X, win.Top + to.Y - from.Y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
 
     void Mode_Checked(object sender, RoutedEventArgs e) =>
         engine.Mode = sender == ModeManual ? RecordMode.Manual : RecordMode.Click;
