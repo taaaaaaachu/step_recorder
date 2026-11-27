@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -51,21 +50,7 @@ public partial class EditorWindow : Window
     {
         base.OnSourceInitialized(e);
         var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        if (savedBounds is [var left, var top, var right, var bottom]
-            && Monitors.Info(Native.MonitorFromPoint(default, Native.MONITOR_DEFAULTTOPRIMARY)) is { } primary)
-        {
-            // 前回閉じたときの位置と大きさ。WINDOWPLACEMENT はメインモニターの作業領域が原点の座標なので、画面の座標に直して見る
-            var (dx, dy) = (primary.rcWork.Left - primary.rcMonitor.Left, primary.rcWork.Top - primary.rcMonitor.Top);
-            var saved = new Native.RECT { Left = left + dx, Top = top + dy, Right = right + dx, Bottom = bottom + dy };
-            var savedWork = Monitors.Info(Native.MonitorFromRect(ref saved, Native.MONITOR_DEFAULTTONULL))?.rcWork.ToPixelRect();
-            var restored = Geometry.RestoreIn(saved.ToPixelRect(), savedWork, primary.rcWork.ToPixelRect());
-            var wp = new Native.WINDOWPLACEMENT { length = Marshal.SizeOf<Native.WINDOWPLACEMENT>() };
-            Native.GetWindowPlacement(hwnd, ref wp);
-            wp.showCmd = 0; // SW_HIDE: まだ見せない(最大化は WindowState で WPF がする)
-            wp.rcNormalPosition = new() { Left = restored.X - dx, Top = restored.Y - dy, Right = restored.X + restored.Width - dx, Bottom = restored.Y + restored.Height - dy };
-            Native.SetWindowPlacement(hwnd, ref wp);
-            return;
-        }
+        if (SavedPlacement.Restore(this, savedBounds)) return; // 前回閉じたときの位置と大きさ
         Native.GetCursorPos(out var cursor);
         if (Monitors.Info(Native.MonitorFromPoint(cursor, Native.MONITOR_DEFAULTTONEAREST)) is not { } info) return;
         var work = info.rcWork;
@@ -1247,14 +1232,12 @@ public partial class EditorWindow : Window
     /// <summary>位置と大きさを覚える。ウィンドウがあるうち(閉じる前)に呼ぶ。覚えられなくても閉じるのは止めない。</summary>
     void RememberPlacement()
     {
-        var wp = new Native.WINDOWPLACEMENT { length = Marshal.SizeOf<Native.WINDOWPLACEMENT>() };
-        if (!Native.GetWindowPlacement(new System.Windows.Interop.WindowInteropHelper(this).Handle, ref wp)) return;
-        var r = wp.rcNormalPosition;
+        if (SavedPlacement.Capture(this) is not { } bounds) return;
         try
         {
             Settings.Update(Settings.DefaultPath, s =>
             {
-                s.EditorBounds = [r.Left, r.Top, r.Right, r.Bottom];
+                s.EditorBounds = bounds;
                 s.EditorMaximized = WindowState == WindowState.Maximized;
             });
         }

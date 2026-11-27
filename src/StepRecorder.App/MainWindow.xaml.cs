@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        if (settings.MainBounds != null) WindowStartupLocation = WindowStartupLocation.Manual; // 前回の位置に置く(OnSourceInitialized)
         Version.Text = $"バージョン {AppVersion.Current}";
         ShowSettings();
         RefreshTargets();
@@ -126,6 +127,21 @@ public partial class MainWindow : Window
     }
 
     void CloseBadge() => badge?.Close();
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        SavedPlacement.Restore(this, settings.MainBounds, keepSize: true);
+    }
+
+    /// <summary>位置を覚える。記録フォルダを渡して起動し、開始画面を一度も出していなければ覚えない。</summary>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        if (e.Cancel || !IsLoaded || SavedPlacement.Capture(this) is not { } bounds) return;
+        try { Settings.Update(Settings.DefaultPath, s => s.MainBounds = bounds); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { } // 覚えられなくても閉じるのは止めない
+    }
 
     protected override void OnClosed(EventArgs e)
     {

@@ -22,6 +22,8 @@ public sealed class Settings
     public double StepListRatio { get; set; } = 0.25;
     /// <summary>編集画面の位置と大きさ(最大化する前。物理ピクセルの left, top, right, bottom)。まだ閉じたことがなければ null。</summary>
     public int[]? EditorBounds { get; set; }
+    /// <summary>開始画面の位置(EditorBounds と同じ形。大きさは使わない)。まだ閉じたことがなければ null。</summary>
+    public int[]? MainBounds { get; set; }
     /// <summary>編集画面を最大化していたか。</summary>
     public bool EditorMaximized { get; set; }
     /// <summary>録画のフレームレート(FrameRate.Choices のどれか)。</summary>
