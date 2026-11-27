@@ -397,7 +397,7 @@ public sealed class EditorSmokeTests : IDisposable
         }
     }
 
-    /// <summary>全編から切り出した動画のステップも、区間を縮めて分割できる。シークバーは今の区間だけ。</summary>
+    /// <summary>全編から切り出した動画のステップも、区間を縮めて分割できる。シークバーは切り出したときの区間で、縮めた所は塗らない。</summary>
     [DesktopFact]
     public async Task 全編から切り出した動画のステップも区間を縮めて分割できる()
     {
@@ -429,7 +429,8 @@ public sealed class EditorSmokeTests : IDisposable
 
         At(1.0);
         Press("開始位置");
-        Assert.Equal((1.0, 2.4), (Math.Round(slider.Current.Minimum, 1), Math.Round(slider.Current.Maximum, 1))); // 今の区間に張り直す
+        Assert.Equal((0.6, 2.4), (Math.Round(slider.Current.Minimum, 1), Math.Round(slider.Current.Maximum, 1))); // 張り直さない
+        Assert.Equal("使う区間 0:01.0 〜 0:02.4", Find(editor, "ClipRangeLabel").Current.Name);
         At(1.6);
         Press("分割");
         Press("保存");
@@ -438,6 +439,7 @@ public sealed class EditorSmokeTests : IDisposable
         double R(TimeSpan? t) => Math.Round(t!.Value.TotalSeconds, 1);
         Assert.Equal([(1.0, 1.6, 1.0), (1.6, 2.4, 1.6)], saved.Steps.Select(s => (R(s.VideoStart), R(s.VideoEnd), R(s.VideoTime))));
         Assert.All(saved.Steps, s => Assert.Equal("videos/full.mp4", s.TimelineVideo));
+        Assert.All(saved.Steps, s => Assert.Equal((0.6, 2.4), (R(s.CutStart), R(s.CutEnd)))); // 分けても、切り出したときの区間までは戻せる
     }
 
     /// <summary>続けて記録して全編が 2 本ある記録は、タイムラインに出す全編を選べる。ステップを選ぶとその全編に移り、足したステップはその全編を指す。</summary>

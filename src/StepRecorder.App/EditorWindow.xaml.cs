@@ -852,7 +852,7 @@ public partial class EditorWindow : Window
             return;
         }
         InsertFromVideo(CaptureTrigger.Video, VideoClips.Frame(FullPath(full!.File), start), start,
-            st => (st.VideoFile, st.VideoStart, st.VideoEnd, st.HideKeys, st.HideMouse, st.HideAudio) = (full.File, start, end, fullHideKeys, fullHideMouse, fullHideAudio));
+            st => (st.VideoFile, st.VideoStart, st.VideoEnd, st.CutStart, st.CutEnd, st.HideKeys, st.HideMouse, st.HideAudio) = (full.File, start, end, start, end, fullHideKeys, fullHideMouse, fullHideAudio));
         (rangeStart, rangeEnd) = (null, null);
         RangeLabel.Text = "";
     }
@@ -886,8 +886,8 @@ public partial class EditorWindow : Window
     }
 
     // ---- 動画のステップの区間 ----
-    // 録画ボタンの動画は、シークバーが動画ファイル全体で、使う区間を塗る。全編から切り出したものは、今の区間がシークバー全体(縮められるが広げられない。
-    // 広げるなら全編から切り出し直す)。値はどちらも動画ファイルの時刻。動かすと表示欄にそのフレームを出す(clipSeeking)
+    // シークバーは、録画ボタンの動画なら動画ファイル全体、全編から切り出したものなら切り出したときの区間(それより広げるなら全編から切り出し直す)。
+    // 使う区間を塗る。値はどちらも動画ファイルの時刻。動かすと表示欄にそのフレームを出す(clipSeeking)
 
     bool clipSeeking, clipQuiet;
     TimeSpan clipDuration;
@@ -910,8 +910,8 @@ public partial class EditorWindow : Window
         ClipPanel.Visibility = Visibility.Visible;
         clipQuiet = true; // Maximum を変えると値が丸められて ValueChanged が来る。MoveClipSlider で戻す
         ClipSlider.Minimum = 0; // 前のステップの範囲が残っていても、次の Maximum が丸められないように
-        ClipSlider.Maximum = (IsFromFull(s) ? s.VideoEnd ?? clipDuration : clipDuration).TotalSeconds;
-        ClipSlider.Minimum = IsFromFull(s) ? (s.VideoStart ?? TimeSpan.Zero).TotalSeconds : 0;
+        ClipSlider.Maximum = (IsFromFull(s) ? s.CutEnd ?? s.VideoEnd ?? clipDuration : clipDuration).TotalSeconds;
+        ClipSlider.Minimum = IsFromFull(s) ? (s.CutStart ?? s.VideoStart ?? TimeSpan.Zero).TotalSeconds : 0;
         MoveClipSlider(s.VideoStart ?? TimeSpan.Zero);
         ShowClipRange(s);
     }
@@ -970,6 +970,7 @@ public partial class EditorWindow : Window
             return;
         }
         Checkpoint();
+        if (IsFromFull(s)) (s.CutStart, s.CutEnd) = (s.CutStart ?? s.VideoStart ?? TimeSpan.Zero, s.CutEnd ?? s.VideoEnd ?? clipDuration); // 前のバージョンで切り出したもの
         s.VideoStart = start < OneFrame ? null : start;
         s.VideoEnd = clipDuration - end < OneFrame ? null : end;
         if (newStart != null) SetPoster(s);
@@ -979,7 +980,7 @@ public partial class EditorWindow : Window
             UpdateTicks();
         }
         RefreshList(CurrentIndex);
-        ShowClipBar(s); // 一覧の行(record)が前と同じ値だと選び直しにならず、ShowStep が呼ばれない。全編からのものは範囲も張り直す
+        ShowClipRange(s); // 一覧の行(record)が前と同じ値だと選び直しにならず、ShowStep が呼ばれない
     }
 
     /// <summary>今の位置で2つのステップに分け、後ろを選ぶ。</summary>

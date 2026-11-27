@@ -65,6 +65,9 @@ public sealed class Step
     /// <summary>動画のうち使う区間。null なら最初から/最後まで。</summary>
     public TimeSpan? VideoStart { get; set; }
     public TimeSpan? VideoEnd { get; set; }
+    /// <summary>全編から切り出した動画のステップで、切り出したときの区間。区間を縮めても、ここまでは戻せる。null なら今の区間。</summary>
+    public TimeSpan? CutStart { get; set; }
+    public TimeSpan? CutEnd { get; set; }
     /// <summary>動画のステップの再生の速さ(2 なら倍速、0.5 なら半分)。null なら等速。使うときは Speed を見る。</summary>
     public double? VideoSpeed { get; set; }
     /// <summary>実際に使う速さ。session.json は手で直せるので、0 や極端な値は範囲に収める。</summary>
