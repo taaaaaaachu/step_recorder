@@ -356,7 +356,14 @@ public sealed class RecordBarTests : IDisposable
             Scale: PresentationSource.FromVisual(b)!.CompositionTarget.TransformToDevice.M11));
         var area = new Int32Rect((int)(window.Left * window.Scale) - m.Bounds.X, (int)(window.Top * window.Scale) - m.Bounds.Y,
             (int)(window.ActualWidth * window.Scale), (int)(window.ActualHeight * window.Scale));
-        BitmapSource Strip() => new CroppedBitmap(WindowCapture.CaptureMonitor(bounds, 0).Image, area);
+        BitmapSource Strip()
+        {
+            var image = WindowCapture.CaptureMonitor(bounds, 0).Image;
+            // たまに範囲が画像からはみ出して落ちるので、原因を絞れるよう値を出す
+            Assert.True(area.X >= 0 && area.Y >= 0 && area.X + area.Width <= image.PixelWidth && area.Y + area.Height <= image.PixelHeight,
+                $"切り出す範囲が画像からはみ出している: 範囲={area} 画像={image.PixelWidth}x{image.PixelHeight} モニター={m.Bounds} ウィンドウ={window}");
+            return new CroppedBitmap(image, area);
+        }
         static int NotBlue(BitmapSource image)
         {
             var px = VideoE2ETests.Bgr24(image);
