@@ -1116,6 +1116,7 @@ public partial class EditorWindow : Window
         popup.PreviewKeyDown += Window_PreviewKeyDown; // Ctrl+Z やズームのキーも効くように
         popup.Closed += (_, _) =>
         {
+            SetBareFrame(false); // 全画面のまま閉じても、戻した表示欄は元の見た目にする
             popup!.Content = null;
             PreviewSlot.Content = PreviewBorder;
             popup = null;
@@ -1137,8 +1138,10 @@ public partial class EditorWindow : Window
             w.WindowStyle = WindowStyle.SingleBorderWindow;
             w.ResizeMode = ResizeMode.CanResize;
             w.WindowState = popupState;
+            SetBareFrame(false);
             return;
         }
+        SetBareFrame(true);
         popupState = w.WindowState;
         w.WindowState = WindowState.Normal; // 最大化したまま枠を消すと、タスクバーの分が空いたままになる
         w.WindowStyle = WindowStyle.None;
@@ -1147,6 +1150,14 @@ public partial class EditorWindow : Window
     }
 
     WindowState popupState; // 全画面にする前の状態(戻すときに使う)
+
+    /// <summary>全画面のときは表示欄の枠・余白・淡い背景を消し、絵の外を黒にする(白い帯が残らないように)。</summary>
+    void SetBareFrame(bool bare)
+    {
+        PreviewBorder.BorderThickness = new Thickness(bare ? 0 : 1);
+        PreviewBorder.Background = bare ? Brushes.Black : new SolidColorBrush(Color.FromRgb(0xf4, 0xf4, 0xf4));
+        Stage.Margin = new Thickness(bare ? 0 : 4);
+    }
 
     // ---- 保存 ----
 

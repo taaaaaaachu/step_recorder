@@ -238,6 +238,12 @@ public sealed class EditorSmokeTests : IDisposable
         {
             PressKeys(popup, on);
             Assert.True(Until(FullScreen), $"キー {on:X} で全画面にならない: {Bounds()} / 画面 {string.Join(", ", Monitors.All().Select(m => m.Bounds))}");
+            // 絵(400x300)の外は黒く、四隅に表示欄の淡い背景や枠が残らない
+            Wait(300);
+            var b = Bounds();
+            var shot = WindowCapture.CaptureMonitor(new() { Left = (int)b.Left, Top = (int)b.Top, Right = (int)b.Right, Bottom = (int)b.Bottom }, 0).Image;
+            foreach (var (x, y) in new[] { (0, 0), (shot.PixelWidth - 1, 0), (0, shot.PixelHeight - 1), (shot.PixelWidth - 1, shot.PixelHeight - 1) })
+                Assert.True(VideoE2ETests.ColorAt(shot, x, y) == Colors.Black, $"全画面の隅 ({x}, {y}) が黒くない: {VideoE2ETests.ColorAt(shot, x, y)}");
             PressKeys(popup, off);
             Assert.True(Until(() => Bounds() == normal), $"キー {off:X} で元の大きさに戻らない");
         }
